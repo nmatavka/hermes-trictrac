@@ -8,20 +8,23 @@ const CopyWebpackPlugin = require('copy-webpack-plugin');
 module.exports = (env, options) => ({
   optimization: {
     minimizer: [
-      new UglifyJsPlugin({ cache: true, parallel: true, sourceMap: false }),
+      new UglifyJsPlugin({
+        cache: true,
+        parallel: true,
+        sourceMap: false
+      }),
       new OptimizeCSSAssetsPlugin({})
     ]
   },
   entry: {
-      './js/app.js': ['./js/app.js'].concat(glob.sync('./vendor/**/*.js'))
+    './js/app.js': ['./js/app.js'].concat(glob.sync('./vendor/**/*.js'))
   },
   output: {
     filename: 'app.js',
     path: path.resolve(__dirname, '../priv/static/js')
   },
   module: {
-    rules: [
-      {
+    rules: [{
         test: /\.(js|jsx)$/,
         exclude: /node_modules/,
         use: {
@@ -34,14 +37,32 @@ module.exports = (env, options) => ({
       {
         test: /\.css$/,
         use: [MiniCssExtractPlugin.loader, 'css-loader']
+      },
+      {
+        test: /\.(ttf|eot|svg|woff(2)?)(\?[a-z0-9=&.]+)?$/,
+        include: [path.join(__dirname, "../assets/static/images")],
+        loader: "file-loader?name=assets/static/images/[name].[ext]"
       }
+      // {
+      //   test: /\.(png|jpg|gif|svg)$/,
+      //   use: [{
+      //     loader: 'file-loader',
+      //     options: {},
+      //   }, ],
+      // },
+
     ]
   },
   resolve: {
     extensions: ['.js', '.jsx', '.css']
   },
   plugins: [
-    new MiniCssExtractPlugin({ filename: '../css/app.css' }),
-    new CopyWebpackPlugin([{ from: 'static/', to: '../' }])
+    new MiniCssExtractPlugin({
+      filename: '../css/app.css'
+    }),
+    new CopyWebpackPlugin([{
+      from: 'static/',
+      to: '../'
+    }])
   ]
 });

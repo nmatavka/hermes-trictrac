@@ -1,0 +1,16 @@
+[Unit]
+Description=Backgammon
+
+[Service]
+Type=simple
+User=backgammon
+Group=backgammon
+Restart=on-failure
+Environment=MIX_ENV=prod "PORT=4793"
+Environment=LANG=en_US.UTF-8
+
+WorkingDirectory=/home/backgammon/backgammon
+ExecStart=/home/backgammon/backgammon/start.sh
+
+[Install]
+WantedBy=multi-user.target

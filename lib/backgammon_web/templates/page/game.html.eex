@@ -1,10 +1,11 @@
 <script>
- window.gameName = "<%= @name %>";
+ window.gameName = "<%= @game %>";
+ window.userName = "<%= @name %>"
 </script>
 
 <div class="row">
   <div class="column">
-    <h1>Backgammon Game: <%= @name %></h1>
+    <h1>Hi <%= @name %>! You are in game lobby: <%= @game %></h1>
     <div id="root">
       <p>React app not loaded...</p>
     </div>

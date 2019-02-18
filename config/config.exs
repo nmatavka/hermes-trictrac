@@ -7,8 +7,6 @@
 # General application configuration
 use Mix.Config
 
-# config :backgammon,
-  # ecto_repos: [Backgammon.Repo]
 
 # Configures the endpoint
 config :backgammon, BackgammonWeb.Endpoint,

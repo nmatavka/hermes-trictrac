@@ -9,10 +9,3 @@ config :backgammon, BackgammonWeb.Endpoint,
 # Print only warnings and errors during test
 config :logger, level: :warn
 
-# Configure your database
-# config :backgammon, Backgammon.Repo,
-#   username: "postgres",
-#   password: "postgres",
-#   database: "backgammon_test",
-#   hostname: "localhost",
-#   pool: Ecto.Adapters.SQL.Sandbox

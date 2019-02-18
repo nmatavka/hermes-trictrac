@@ -11,9 +11,11 @@ defmodule Backgammon.Application do
       # Start the Ecto repository
       # Backgammon.Repo,
       # Start the endpoint when the application starts
-      BackgammonWeb.Endpoint
+      BackgammonWeb.Endpoint,
+      Backgammon.BackupAgent,
       # Starts a worker by calling: Backgammon.Worker.start_link(arg)
       # {Backgammon.Worker, arg},
+      Backgammon.GameSup
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html

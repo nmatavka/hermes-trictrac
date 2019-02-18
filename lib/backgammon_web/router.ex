@@ -18,7 +18,9 @@ defmodule BackgammonWeb.Router do
 
     get "/", PageController, :index
 
-    get "/game/:name", PageController, :game
+    get "/game/:game", PageController, :game
+
+    post "/game/", PageController, :game
   end
 
   # Other scopes may use custom stacks.

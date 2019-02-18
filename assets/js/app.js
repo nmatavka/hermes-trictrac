@@ -17,16 +17,26 @@ import "phoenix_html"
 // import socket from "./socket"
 
 import socket from "./socket";
-import game_init from "./backgammon";
+import gameInit from "./Backgammon";
 import $ from 'jquery';
 
 $(() => {
   let root = document.getElementById('root');
   if (root) {
-    let channel = socket.channel("games:" + window.gameName, {});
-    // We want to join in the react component.
-    game_init(root, channel);
+    // console.log(window.gameName);
+    // console.log(window.userName);
+    let channel = socket.channel("games:" + window.gameName, {
+      "user": window.userName
+    });
+    gameInit(root, channel, window.userName);
   }
+
+  $(".submit").on('click', function () {
+    window.location.href += ("game/" + $("#game").val());
+  });
+
+  $("#name").on('change', function () {
+    window.userName = $(this).val();
+    console.log(window.userName);
+  });
 });
-
-
