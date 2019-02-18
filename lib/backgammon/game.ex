@@ -71,7 +71,6 @@ defmodule Backgammon.Game do
     |> Map.put(:possible_moves, MoveGenerator.possible_moves(game))
     |> Map.put(:color, game.players[user])
     |> Map.put(:winner, winner)
-    |> Map.delete(:players)
 
     if winner == "" do
       view
