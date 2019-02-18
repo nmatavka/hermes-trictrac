@@ -1,7 +1,7 @@
 <section class="row">
   <div class="row">
     <div class="column">
-      <h1 id="index-page">Join a Game</h1>
+      <h1 id="index-page">Join a Backgammon game!</h1>
         <%= form_for @conn, "/game", fn f -> %>
 
           <label>

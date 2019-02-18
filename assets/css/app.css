@@ -175,7 +175,7 @@ table .home svg {
 }
 
 span:not(.empty) {
-  width: 150px;
+  width: 210px;
   display: inline-block;
 }
 
@@ -184,6 +184,7 @@ span:not(.empty) {
   text-align: center;
 }
 
-h1 {
+h1,
+form {
   text-align: center;
 }
