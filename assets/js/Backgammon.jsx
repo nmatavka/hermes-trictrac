@@ -176,6 +176,17 @@ class Backgammon extends Component {
       winner = <span>You lost!</span>;
     }
 
+    let opponent = filler;
+    if (Object.keys(this.state.game.players).length < 2) {
+      opponent = <span>Waiting for opponent to join</span>;
+    } else {
+      let name = Object.keys(this.state.game.players).filter(player => {
+        return player != window.userName;
+      })[0];
+
+      opponent = <span>Your opponent is: {name}</span>;
+    }
+
     let topSlots =
       playerColor == 'white'
         ? this.state.game.slots.slice(0, 12).reverse()
@@ -221,6 +232,7 @@ class Backgammon extends Component {
       <div>
         <div className="subheader-wrapper">
           <span>You are {playerColor}</span>
+          {opponent}
           {yourTurn}
           {rollBtn}
           {yourRoll}
