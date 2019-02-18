@@ -71,7 +71,7 @@ defmodule Backgammon.MoveGenerator do
     max_dice = Enum.max(dice)
     max_point = max_point(home_board, 6, player)
 
-    if max_dice > max_point do
+    if max_dice > max_point and max_point != 0 do
       {:ok, %{idx: max_slot}} = Enum.fetch(home_board, 6 - max_point)
       [%{from: max_slot, to: :home, die: max_dice}]
     else

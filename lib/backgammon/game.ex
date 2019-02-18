@@ -65,11 +65,19 @@ defmodule Backgammon.Game do
 
 
   def client_view(game, user) do
-    game
+    winner = winner(game)
+
+    view = game
     |> Map.put(:possible_moves, MoveGenerator.possible_moves(game))
     |> Map.put(:color, game.players[user])
-    |> Map.put(:winner, winner(game))
+    |> Map.put(:winner, winner)
     |> Map.delete(:players)
+
+    if winner == "" do
+      view
+    else
+      Map.update(view, :current_dice, [], fn _ -> [] end)
+    end
   end
 
 
