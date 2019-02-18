@@ -9,6 +9,4 @@ defmodule BackgammonWeb.PageController do
     render conn, "game.html", name: name, game: game
   end
 
-  # TODO add routes for game
-
 end
