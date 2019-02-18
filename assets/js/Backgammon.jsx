@@ -49,11 +49,13 @@ class Backgammon extends Component {
   }
 
   moveIn() {
-    let moves = [];
-    for (let i = 0; i < this.state.game.possible_moves.length; i++) {
-      moves.push(this.state.game.possible_moves[i].to);
+    if (this.state.game.whose_turn == this.props.playerColor) {
+      let moves = [];
+      for (let i = 0; i < this.state.game.possible_moves.length; i++) {
+        moves.push(this.state.game.possible_moves[i].to);
+      }
+      this.setState({ selectedSlot: 'knocked', highlightedSlots: moves });
     }
-    this.setState({ selectedSlot: 'knocked', highlightedSlots: moves });
   }
 
   getRoll() {
@@ -82,48 +84,52 @@ class Backgammon extends Component {
   }
 
   makeMove(e) {
-    let td = e.target.parentNode;
-    if (td.tagName == 'svg') {
-      td = td.parentNode;
-    }
+    if (this.state.game.whose_turn == this.props.playerColor) {
+      let td = e.target.parentNode;
+      if (td.tagName == 'svg') {
+        td = td.parentNode;
+      }
 
-    if (td.classList.contains('highlighted')) {
-      let moveTaken = this.state.game.possible_moves.filter(
-        move =>
-          move.from == this.state.selectedSlot && move.to == td.dataset.index
-      )[0];
+      if (td.classList.contains('highlighted')) {
+        let moveTaken = this.state.game.possible_moves.filter(
+          move =>
+            move.from == this.state.selectedSlot && move.to == td.dataset.index
+        )[0];
 
-      this.channel.push('move', {
-        move: moveTaken
-      });
-      this.setState({ selectedSlot: null, highlightedSlots: [] });
+        this.channel.push('move', {
+          move: moveTaken
+        });
+        this.setState({ selectedSlot: null, highlightedSlots: [] });
+      }
     }
   }
 
   selectSlot(e) {
-    let td = e.target.parentNode;
-    if (td.tagName == 'svg') {
-      td = td.parentNode;
-    }
-    let idx = td.dataset.index;
+    if (this.state.game.whose_turn == this.props.playerColor) {
+      let td = e.target.parentNode;
+      if (td.tagName == 'svg') {
+        td = td.parentNode;
+      }
+      let idx = td.dataset.index;
 
-    if (td.classList.contains(this.props.playerColor)) {
-      if (this.state.selectedSlot == idx) {
-        this.setState({ selectedSlot: null, highlightedSlots: [] });
-      } else {
-        let moves = [];
-        for (let i = 0; i < this.state.game.possible_moves.length; i++) {
-          let move = this.state.game.possible_moves[i];
-          if (move.from == idx) {
-            let dest =
-              move.to == 'home' ? 'home-' + this.props.playerColor : move.to;
-            moves.push(dest);
+      if (td.classList.contains(this.props.playerColor)) {
+        if (this.state.selectedSlot == idx) {
+          this.setState({ selectedSlot: null, highlightedSlots: [] });
+        } else {
+          let moves = [];
+          for (let i = 0; i < this.state.game.possible_moves.length; i++) {
+            let move = this.state.game.possible_moves[i];
+            if (move.from == idx) {
+              let dest =
+                move.to == 'home' ? 'home-' + this.props.playerColor : move.to;
+              moves.push(dest);
+            }
           }
+          this.setState({
+            selectedSlot: idx,
+            highlightedSlots: moves
+          });
         }
-        this.setState({
-          selectedSlot: idx,
-          highlightedSlots: moves
-        });
       }
     }
   }
@@ -139,13 +145,21 @@ class Backgammon extends Component {
         <span>Waiting on opponent</span>
       );
 
-    let yourRoll =
+    let yourRoll = filler;
+    if (
       this.state.game.current_dice.length > 0 &&
-      this.state.game.whose_turn == playerColor ? (
+      this.state.game.whose_turn == playerColor
+    ) {
+      yourRoll = (
         <span>Your roll: {this.state.game.current_dice.join(' ')}</span>
-      ) : (
-        filler
       );
+    } else if (this.state.game.current_dice.length > 0) {
+      yourRoll = (
+        <span>
+          Your opponent rolled: {this.state.game.current_dice.join(' ')}
+        </span>
+      );
+    }
 
     let rollBtn =
       this.state.game.current_dice.length == 0 &&
@@ -202,11 +216,6 @@ class Backgammon extends Component {
         />
       </tbody>
     );
-
-    let style = {
-      height: '50px',
-      width: '50px'
-    };
 
     return (
       <div>
