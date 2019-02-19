@@ -1,6 +1,11 @@
 import React, { Component } from 'react';
 import ReactDOM from 'react-dom';
 import Row from './Row';
+import Opponent from './Opponent';
+import WhoseTurn from './WhoseTurn';
+import RollBtn from './RollBtn';
+import RolledDice from './RolledDice';
+import Winner from './Winner';
 import _ from 'lodash';
 
 export default function gameInit(root, channel, name) {
@@ -137,56 +142,6 @@ class Backgammon extends Component {
   render() {
     const { playerColor } = this.props;
 
-    let filler = <span className="empty" />;
-    let yourTurn =
-      this.state.game.whose_turn == playerColor ? (
-        <span>It is your turn</span>
-      ) : (
-        <span>Waiting on opponent</span>
-      );
-
-    let yourRoll = filler;
-    if (
-      this.state.game.current_dice.length > 0 &&
-      this.state.game.whose_turn == playerColor
-    ) {
-      yourRoll = (
-        <span>Your roll: {this.state.game.current_dice.join(' ')}</span>
-      );
-    } else if (this.state.game.current_dice.length > 0) {
-      yourRoll = (
-        <span>
-          Your opponent rolled: {this.state.game.current_dice.join(' ')}
-        </span>
-      );
-    }
-
-    let rollBtn =
-      this.state.game.current_dice.length == 0 &&
-      this.state.game.whose_turn == playerColor ? (
-        <button onClick={this.getRoll}>Roll</button>
-      ) : (
-        filler
-      );
-
-    let winner = filler;
-    if (this.state.game.winner == this.props.playerColor) {
-      winner = <span>You won!</span>;
-    } else if (this.state.game.winner) {
-      winner = <span>You lost!</span>;
-    }
-
-    let opponent = filler;
-    if (Object.keys(this.state.game.players).length < 2) {
-      opponent = <span>Waiting for opponent to join</span>;
-    } else {
-      let name = Object.keys(this.state.game.players).filter(player => {
-        return player != window.userName;
-      })[0];
-
-      opponent = <span>Your opponent is: {name}</span>;
-    }
-
     let topSlots =
       playerColor == 'white'
         ? this.state.game.slots.slice(0, 12).reverse()
@@ -232,11 +187,21 @@ class Backgammon extends Component {
       <div>
         <div className="subheader-wrapper">
           <span>You are {playerColor}</span>
-          {opponent}
-          {yourTurn}
-          {rollBtn}
-          {yourRoll}
-          {winner}
+          <Opponent players={Object.keys(this.state.game.players)} />
+          <WhoseTurn isYourTurn={this.state.game.whose_turn == playerColor} />
+          <RollBtn
+            showBtn={
+              this.state.game.current_dice.length == 0 &&
+              this.state.game.whose_turn == playerColor &&
+              !this.state.winner
+            }
+            getRoll={this.getRoll}
+          />
+          <RolledDice
+            dice={this.state.game.current_dice}
+            isYourTurn={this.state.game.whose_turn == playerColor}
+          />
+          <Winner winner={this.state.game.winner} playerColor={playerColor} />
         </div>
         <table>{rows}</table>
       </div>
