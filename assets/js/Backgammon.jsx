@@ -138,6 +138,7 @@ class Backgammon extends Component {
   }
 
   _onMessageWasSent(message) {
+    // TODO change this
     this.setState({
       messageList: [...this.state.messageList, message]
     });
@@ -145,6 +146,7 @@ class Backgammon extends Component {
 
   _sendMessage(text) {
     if (text.length > 0) {
+      // TODO change this
       this.setState({
         messageList: [
           ...this.state.messageList,
@@ -212,9 +214,7 @@ class Backgammon extends Component {
         <table>{rows}</table>
         <Launcher
           agentProfile={{
-            teamName: 'react-chat-window',
-            imageUrl:
-              'https://a.slack-edge.com/66f9/img/avatars-teams/ava_0001-34.png'
+            teamName: 'Backgammon Chat'
           }}
           onMessageWasSent={this._onMessageWasSent.bind(this)}
           messageList={this.state.messageList}
