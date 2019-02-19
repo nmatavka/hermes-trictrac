@@ -40,15 +40,25 @@ class Backgammon extends Component {
     this.makeMove = this.makeMove.bind(this);
     this.moveIn = this.moveIn.bind(this);
     this.moveHome = this.moveHome.bind(this);
+    this.onMessageWasSent = this.onMessageWasSent.bind(this);
 
     this.channel.on('update', resp => {
       this.update(resp);
     });
   }
 
+  mapMessages() {
+    this.state.game.chat.map(msg => {
+      msg.author = msg.author == this.props.playerColor ? 'me' : 'them';
+    });
+    this.setState({ messageList: this.state.game.chat });
+  }
+
   update(response) {
     console.log(response);
-    this.setState({ game: response.game });
+    this.setState({ game: response.game }, () => {
+      this.mapMessages();
+    });
   }
 
   getRoll() {
@@ -137,27 +147,9 @@ class Backgammon extends Component {
     }
   }
 
-  _onMessageWasSent(message) {
-    // TODO change this
-    this.setState({
-      messageList: [...this.state.messageList, message]
-    });
-  }
-
-  _sendMessage(text) {
-    if (text.length > 0) {
-      // TODO change this
-      this.setState({
-        messageList: [
-          ...this.state.messageList,
-          {
-            author: 'them',
-            type: 'text',
-            data: { text }
-          }
-        ]
-      });
-    }
+  onMessageWasSent(chat) {
+    chat.author = this.props.playerColor;
+    this.channel.push('chat', { chat: chat });
   }
 
   render() {
@@ -216,7 +208,7 @@ class Backgammon extends Component {
           agentProfile={{
             teamName: 'Backgammon Chat'
           }}
-          onMessageWasSent={this._onMessageWasSent.bind(this)}
+          onMessageWasSent={this.onMessageWasSent}
           messageList={this.state.messageList}
           showEmoji
         />

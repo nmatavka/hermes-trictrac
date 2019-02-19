@@ -40,6 +40,18 @@ defmodule BackgammonWeb.GamesChannel do
     end
   end
 
+  def handle_in("chat", payload, socket) do
+    user = socket.assigns[:user]
+    g = Backgammon.GameServer.chat(socket.assigns[:name], payload["chat"], user)
+    case g do
+      {:ok, game} -> broadcast(socket, "update", %{game: Game.client_view(game, user)})
+                    {:noreply, socket}
+      {:error, msg} -> {:reply, {:error, %{msg: msg}}, socket}
+      _ -> {:reply, {:error, %{msg: "unknown error"}}, socket}
+    end
+  end
+  
+
   def handle_in("move", payload, socket) do
     user = socket.assigns[:user]
     %{"from" => from, "to" => to, "die" => die} = payload["move"]

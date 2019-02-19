@@ -14,7 +14,8 @@ defmodule Backgammon.Game do
       },
       whose_turn: :white,
       current_dice: [],
-      players: %{}
+      players: %{},
+      chat: []
     }
   end
 
@@ -126,6 +127,20 @@ defmodule Backgammon.Game do
     end
   end
 
+  def chat(g, chat, player) do
+    # TODO: do this better
+     g = %{
+          slots: g.slots,
+          knocked: g.knocked,
+          home: g.home,
+          whose_turn: g.whose_turn,
+          current_dice: g.current_dice,
+          players: g.players,
+          chat: g.chat ++ [chat]
+        }
+    {:ok, g}
+  end
+
 
   # returns the game state after enacting the given move
   def move(g, move = %{from: from, to: to, die: die}, player) do
@@ -148,7 +163,8 @@ defmodule Backgammon.Game do
           home: new_home,
           whose_turn: new_player,
           current_dice: new_dice,
-          players: g.players
+          players: g.players,
+          chat: g.chat
         }
 
         check_no_moves(g)

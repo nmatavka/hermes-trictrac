@@ -32,6 +32,10 @@ defmodule Backgammon.GameServer do
     GenServer.call(reg(name), {:roll, name, user})
   end
 
+  def chat(name, chat, user) do
+    GenServer.call(reg(name), {:chat, name, chat, user})
+  end
+
   def peek(name) do
     GenServer.call(reg(name), {:peek, name})
   end
@@ -62,6 +66,16 @@ defmodule Backgammon.GameServer do
 
   def handle_call({:roll, name, user}, _from, game) do
     with {:ok, game} <- Backgammon.Game.roll(game, user) do
+      Backgammon.BackupAgent.put(name, game)
+      {:reply, {:ok, game}, game}
+    else
+      {:error, msg} -> {:reply, {:error, msg}, game}
+      _ -> {:reply, {:error, "unknown error"}, game}
+    end
+  end
+
+  def handle_call({:chat, name, chat, user}, _from, game) do
+    with {:ok, game} <- Backgammon.Game.chat(game, chat, user) do
       Backgammon.BackupAgent.put(name, game)
       {:reply, {:ok, game}, game}
     else
