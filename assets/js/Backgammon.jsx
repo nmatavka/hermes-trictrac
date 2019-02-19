@@ -49,16 +49,6 @@ class Backgammon extends Component {
     this.setState({ game: response.game });
   }
 
-  moveIn() {
-    if (this.isAllowedToMove()) {
-      let moves = [];
-      for (let i = 0; i < this.state.game.possible_moves.length; i++) {
-        moves.push(this.state.game.possible_moves[i].to);
-      }
-      this.setState({ selectedSlot: 'knocked', highlightedSlots: moves });
-    }
-  }
-
   getRoll() {
     this.channel.push('roll');
   }
@@ -86,21 +76,35 @@ class Backgammon extends Component {
     this.setState({ selectedSlot: null, highlightedSlots: [] });
   }
 
+  isHighlighted(td) {
+    return td.classList.contains('highlighted');
+  }
+
   moveHome(e) {
-    let td = this.getTd(this.getTd(e.target));
-    if (td.classList.contains('highlighted')) {
-      let moveTaken = this.getMoveTaken('home');
-      this.moveAndClearSlot(moveTaken);
+    if (this.isAllowedToMove()) {
+      let td = this.getTd(this.getTd(e.target));
+      if (this.isHighlighted(td)) {
+        this.moveAndClearSlot(this.getMoveTaken('home'));
+      }
     }
   }
 
   makeMove(e) {
     if (this.isAllowedToMove()) {
       let td = this.getTd(e.target.parentNode);
-      if (td.classList.contains('highlighted')) {
-        let moveTaken = this.getMoveTaken(td.dataset.index);
-        this.moveAndClearSlot(moveTaken);
+      if (this.isHighlighted(td)) {
+        this.moveAndClearSlot(this.getMoveTaken(td.dataset.index));
       }
+    }
+  }
+
+  moveIn() {
+    if (this.isAllowedToMove()) {
+      let moves = [];
+      for (let i = 0; i < this.state.game.possible_moves.length; i++) {
+        moves.push(this.state.game.possible_moves[i].to);
+      }
+      this.setState({ selectedSlot: 'knocked', highlightedSlots: moves });
     }
   }
 
