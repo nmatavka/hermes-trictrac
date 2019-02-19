@@ -50,7 +50,7 @@ class Backgammon extends Component {
   }
 
   moveIn() {
-    if (this.state.game.whose_turn == this.props.playerColor) {
+    if (this.isAllowedToMove()) {
       let moves = [];
       for (let i = 0; i < this.state.game.possible_moves.length; i++) {
         moves.push(this.state.game.possible_moves[i].to);
@@ -63,22 +63,18 @@ class Backgammon extends Component {
     this.channel.push('roll');
   }
 
-  moveHome(e) {
-    let td = e.target;
-    if (td.tagName == 'svg' || td.tagName == 'rect') {
-      td = td.parentNode;
-    }
-    if (td.tagName == 'svg') {
-      td = td.parentNode;
-    }
+  isAllowedToMove() {
+    return this.state.game.whose_turn == this.props.playerColor;
+  }
 
-    if (td.classList.contains('highlighted')) {
-      let moveTaken = this.state.game.possible_moves.filter(
-        move => move.from == this.state.selectedSlot && move.to == 'home'
-      )[0];
+  getTd(td) {
+    return td.tagName == 'svg' || td.tagName == 'rect' ? td.parentNode : td;
+  }
 
-      this.moveAndClearSlot(moveTaken);
-    }
+  getMoveTaken(moveTo) {
+    return this.state.game.possible_moves.filter(
+      move => move.from == this.state.selectedSlot && move.to == moveTo
+    )[0];
   }
 
   moveAndClearSlot(moveTaken) {
@@ -90,32 +86,27 @@ class Backgammon extends Component {
     this.setState({ selectedSlot: null, highlightedSlots: [] });
   }
 
-  makeMove(e) {
-    if (this.state.game.whose_turn == this.props.playerColor) {
-      let td = e.target.parentNode;
-      if (td.tagName == 'svg') {
-        td = td.parentNode;
-      }
+  moveHome(e) {
+    let td = this.getTd(this.getTd(e.target));
+    if (td.classList.contains('highlighted')) {
+      let moveTaken = this.getMoveTaken('home');
+      this.moveAndClearSlot(moveTaken);
+    }
+  }
 
+  makeMove(e) {
+    if (this.isAllowedToMove()) {
+      let td = this.getTd(e.target.parentNode);
       if (td.classList.contains('highlighted')) {
-        let moveTaken = this.state.game.possible_moves.filter(
-          move =>
-            move.from == this.state.selectedSlot && move.to == td.dataset.index
-        )[0];
+        let moveTaken = this.getMoveTaken(td.dataset.index);
         this.moveAndClearSlot(moveTaken);
       }
     }
   }
 
   selectSlot(e) {
-    if (
-      this.state.game.whose_turn == this.props.playerColor &&
-      this.state.game.current_dice.length > 0
-    ) {
-      let td = e.target.parentNode;
-      if (td.tagName == 'svg') {
-        td = td.parentNode;
-      }
+    if (this.isAllowedToMove() && this.state.game.current_dice.length > 0) {
+      let td = this.getTd(e.target.parentNode);
       let idx = td.dataset.index;
 
       if (td.classList.contains(this.props.playerColor)) {
@@ -143,14 +134,12 @@ class Backgammon extends Component {
   render() {
     const { playerColor } = this.props;
 
-    let topSlots =
-      playerColor == 'white'
-        ? this.state.game.slots.slice(0, 12).reverse()
-        : this.state.game.slots.slice(12, 24);
+    let firstTwelveSlots = this.state.game.slots.slice(0, 12).reverse();
+    let lastTwelveSlots = this.state.game.slots.slice(12, 24);
+
+    let topSlots = playerColor == 'white' ? firstTwelveSlots : lastTwelveSlots;
     let bottomSlots =
-      playerColor == 'white'
-        ? this.state.game.slots.slice(12, 24)
-        : this.state.game.slots.slice(0, 12).reverse();
+      playerColor == 'white' ? lastTwelveSlots : firstTwelveSlots;
 
     let topColor = playerColor == 'white' ? 'red' : 'white';
 

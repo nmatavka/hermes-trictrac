@@ -7,7 +7,10 @@ import Winner from './Winner';
 
 class Subheader extends Component {
   isYourTurn() {
-    return this.props.state.whose_turn == this.props.playerColor;
+    return (
+      this.props.state.game.whose_turn == this.props.playerColor &&
+      !this.props.state.game.winner
+    );
   }
 
   render() {
@@ -17,14 +20,13 @@ class Subheader extends Component {
       <div className="subheader-wrapper">
         <span>You are {playerColor}</span>
         <Opponent players={Object.keys(state.game.players)} />
-        <WhoseTurn isYourTurn={this.isYourTurn()} />
+        <WhoseTurn
+          isYourTurn={this.isYourTurn()}
+          isGameOver={state.game.winner}
+        />
         <RollBtn
-          showBtn={
-            state.game.current_dice.length == 0 &&
-            this.isYourTurn() &&
-            !state.winner
-          }
-          getRoll={this.getRoll}
+          showBtn={state.game.current_dice.length == 0 && this.isYourTurn()}
+          getRoll={this.props.getRoll}
         />
         <RolledDice
           dice={state.game.current_dice}
