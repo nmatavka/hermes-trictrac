@@ -72,6 +72,7 @@ export default class Row extends Component {
     const {
       isTop,
       color,
+      playerColor,
       selectedSlot,
       highlightedSlots,
       handler,
@@ -103,6 +104,7 @@ export default class Row extends Component {
       let tdClasses = classNames(
         isBlack ? 'black' : '',
         slot.owner || '',
+        slot.owner == playerColor ? 'clickable' : '',
         selectedSlot == slot.idx || highlightedSlots.includes(slot.idx)
           ? 'highlighted'
           : ''

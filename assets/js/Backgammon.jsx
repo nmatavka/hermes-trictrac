@@ -1,11 +1,7 @@
 import React, { Component } from 'react';
 import ReactDOM from 'react-dom';
 import Row from './Row';
-import Opponent from './Opponent';
-import WhoseTurn from './WhoseTurn';
-import RollBtn from './RollBtn';
-import RolledDice from './RolledDice';
-import Winner from './Winner';
+import Subheader from './Subheader';
 import _ from 'lodash';
 
 export default function gameInit(root, channel, name) {
@@ -81,11 +77,17 @@ class Backgammon extends Component {
         move => move.from == this.state.selectedSlot && move.to == 'home'
       )[0];
 
+      this.moveAndClearSlot(moveTaken);
+    }
+  }
+
+  moveAndClearSlot(moveTaken) {
+    if (moveTaken) {
       this.channel.push('move', {
         move: moveTaken
       });
-      this.setState({ selectedSlot: null, highlightedSlots: [] });
     }
+    this.setState({ selectedSlot: null, highlightedSlots: [] });
   }
 
   makeMove(e) {
@@ -100,17 +102,16 @@ class Backgammon extends Component {
           move =>
             move.from == this.state.selectedSlot && move.to == td.dataset.index
         )[0];
-
-        this.channel.push('move', {
-          move: moveTaken
-        });
-        this.setState({ selectedSlot: null, highlightedSlots: [] });
+        this.moveAndClearSlot(moveTaken);
       }
     }
   }
 
   selectSlot(e) {
-    if (this.state.game.whose_turn == this.props.playerColor) {
+    if (
+      this.state.game.whose_turn == this.props.playerColor &&
+      this.state.game.current_dice.length > 0
+    ) {
       let td = e.target.parentNode;
       if (td.tagName == 'svg') {
         td = td.parentNode;
@@ -119,7 +120,7 @@ class Backgammon extends Component {
 
       if (td.classList.contains(this.props.playerColor)) {
         if (this.state.selectedSlot == idx) {
-          this.setState({ selectedSlot: null, highlightedSlots: [] });
+          this.moveAndClearSlot(null);
         } else {
           let moves = [];
           for (let i = 0; i < this.state.game.possible_moves.length; i++) {
@@ -158,6 +159,7 @@ class Backgammon extends Component {
         <Row
           isTop={true}
           color={topColor}
+          playerColor={playerColor}
           selectedSlot={this.state.selectedSlot}
           highlightedSlots={this.state.highlightedSlots}
           handler={this.selectSlot}
@@ -170,6 +172,7 @@ class Backgammon extends Component {
         <Row
           isTop={false}
           color={playerColor}
+          playerColor={playerColor}
           selectedSlot={this.state.selectedSlot}
           highlightedSlots={this.state.highlightedSlots}
           handler={this.selectSlot}
@@ -185,24 +188,11 @@ class Backgammon extends Component {
 
     return (
       <div>
-        <div className="subheader-wrapper">
-          <span>You are {playerColor}</span>
-          <Opponent players={Object.keys(this.state.game.players)} />
-          <WhoseTurn isYourTurn={this.state.game.whose_turn == playerColor} />
-          <RollBtn
-            showBtn={
-              this.state.game.current_dice.length == 0 &&
-              this.state.game.whose_turn == playerColor &&
-              !this.state.winner
-            }
-            getRoll={this.getRoll}
-          />
-          <RolledDice
-            dice={this.state.game.current_dice}
-            isYourTurn={this.state.game.whose_turn == playerColor}
-          />
-          <Winner winner={this.state.game.winner} playerColor={playerColor} />
-        </div>
+        <Subheader
+          state={this.state}
+          playerColor={playerColor}
+          getRoll={this.getRoll}
+        />
         <table>{rows}</table>
       </div>
     );
