@@ -191,3 +191,7 @@ form {
 button {
   background-color: red;
 }
+
+.sc-chat-window.opened {
+  z-index: 1000;
+}

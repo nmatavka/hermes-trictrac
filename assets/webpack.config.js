@@ -38,19 +38,18 @@ module.exports = (env, options) => ({
         test: /\.css$/,
         use: [MiniCssExtractPlugin.loader, 'css-loader']
       },
-      {
-        test: /\.(ttf|eot|svg|woff(2)?)(\?[a-z0-9=&.]+)?$/,
-        include: [path.join(__dirname, "../assets/static/images")],
-        loader: "file-loader?name=assets/static/images/[name].[ext]"
-      }
       // {
-      //   test: /\.(png|jpg|gif|svg)$/,
-      //   use: [{
-      //     loader: 'file-loader',
-      //     options: {},
-      //   }, ],
-      // },
-
+      //   test: /\.(ttf|eot|svg|woff(2)?)(\?[a-z0-9=&.]+)?$/,
+      //   include: [path.join(__dirname, "../assets/static/images")],
+      //   loader: "file-loader?name=assets/static/images/[name].[ext]"
+      // }
+      {
+        test: /\.(png|jpg|gif|svg|mp3)$/,
+        loader: 'file-loader',
+        options: {
+          name: '[path][name].[ext]',
+        },
+      }
     ]
   },
   resolve: {

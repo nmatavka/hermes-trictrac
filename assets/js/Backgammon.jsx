@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom';
 import Row from './Row';
 import Subheader from './Subheader';
 import _ from 'lodash';
+import { Launcher } from 'react-chat-window';
 
 export default function gameInit(root, channel, name) {
   channel
@@ -30,7 +31,8 @@ class Backgammon extends Component {
     this.state = {
       game: props.resp.game,
       selectedSlot: null,
-      highlightedSlots: []
+      highlightedSlots: [],
+      messageList: []
     };
 
     this.selectSlot = this.selectSlot.bind(this);
@@ -135,6 +137,27 @@ class Backgammon extends Component {
     }
   }
 
+  _onMessageWasSent(message) {
+    this.setState({
+      messageList: [...this.state.messageList, message]
+    });
+  }
+
+  _sendMessage(text) {
+    if (text.length > 0) {
+      this.setState({
+        messageList: [
+          ...this.state.messageList,
+          {
+            author: 'them',
+            type: 'text',
+            data: { text }
+          }
+        ]
+      });
+    }
+  }
+
   render() {
     const { playerColor } = this.props;
 
@@ -187,6 +210,16 @@ class Backgammon extends Component {
           getRoll={this.getRoll}
         />
         <table>{rows}</table>
+        <Launcher
+          agentProfile={{
+            teamName: 'react-chat-window',
+            imageUrl:
+              'https://a.slack-edge.com/66f9/img/avatars-teams/ava_0001-34.png'
+          }}
+          onMessageWasSent={this._onMessageWasSent.bind(this)}
+          messageList={this.state.messageList}
+          showEmoji
+        />
       </div>
     );
   }
