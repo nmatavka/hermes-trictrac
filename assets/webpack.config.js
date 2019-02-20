@@ -44,13 +44,13 @@ module.exports = (env, options) => ({
       //   loader: "file-loader?name=assets/static/images/[name].[ext]"
       // }
       {
-        test: /\.(png|jpg|gif|svg|mp3)$/,
-        loader: 'file-loader',
+        test: /\.(jpg|png|gif|svg|mp3)$/,
+        loader: "file-loader",
         options: {
-          name: '[path][name].[ext]',
-          publicPath: './',
-          outputPath: 'images/',
-        },
+          name: "[name].[ext]",
+          // outputPath: `priv/static/`,
+          // publicPath: `priv/static/`
+        }
       }
     ]
   },
@@ -64,6 +64,10 @@ module.exports = (env, options) => ({
     new CopyWebpackPlugin([{
       from: 'static/',
       to: '../'
+    }]),
+    new CopyWebpackPlugin([{
+      from: 'node_modules/react-chat-window/es/assets/',
+      to: '../images/'
     }])
   ]
 });
