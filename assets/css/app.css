@@ -196,6 +196,10 @@ form {
   z-index: 1000;
 }
 
+.sc-launcher {
+  cursor: pointer;
+}
+
 img {
   display: none;
 }
