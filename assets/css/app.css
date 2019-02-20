@@ -179,12 +179,12 @@ span:not(.empty) {
 }
 
 .subheader-wrapper {
-  height: 25px;
+  height: 35px;
   text-align: center;
 }
 
 h1,
-form {
+#index-page~form {
   text-align: center;
 }
 
@@ -200,6 +200,7 @@ form {
   cursor: pointer;
 }
 
-img {
-  display: none;
+.die {
+  height: 20px;
+  padding: 0 5px;
 }

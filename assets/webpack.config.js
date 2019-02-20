@@ -38,18 +38,20 @@ module.exports = (env, options) => ({
         test: /\.css$/,
         use: [MiniCssExtractPlugin.loader, 'css-loader']
       },
-      // {
-      //   test: /\.(ttf|eot|svg|woff(2)?)(\?[a-z0-9=&.]+)?$/,
-      //   include: [path.join(__dirname, "../assets/static/images")],
-      //   loader: "file-loader?name=assets/static/images/[name].[ext]"
-      // }
       {
-        test: /\.(jpg|png|gif|svg|mp3)$/,
+        test: /\.(jpg|png|gif|svg)$/,
         loader: "file-loader",
         options: {
           name: "[name].[ext]",
-          // outputPath: `priv/static/`,
-          // publicPath: `priv/static/`
+          outputPath: `/images/`
+        }
+      },
+      {
+        test: /\.(mp3)$/,
+        loader: "file-loader",
+        options: {
+          name: "[name].[ext]",
+          outputPath: `/images/sounds/`
         }
       }
     ]
@@ -67,6 +69,10 @@ module.exports = (env, options) => ({
     }]),
     new CopyWebpackPlugin([{
       from: 'node_modules/react-chat-window/es/assets/',
+      to: '../'
+    }]),
+    new CopyWebpackPlugin([{
+      from: 'node_modules/react-chat-window/es/assets/sounds/',
       to: '../'
     }])
   ]
