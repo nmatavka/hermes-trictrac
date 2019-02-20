@@ -192,6 +192,10 @@ form {
   background-color: red;
 }
 
-.sc-chat-window.opened {
+.sc-chat-window {
   z-index: 1000;
+}
+
+img {
+  display: none;
 }
