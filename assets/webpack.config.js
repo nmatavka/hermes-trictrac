@@ -67,7 +67,7 @@ module.exports = (env, options) => ({
     }]),
     new CopyWebpackPlugin([{
       from: 'node_modules/react-chat-window/es/assets/',
-      to: '../images/'
+      to: '../'
     }])
   ]
 });

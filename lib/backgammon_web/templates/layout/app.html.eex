@@ -16,8 +16,6 @@
     <main>
       <%= render @view_module, @view_template, assigns %>
     </main>
-    <img src="<%= Routes.static_path(@conn, "/images/dice-six-faces-six.svg") %>"></script>
-    <img src="<%= Routes.static_path(@conn, "/images/chat-icon.svg") %>"></script>
     <script type="text/javascript" src="<%= Routes.static_path(@conn, "/js/app.js") %>"></script>
   </body>
 </html>
