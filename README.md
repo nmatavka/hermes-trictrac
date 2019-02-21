@@ -19,7 +19,7 @@ Ready to run in production? Please [check our deployment guides](https://hexdocs
   * Mailing list: http://groups.google.com/group/phoenix-talk
   * Source: https://github.com/phoenixframework/phoenix
 
-# Attribution:
+# Attribution
 
  * React Chat Window: https://github.com/kingofthestack/react-chat-window
  * Dice Images: https://game-icons.net/tags/dice.html
