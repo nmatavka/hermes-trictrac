@@ -2,6 +2,7 @@ import React, { Component } from 'react';
 import ReactDOM from 'react-dom';
 import Row from './Row';
 import Subheader from './Subheader';
+import Die from './Die';
 import _ from 'lodash';
 import { Launcher } from 'react-chat-window';
 
@@ -55,7 +56,6 @@ class Backgammon extends Component {
   }
 
   update(response) {
-    console.log(response);
     this.setState({ game: response.game }, () => {
       this.mapMessages();
     });

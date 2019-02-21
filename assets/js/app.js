@@ -23,20 +23,9 @@ import $ from 'jquery';
 $(() => {
   let root = document.getElementById('root');
   if (root) {
-    // console.log(window.gameName);
-    // console.log(window.userName);
     let channel = socket.channel("games:" + window.gameName, {
       "user": window.userName
     });
     gameInit(root, channel, window.userName);
   }
-
-  $(".submit").on('click', function () {
-    window.location.href += ("game/" + $("#game").val());
-  });
-
-  $("#name").on('change', function () {
-    window.userName = $(this).val();
-    console.log(window.userName);
-  });
 });
