@@ -18,4 +18,9 @@ Ready to run in production? Please [check our deployment guides](https://hexdocs
   * Docs: https://hexdocs.pm/phoenix
   * Mailing list: http://groups.google.com/group/phoenix-talk
   * Source: https://github.com/phoenixframework/phoenix
-# backgammon
+
+# Attribution:
+
+ * React Chat Window: https://github.com/kingofthestack/react-chat-window
+ * Dice Images: https://game-icons.net/tags/dice.html
+ * Dice Favicon: https://www.favicon.cc/?action=icon&file_id=927484
