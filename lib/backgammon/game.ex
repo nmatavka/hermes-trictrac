@@ -128,7 +128,6 @@ defmodule Backgammon.Game do
   end
 
   def chat(g, chat, player) do
-    # TODO: do this better
      g = %{
           slots: g.slots,
           knocked: g.knocked,

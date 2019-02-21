@@ -13,7 +13,11 @@ class RolledDice extends Component {
         </span>
       );
     } else if (dice.length > 0) {
-      roll = <span>Your opponent rolled: {dice.join(' ')}</span>;
+      roll = (
+        <span>
+          Your opponent's rolled: <Die roll={dice} />
+        </span>
+      );
     }
     return roll;
   }

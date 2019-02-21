@@ -152,15 +152,8 @@ table .home svg {
   vertical-align: bottom;
 }
 
-.red {
-  color: red;
-}
-
-.white {
-  color: black;
-}
-
-.clickable {
+.clickable,
+.sc-launcher {
   cursor: pointer;
 }
 
@@ -174,7 +167,8 @@ table .home svg {
 }
 
 span:not(.empty) {
-  width: 210px;
+  padding: 0 20px;
+  width: auto;
   display: inline-block;
 }
 
@@ -194,10 +188,6 @@ h1,
 
 .sc-chat-window {
   z-index: 1000;
-}
-
-.sc-launcher {
-  cursor: pointer;
 }
 
 .die {
