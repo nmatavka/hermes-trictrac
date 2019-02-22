@@ -10,7 +10,7 @@ defmodule Backgammon.Game do
       },
       home: %{
         red: 0,
-        white: 15,
+        white: 0,
       },
       whose_turn: :white,
       current_dice: [],
