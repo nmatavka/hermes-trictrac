@@ -173,11 +173,7 @@ span:not(.empty) {
 }
 
 .subheader-wrapper {
-<<<<<<< HEAD
   height: 50px;
-=======
-  height: 35px;
->>>>>>> 469555a1e9e24f0c3922b60ea3c32fc1b303bae8
   text-align: center;
 }
 
@@ -194,13 +190,7 @@ h1,
   z-index: 1000;
 }
 
-<<<<<<< HEAD
-img {
-  display: none;
-}
-=======
 .die {
   height: 20px;
   padding: 0 5px;
 }
->>>>>>> 469555a1e9e24f0c3922b60ea3c32fc1b303bae8

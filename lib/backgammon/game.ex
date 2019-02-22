@@ -10,7 +10,7 @@ defmodule Backgammon.Game do
       },
       home: %{
         red: 0,
-        white: 0,
+        white: 15,
       },
       whose_turn: :white,
       current_dice: [],
@@ -127,7 +127,7 @@ defmodule Backgammon.Game do
     end
   end
 
-  def chat(g, chat, player) do
+  def chat(g, chat, _player) do
      g = %{
           slots: g.slots,
           knocked: g.knocked,
