@@ -152,15 +152,8 @@ table .home svg {
   vertical-align: bottom;
 }
 
-.red {
-  color: red;
-}
-
-.white {
-  color: black;
-}
-
-.clickable {
+.clickable,
+.sc-launcher {
   cursor: pointer;
 }
 
@@ -174,17 +167,22 @@ table .home svg {
 }
 
 span:not(.empty) {
-  width: 210px;
+  padding: 0 20px;
+  width: auto;
   display: inline-block;
 }
 
 .subheader-wrapper {
+<<<<<<< HEAD
   height: 50px;
+=======
+  height: 35px;
+>>>>>>> 469555a1e9e24f0c3922b60ea3c32fc1b303bae8
   text-align: center;
 }
 
 h1,
-form {
+#index-page~form {
   text-align: center;
 }
 
@@ -196,6 +194,13 @@ form {
   z-index: 1000;
 }
 
+<<<<<<< HEAD
 img {
   display: none;
 }
+=======
+.die {
+  height: 20px;
+  padding: 0 5px;
+}
+>>>>>>> 469555a1e9e24f0c3922b60ea3c32fc1b303bae8
