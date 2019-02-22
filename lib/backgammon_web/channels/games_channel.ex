@@ -40,6 +40,12 @@ defmodule BackgammonWeb.GamesChannel do
     end
   end
 
+  def handle_in("reset", _payload, socket) do
+    Backgammon.GameServer.reset(socket.assigns[:name])
+    broadcast(socket, "reset", %{msg: "Game reset by #{socket.assigns[:user]}"})
+    {:noreply, socket}
+  end
+
   def handle_in("chat", payload, socket) do
     user = socket.assigns[:user]
     g = Backgammon.GameServer.chat(socket.assigns[:name], payload["chat"], user)
@@ -50,7 +56,7 @@ defmodule BackgammonWeb.GamesChannel do
       _ -> {:reply, {:error, %{msg: "unknown error"}}, socket}
     end
   end
-  
+
 
   def handle_in("move", payload, socket) do
     user = socket.assigns[:user]

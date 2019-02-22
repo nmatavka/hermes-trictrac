@@ -41,9 +41,14 @@ class Backgammon extends Component {
     this.moveIn = this.moveIn.bind(this);
     this.moveHome = this.moveHome.bind(this);
     this.onMessageWasSent = this.onMessageWasSent.bind(this);
+    this.reset = this.reset.bind(this);
 
     this.channel.on('update', resp => {
       this.update(resp);
+    });
+
+    this.channel.on('reset', resp => {
+      window.location.href = '/';
     });
   }
 
@@ -152,6 +157,10 @@ class Backgammon extends Component {
     this.channel.push('chat', { chat: chat });
   }
 
+  reset() {
+    this.channel.push('reset');
+  }
+
   render() {
     const { playerColor } = this.props;
 
@@ -202,6 +211,7 @@ class Backgammon extends Component {
           state={this.state}
           playerColor={playerColor}
           getRoll={this.getRoll}
+          reset={this.reset}
         />
         <table>{rows}</table>
         <Launcher

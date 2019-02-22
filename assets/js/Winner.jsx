@@ -3,14 +3,15 @@ import Filler from './Filler';
 
 class Winner extends Component {
   render() {
-    const { winner } = this.props;
+    const { winner, reset } = this.props;
     let winnerSpan = <Filler />;
     if (winner == this.props.playerColor) {
       winnerSpan = <span>You won!</span>;
     } else if (winner) {
       winnerSpan = <span>You lost!</span>;
     }
-    return winnerSpan;
+    let resetButton = <button onClick={reset}>Reset</button>;
+    return <div>{winnerSpan} {resetButton}</div>;
   }
 }
 

@@ -14,7 +14,7 @@ class Subheader extends Component {
   }
 
   render() {
-    const { state, playerColor } = this.props;
+    const { state, playerColor, reset } = this.props;
 
     return (
       <div className="subheader-wrapper">
@@ -32,7 +32,11 @@ class Subheader extends Component {
           dice={state.game.current_dice}
           isYourTurn={this.isYourTurn()}
         />
-        <Winner winner={state.game.winner} playerColor={playerColor} />
+        <Winner
+          winner={state.game.winner}
+          playerColor={playerColor}
+          reset={reset}
+        />
       </div>
     );
   }

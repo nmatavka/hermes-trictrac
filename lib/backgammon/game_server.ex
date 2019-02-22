@@ -40,6 +40,10 @@ defmodule Backgammon.GameServer do
     GenServer.call(reg(name), {:peek, name})
   end
 
+  def reset(name) do
+    GenServer.call(reg(name), {:reset, name})
+  end
+
   def init(game) do
     {:ok, game}
   end
@@ -86,5 +90,13 @@ defmodule Backgammon.GameServer do
 
   def handle_call({:peek, _name}, _from, game) do
     {:reply, game, game}
+  end
+
+  def handle_call({:reset, name}, _from, game) do
+    if Backgammon.Game.winner(game) != "" do
+      {:reply, {:ok, "reset"}, Backgammon.Game.new()}
+    else
+      {:reply, {:error, "game in progress"}, game}
+    end
   end
 end
