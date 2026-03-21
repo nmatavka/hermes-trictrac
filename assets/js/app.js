@@ -1,31 +1,27 @@
-// We need to import the CSS so that webpack will load it.
-// The MiniCssExtractPlugin is used to separate it out into
-// its own CSS file.
-import css from "../css/app.css"
-
-// webpack automatically bundles all modules in your
-// entry points. Those entry points can be configured
-// in "webpack.config.js".
-//
-// Import dependencies
-//
+import "../css/app.css";
 import "phoenix_html"
-
-// Import local files
-//
-// Local files can be imported directly using relative paths, for example:
-// import socket from "./socket"
-
 import socket from "./socket";
 import gameInit from "./Backgammon";
-import $ from 'jquery';
+document.addEventListener("DOMContentLoaded", () => {
+  const root = document.getElementById("root");
 
-$(() => {
-  let root = document.getElementById('root');
-  if (root) {
-    let channel = socket.channel("games:" + window.gameName, {
-      "user": window.userName
-    });
-    gameInit(root, channel, window.userName);
+  if (!root?.dataset.joinTopic || !root.dataset.user) {
+    return;
   }
+
+  const storageKey = `backgammon-client-id:${root.dataset.joinTopic}`;
+  let clientId = window.sessionStorage.getItem(storageKey);
+
+  if (!clientId) {
+    clientId = window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    window.sessionStorage.setItem(storageKey, clientId);
+  }
+
+  const channel = socket.channel(root.dataset.joinTopic, {
+    user: root.dataset.user,
+    variant: root.dataset.variant,
+    client_id: clientId
+  });
+
+  gameInit(root, channel);
 });

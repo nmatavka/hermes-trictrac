@@ -1,20 +1,18 @@
 #!/bin/bash
 
+set -euo pipefail
+
 export MIX_ENV=prod
-export PORT=4793
-export NODEBIN=`pwd`/assets/node_modules/.bin
-export PATH="$PATH:$NODEBIN"
+export PHX_SERVER=true
+export PORT="${PORT:-4793}"
 
 echo "Building..."
 
 mkdir -p ~/.config
-mkdir -p priv/static
 
 mix deps.get
 mix compile
-(cd assets && npm install)
-(cd assets && webpack --mode production)
-mix phx.digest
+mix assets.deploy
 
 echo "Generating release..."
 mix release
@@ -25,4 +23,3 @@ mix release
 echo "Starting app..."
 
 _build/prod/rel/backgammon/bin/backgammon foreground
-

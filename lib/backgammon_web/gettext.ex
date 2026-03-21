@@ -20,5 +20,5 @@ defmodule BackgammonWeb.Gettext do
 
   See the [Gettext Docs](https://hexdocs.pm/gettext) for detailed usage.
   """
-  use Gettext, otp_app: :backgammon
+  use Gettext.Backend, otp_app: :backgammon
 end

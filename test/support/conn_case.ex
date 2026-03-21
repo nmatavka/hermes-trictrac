@@ -17,16 +17,14 @@ defmodule BackgammonWeb.ConnCase do
 
   using do
     quote do
-      # Import conveniences for testing with connections
-      use Phoenix.ConnTest
-      alias BackgammonWeb.Router.Helpers, as: Routes
+      import Plug.Conn
+      import Phoenix.ConnTest
 
-      # The default endpoint for testing
       @endpoint BackgammonWeb.Endpoint
     end
   end
 
-  setup tags do
+  setup do
     {:ok, conn: Phoenix.ConnTest.build_conn()}
   end
 end

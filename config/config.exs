@@ -1,28 +1,38 @@
-# This file is responsible for configuring your application
-# and its dependencies with the aid of the Mix.Config module.
-#
-# This configuration file is loaded before any dependency and
-# is restricted to this project.
+import Config
 
-# General application configuration
-use Mix.Config
-
-
-# Configures the endpoint
 config :backgammon, BackgammonWeb.Endpoint,
   url: [host: "localhost"],
-  secret_key_base: "srsgAtljdoJ36z+VGabQfKmLq6rnBP+bbNCCPfhxYfJd9X62yKd28GHb9j1CYlR4",
-  render_errors: [view: BackgammonWeb.ErrorView, accepts: ~w(html json)],
-  pubsub: [name: Backgammon.PubSub, adapter: Phoenix.PubSub.PG2]
+  render_errors: [
+    formats: [html: BackgammonWeb.ErrorHTML, json: BackgammonWeb.ErrorJSON],
+    layout: false
+  ],
+  pubsub_server: Backgammon.PubSub
 
-# Configures Elixir's Logger
 config :logger, :console,
   format: "$time $metadata[$level] $message\n",
   metadata: [:request_id]
 
-# Use Jason for JSON parsing in Phoenix
 config :phoenix, :json_library, Jason
 
-# Import environment specific config. This must remain at the bottom
-# of this file so it overrides the configuration defined above.
-import_config "#{Mix.env()}.exs"
+config :backgammon, :dice_impl, Backgammon.Rules.Dice.CryptoRandom
+
+config :esbuild,
+  version: "0.25.1",
+  backgammon: [
+    args: ~w(
+        js/app.js
+        --bundle
+        --target=es2020
+        --outdir=../priv/static/assets
+        --public-path=/assets
+        --loader:.svg=file
+        --loader:.png=file
+        --loader:.jpg=file
+        --loader:.gif=file
+        --loader:.ico=file
+        --loader:.mp3=file
+      ),
+    cd: Path.expand("../assets", __DIR__)
+  ]
+
+import_config "#{config_env()}.exs"

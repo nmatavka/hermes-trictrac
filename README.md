@@ -1,25 +1,34 @@
 # Backgammon
 
-To start your Phoenix server:
+Modern Phoenix 1.8 app with a React frontend over Phoenix Channels.
+
+To start the development server:
 
   * Install dependencies with `mix deps.get`
-  * Install Node.js dependencies with `cd assets && npm install`
-  * Start Phoenix endpoint with `mix phx.server`
+  * Install frontend dependencies with `cd assets && npm install`
+  * Start Phoenix with `mix phx.server`
 
 Now you can visit [`localhost:4000`](http://localhost:4000) from your browser.
 
-Ready to run in production? Please [check our deployment guides](https://hexdocs.pm/phoenix/deployment.html).
+To build production assets:
+
+  * Run `mix assets.deploy`
+
+To build a release:
+
+  * Run `MIX_ENV=prod mix release`
+  * Start it with `PHX_SERVER=true SECRET_KEY_BASE=$(mix phx.gen.secret) _build/prod/rel/backgammon/bin/backgammon start`
+
+Ready to deploy? Please [check Phoenix deployment guides](https://hexdocs.pm/phoenix/deployment.html).
 
 ## Learn more
 
-  * Official website: http://www.phoenixframework.org/
+  * Official website: https://www.phoenixframework.org/
   * Guides: https://hexdocs.pm/phoenix/overview.html
   * Docs: https://hexdocs.pm/phoenix
-  * Mailing list: http://groups.google.com/group/phoenix-talk
   * Source: https://github.com/phoenixframework/phoenix
 
 # Attribution
 
- * React Chat Window: https://github.com/kingofthestack/react-chat-window
  * Dice Images: https://game-icons.net/tags/dice.html
  * Dice Favicon: https://www.favicon.cc/?action=icon&file_id=927484

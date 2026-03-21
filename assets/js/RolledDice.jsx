@@ -1,26 +1,17 @@
-import React, { Component } from 'react';
-import Filler from './Filler';
-import Die from './Die';
+import React from "react";
+import Filler from "./Filler";
+import Die from "./Die";
 
-class RolledDice extends Component {
-  render() {
-    const { dice } = this.props;
-    let roll = <Filler />;
-    if (dice.length > 0 && this.props.isYourTurn) {
-      roll = (
-        <span>
-          Your roll: <Die roll={dice} />
-        </span>
-      );
-    } else if (dice.length > 0) {
-      roll = (
-        <span>
-          Your opponent's rolled: <Die roll={dice} />
-        </span>
-      );
-    }
-    return roll;
+function RolledDice({ dice, isYourTurn }) {
+  if (dice.length === 0) {
+    return <Filler />;
   }
+
+  return (
+    <span>
+      {isYourTurn ? "Your roll:" : "Your opponent rolled:"} <Die roll={dice} />
+    </span>
+  );
 }
 
 export default RolledDice;

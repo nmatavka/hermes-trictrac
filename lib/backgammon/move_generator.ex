@@ -13,6 +13,7 @@ defmodule Backgammon.MoveGenerator do
     whose_turn = game.whose_turn
     slots = ordered_slots(game.slots, game.whose_turn)
     home = home_moves(slots, game.knocked[whose_turn], game.current_dice, whose_turn)
+
     if game.knocked[whose_turn] > 0 do
       home ++ knocked_moves(slots, game.current_dice, whose_turn)
     else
@@ -48,18 +49,18 @@ defmodule Backgammon.MoveGenerator do
   def moves_home_with_dice(slots, dice, player) do
     home_board = Enum.drop(slots, 18)
 
-    bear_off_slots = dice
-    |> Enum.map(&([Enum.fetch(home_board, 6 - &1), &1]))
-    |> Enum.map(fn fetched ->
-                  [{:ok, slot}, die] = fetched
-                  {slot, die}
-                end)
+    bear_off_slots =
+      dice
+      |> Enum.map(&[Enum.fetch(home_board, 6 - &1), &1])
+      |> Enum.map(fn fetched ->
+        [{:ok, slot}, die] = fetched
+        {slot, die}
+      end)
 
-    moves_home = bear_off_slots
-    |> Enum.filter(&(can_move_from?(&1, player)))
-    |> Enum.map(&(convert_to_move(&1)))
-
-
+    moves_home =
+      bear_off_slots
+      |> Enum.filter(&can_move_from?(&1, player))
+      |> Enum.map(&convert_to_move(&1))
 
     high_point_move = high_point_move(home_board, dice, player)
     moves_home ++ high_point_move
@@ -79,7 +80,6 @@ defmodule Backgammon.MoveGenerator do
     end
   end
 
-
   def max_point([], _cur_point, _player) do
     0
   end
@@ -91,7 +91,6 @@ defmodule Backgammon.MoveGenerator do
       max_point(home_board, cur_point - 1, player)
     end
   end
-
 
   def convert_to_move({slot, die}) do
     %{
@@ -130,8 +129,10 @@ defmodule Backgammon.MoveGenerator do
   # player
   def moves_with_die([slot | rest], die, player) do
     moves_in_rest = moves_with_die(rest, die, player)
+
     if Map.has_key?(slot, :owner) and slot.owner == player do
       move = move_to_slot([slot | rest], die, die, player)
+
       if move do
         [%{from: slot.idx, to: move.destination, die: move.die}] ++ moves_in_rest
       else
@@ -149,13 +150,15 @@ defmodule Backgammon.MoveGenerator do
   # returns all possible moves off of the bar into the slots
   def knocked_moves(slots, dice, player) do
     dice
-    |> Enum.map(&(move_to_slot(slots, &1 - 1, &1, player)))
+    |> Enum.map(&move_to_slot(slots, &1 - 1, &1, player))
     |> Enum.filter(&(&1 != nil))
-    |> Enum.map(&(%{
-      from: :knocked,
-      to: &1.destination,
-      die: &1.die
-      }))
+    |> Enum.map(
+      &%{
+        from: :knocked,
+        to: &1.destination,
+        die: &1.die
+      }
+    )
   end
 
   # Returns the id of the slot that the player can move to, or nil
@@ -166,8 +169,8 @@ defmodule Backgammon.MoveGenerator do
 
   def move_to_slot([slot | _rest], 0, initial_dice, player) do
     if !Map.has_key?(slot, :owner) or
-              slot.owner == player or
-              slot.num == 1 do
+         slot.owner == player or
+         slot.num == 1 do
       %{destination: slot.idx, die: initial_dice}
     else
       nil

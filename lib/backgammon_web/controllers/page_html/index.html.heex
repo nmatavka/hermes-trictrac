@@ -1,0 +1,36 @@
+<section class="row">
+  <div class="row">
+    <div class="column">
+      <h1 id="index-page">Start or Join a Table</h1>
+      <form action={~p"/game"} method="post">
+        <input type="hidden" name="_csrf_token" value={get_csrf_token()} />
+
+        <label>
+          Lobby Name: <input type="text" name="game" />
+        </label>
+
+        <label>
+          User Name: <input type="text" name="name" />
+        </label>
+
+        <label>
+          Variant:
+          <select name="variant">
+            <option value="backgammon">Backgammon</option>
+            <option value="tapa">Tapa / Plakoto</option>
+            <option value="trictrac_classique">Trictrac Classique</option>
+            <option value="trictrac_aecrire">Trictrac A Ecrire</option>
+            <option value="trictrac_combine">Trictrac Combine</option>
+            <option value="tourne_case">Tourne-Case</option>
+            <option value="dames_rabattues">Dames Rabattues</option>
+            <option value="plein">Jeu du Plein</option>
+            <option value="toc">Jeu du Toc</option>
+            <option value="brade">Brade Suedois</option>
+          </select>
+        </label>
+
+        <button type="submit">Enter Lobby</button>
+      </form>
+    </div>
+  </div>
+</section>

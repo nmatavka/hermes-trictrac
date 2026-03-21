@@ -1,9 +1,7 @@
-import React, { Component } from 'react';
+import React from "react";
 
-class Filler extends Component {
-  render() {
-    return <span className="empty" />;
-  }
+function Filler() {
+  return <span className="empty" />;
 }
 
 export default Filler;

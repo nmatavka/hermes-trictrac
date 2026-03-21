@@ -5,6 +5,7 @@ defmodule BackgammonWeb.Router do
     plug :accepts, ["html"]
     plug :fetch_session
     plug :fetch_flash
+    plug :put_root_layout, html: {BackgammonWeb.Layouts, :root}
     plug :protect_from_forgery
     plug :put_secure_browser_headers
   end
@@ -17,14 +18,7 @@ defmodule BackgammonWeb.Router do
     pipe_through :browser
 
     get "/", PageController, :index
-
     get "/game/:game", PageController, :game
-
-    post "/game/", PageController, :game
+    post "/game", PageController, :game
   end
-
-  # Other scopes may use custom stacks.
-  # scope "/api", BackgammonWeb do
-  #   pipe_through :api
-  # end
 end

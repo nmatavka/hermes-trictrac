@@ -6,6 +6,7 @@ defmodule GameTest do
 
   test "possible moves for red with knocked pieces" do
     slots = [%{idx: 0}, %{idx: 1}, %{idx: 2}, %{idx: 3}]
+
     game = %{
       slots: slots,
       whose_turn: :red,
@@ -13,24 +14,26 @@ defmodule GameTest do
         red: 1,
         white: 1
       },
-      current_dice: [1],
+      current_dice: [1]
     }
+
     moves = MoveGenerator.possible_moves(game)
-    assert moves == [[:knocked, 3]]
+    assert moves == [%{from: :knocked, to: 3, die: 1}]
 
     game = %{game | whose_turn: :white}
     moves = MoveGenerator.possible_moves(game)
-    assert moves == [[:knocked, 0]]
+    assert moves == [%{from: :knocked, to: 0, die: 1}]
   end
 
   test "changes turn when no possible moves" do
     slots = [%{idx: 0, owner: :white, num: 1}, %{idx: 1}]
+
     game = %{
       slots: slots,
       whose_turn: :white,
       knocked: %{
         red: 0,
-        white: 0,
+        white: 0
       },
       home: %{
         red: 0,
@@ -40,11 +43,12 @@ defmodule GameTest do
       players: %{
         x: :white,
         y: :red
-      }
+      },
+      chat: []
     }
-    {:ok, g} = Game.move(game, [0, 1], :x)
+
+    {:ok, g} = Game.move(game, %{from: 0, to: 1, die: 1}, :x)
     assert g.whose_turn == :red
     assert g.current_dice == []
   end
-
 end

@@ -1,144 +1,87 @@
-import React, { Component } from 'react';
-import classNames from 'classnames/bind';
+import React from "react";
+import classNames from "classnames";
 
-export default class Row extends Component {
-  constructor(props) {
-    super(props);
-  }
+function drawPieces(count, color, isTop, isHome) {
+  const height = 250 / 15;
+  const width = 50;
+  const sideLength = 40;
 
-  drawPieces(count, color, isTop, isHome) {
-    const height = 250 / 15;
-    const width = 50;
-    const sideLength = 40;
-    let svgs = [];
+  return Array.from({ length: count }, (_, index) => {
+    const offset = isHome ? `${index * height}px` : `${index * sideLength}px`;
+    const style = isTop ? { top: offset } : { bottom: offset };
 
-    for (let i = 0; i < count; i++) {
-      let val = isHome ? i * height + 'px' : i * sideLength + 'px';
-      let style = isTop ? { top: val } : { bottom: val };
+    return isHome ? (
+      <svg key={`${color}-home-${index}`} height={height} width={width} style={style}>
+        <rect height={height} width={width} stroke="black" strokeWidth="2" fill={color} />
+      </svg>
+    ) : (
+      <svg key={`${color}-piece-${index}`} height={sideLength} width={sideLength} style={style}>
+        <circle cx="20" cy="20" r="18" stroke="black" strokeWidth="2" fill={color} />
+      </svg>
+    );
+  });
+}
 
-      let svg = isHome ? (
-        <svg key={i} height={height} width={width} style={style}>
-          <rect
-            height={height}
-            width={width}
-            stroke="black"
-            strokeWidth="2"
-            fill={color}
-          />
-        </svg>
-      ) : (
-        <svg key={i} height={sideLength} width={sideLength} style={style}>
-          <circle
-            cx="20"
-            cy="20"
-            r="18"
-            stroke="black"
-            strokeWidth="2"
-            fill={color}
-          />
-        </svg>
-      );
-      svgs.push(svg);
-    }
+function Row({
+  isTop,
+  color,
+  playerColor,
+  selectedSlot,
+  highlightedSlots,
+  onSelectSlot,
+  onMoveSlot,
+  onMoveHome,
+  onMoveIn,
+  homeCount,
+  knockedCount,
+  slots
+}) {
+  let isBlack = !isTop;
+  const renderedSlots = [];
 
-    return svgs;
-  }
-
-  getSvgs(slot, isTop) {
-    let svgs = [];
-    if (slot.hasOwnProperty('num')) {
-      svgs = this.drawPieces(slot.num, slot.owner, isTop, false);
-    }
-    return svgs;
-  }
-
-  getHomePieces(count, color, isTop) {
-    let svgs = [];
-    if (count > 0) {
-      svgs = this.drawPieces(count, color, isTop, true);
-    }
-    return svgs;
-  }
-
-  getKnocked(count, color, isTop) {
-    let svgs = [];
-    if (count > 0) {
-      svgs = this.drawPieces(count, color, isTop, false);
-    }
-    return svgs;
-  }
-
-  render() {
-    const {
-      isTop,
-      color,
-      playerColor,
-      selectedSlot,
-      highlightedSlots,
-      handler,
-      moveHandler,
-      moveHomeHandler,
-      moveInHandler,
-      homeCount,
-      knockedCount,
-      slots
-    } = this.props;
-
-    let isBlack = isTop ? false : true;
-
-    let returnSlots = [];
-
-    for (let i = 0; i < slots.length; i++) {
-      let slot = slots[i];
-      if (i == 6) {
-        returnSlots.push(
-          <td
-            key={'knocked-' + color}
-            onClick={moveInHandler}
-            className="knocked"
-          >
-            {this.getKnocked(knockedCount, color, !isTop)}
-          </td>
-        );
-      }
-      let tdClasses = classNames(
-        isBlack ? 'black' : '',
-        slot.owner || '',
-        slot.owner == playerColor ? 'clickable' : '',
-        selectedSlot == slot.idx || highlightedSlots.includes(slot.idx)
-          ? 'highlighted'
-          : ''
-      );
-      let clickHandler = highlightedSlots.includes(slot.idx)
-        ? moveHandler
-        : handler;
-      returnSlots.push(
-        <td
-          key={slot.idx}
-          data-index={slot.idx}
-          onClick={clickHandler}
-          className={tdClasses}
-        >
-          <div className="triangle" />
-          {this.getSvgs(slot, isTop)}
+  slots.forEach((slot, index) => {
+    if (index === 6) {
+      renderedSlots.push(
+        <td key={`knocked-${color}`} onClick={onMoveIn} className="knocked">
+          {knockedCount > 0 ? drawPieces(knockedCount, color, !isTop, false) : null}
         </td>
       );
-      isBlack = !isBlack;
     }
 
-    let homeClasses = classNames(
-      'home',
-      highlightedSlots.includes('home-' + color) ? 'highlighted' : ''
+    const isHighlighted = highlightedSlots.includes(slot.idx);
+    const tdClasses = classNames(
+      isBlack && "black",
+      slot.owner,
+      slot.owner === playerColor && "clickable",
+      (selectedSlot === slot.idx || isHighlighted) && "highlighted"
     );
 
-    returnSlots.push(
-      <td onClick={moveHomeHandler} key={isTop} className={homeClasses}>
-        {this.getHomePieces(homeCount, color, isTop)}
+    renderedSlots.push(
+      <td
+        key={slot.idx}
+        data-index={slot.idx}
+        onClick={() => (isHighlighted ? onMoveSlot(slot.idx) : onSelectSlot(slot.idx))}
+        className={tdClasses}
+      >
+        <div className="triangle" />
+        {slot.num ? drawPieces(slot.num, slot.owner, isTop, false) : null}
       </td>
     );
 
-    let rowClass = isTop ? 'top' : 'bottom';
+    isBlack = !isBlack;
+  });
 
-    return <tr className={rowClass}>{returnSlots}</tr>;
-  }
+  renderedSlots.push(
+    <td
+      onClick={onMoveHome}
+      key={`home-${color}`}
+      className={classNames("home", highlightedSlots.includes(`home-${color}`) && "highlighted")}
+    >
+      {homeCount > 0 ? drawPieces(homeCount, color, isTop, true) : null}
+    </td>
+  );
+
+  return <tr className={isTop ? "top" : "bottom"}>{renderedSlots}</tr>;
 }
+
+export default Row;
