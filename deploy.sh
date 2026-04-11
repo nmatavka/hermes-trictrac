@@ -22,4 +22,4 @@ mix release
 
 echo "Starting app..."
 
-_build/prod/rel/backgammon/bin/backgammon foreground
+_build/prod/rel/hermes_trictrac/bin/hermes_trictrac foreground

@@ -1,0 +1,16 @@
+name = "TricTracZero"
+uuid = "dfe333c4-23b2-4674-b6c9-6dddbf19ffc8"
+version = "0.1.0"
+
+[deps]
+AlphaZero = "8ed9eb0b-7496-408d-8c8b-2119aeea02cd"
+JSON3 = "0f8b85d8-7281-11e9-16c2-39a750bddbf1"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[sources]
+AlphaZero = {path = "/Users/nick/backgammon/trictrac_zero/vendor/AlphaZero.jl"}
+
+[compat]
+JSON3 = "1"
+julia = "1.10, 1.11, 1.12"

@@ -1,9 +1,9 @@
-defmodule Backgammon.MixProject do
+defmodule HermesTrictrac.MixProject do
   use Mix.Project
 
   def project do
     [
-      app: :backgammon,
+      app: :hermes_trictrac,
       version: "0.1.0",
       elixir: "~> 1.16",
       elixirc_paths: elixirc_paths(Mix.env()),
@@ -19,7 +19,7 @@ defmodule Backgammon.MixProject do
   # Type `mix help compile.app` for more information.
   def application do
     [
-      mod: {Backgammon.Application, []},
+      mod: {HermesTrictrac.Application, []},
       extra_applications: [:logger, :runtime_tools]
     ]
   end
@@ -47,10 +47,10 @@ defmodule Backgammon.MixProject do
   defp aliases do
     [
       setup: ["deps.get", "cmd --cd assets npm install"],
-      "assets.build": ["esbuild backgammon"],
+      "assets.build": ["esbuild hermes_trictrac"],
       "assets.deploy": [
         "cmd --cd assets npm install",
-        "esbuild backgammon --minify",
+        "esbuild hermes_trictrac --minify",
         "phx.digest"
       ]
     ]

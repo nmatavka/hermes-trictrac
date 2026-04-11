@@ -1,0 +1,80 @@
+<section class="row">
+  <div class="row">
+    <div class="column">
+      <h1 id="index-page">Start or Join a Table</h1>
+      <form action={~p"/game"} method="post">
+        <input type="hidden" name="_csrf_token" value={get_csrf_token()} />
+
+        <label>
+          Lobby Name: <input type="text" name="game" />
+        </label>
+
+        <label>
+          User Name: <input type="text" name="name" />
+        </label>
+
+        <fieldset class="variant-fieldset">
+          <legend>Choose a Game</legend>
+
+          <div class="variant-grid variant-grid-headline">
+            <%= for variant <- @headline_variants do %>
+              <label class="variant-option">
+                <input
+                  class="variant-choice"
+                  type="radio"
+                  name="variant"
+                  value={variant.id}
+                  checked={variant.id == "backgammon"}
+                />
+                <span class="variant-chip"><%= raw(variant.label) %></span>
+              </label>
+            <% end %>
+          </div>
+
+          <details class="variant-disclosure">
+            <summary>More games</summary>
+            <div class="variant-grid variant-grid-secondary">
+              <%= for variant <- @secondary_variants do %>
+                <label class="variant-option">
+                  <input class="variant-choice" type="radio" name="variant" value={variant.id} />
+                  <span class="variant-chip variant-chip-secondary"><%= variant.label %></span>
+                </label>
+              <% end %>
+            </div>
+          </details>
+        </fieldset>
+
+        <fieldset>
+          <legend>Model Opponent</legend>
+
+          <label>
+            <input type="radio" name="bot" value="" checked />
+            Human opponent
+          </label>
+
+          <label>
+            <input type="radio" name="bot" value="backgammon_ai" />
+            Play English backgammon against BackgammonAI
+          </label>
+
+          <label>
+            <input type="radio" name="bot" value="trictrac_zero" />
+            Play against the current TricTrac model
+          </label>
+
+          <label>
+            Margot:
+            <select name="bot_margot">
+              <option value="no">Margot off</option>
+              <option value="yes">Margot on</option>
+            </select>
+          </label>
+
+          <p>BackgammonAI supports English backgammon. The TricTrac model supports Trictrac classique, Trictrac &agrave; &eacute;crire, Trictrac combin&eacute;, Toc, and Toccategli.</p>
+        </fieldset>
+
+        <button type="submit">Enter Lobby</button>
+      </form>
+    </div>
+  </div>
+</section>

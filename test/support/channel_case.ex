@@ -1,4 +1,4 @@
-defmodule BackgammonWeb.ChannelCase do
+defmodule HermesTrictracWeb.ChannelCase do
   @moduledoc """
   This module defines the test case to be used by
   channel tests.
@@ -19,7 +19,7 @@ defmodule BackgammonWeb.ChannelCase do
     quote do
       import Phoenix.ChannelTest
 
-      @endpoint BackgammonWeb.Endpoint
+      @endpoint HermesTrictracWeb.Endpoint
     end
   end
 

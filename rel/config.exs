@@ -60,8 +60,8 @@ end
 # when running `mix release`, the first release in the file
 # will be used by default
 
-release :backgammon do
-  set version: current_version(:backgammon)
+release :hermes_trictrac do
+  set version: current_version(:hermes_trictrac)
   set applications: [
     :runtime_tools
   ]

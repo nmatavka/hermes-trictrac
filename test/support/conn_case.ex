@@ -1,4 +1,4 @@
-defmodule BackgammonWeb.ConnCase do
+defmodule HermesTrictracWeb.ConnCase do
   @moduledoc """
   This module defines the test case to be used by
   tests that require setting up a connection.
@@ -20,7 +20,7 @@ defmodule BackgammonWeb.ConnCase do
       import Plug.Conn
       import Phoenix.ConnTest
 
-      @endpoint BackgammonWeb.Endpoint
+      @endpoint HermesTrictracWeb.Endpoint
     end
   end
 

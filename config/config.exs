@@ -1,12 +1,12 @@
 import Config
 
-config :backgammon, BackgammonWeb.Endpoint,
+config :hermes_trictrac, HermesTrictracWeb.Endpoint,
   url: [host: "localhost"],
   render_errors: [
-    formats: [html: BackgammonWeb.ErrorHTML, json: BackgammonWeb.ErrorJSON],
+    formats: [html: HermesTrictracWeb.ErrorHTML, json: HermesTrictracWeb.ErrorJSON],
     layout: false
   ],
-  pubsub_server: Backgammon.PubSub
+  pubsub_server: HermesTrictrac.PubSub
 
 config :logger, :console,
   format: "$time $metadata[$level] $message\n",
@@ -14,11 +14,19 @@ config :logger, :console,
 
 config :phoenix, :json_library, Jason
 
-config :backgammon, :dice_impl, Backgammon.Rules.Dice.CryptoRandom
+config :hermes_trictrac, :dice_impl, HermesTrictrac.Rules.Dice.CryptoRandom
+config :hermes_trictrac, :client_id_scope, :tab
+
+config :hermes_trictrac, :trictrac_model_bot,
+  project_dir: Path.expand("../trictrac_zero", __DIR__),
+  script: Path.expand("../trictrac_zero/scripts/frontend_bot.jl", __DIR__),
+  session_dir:
+    Path.expand("../trictrac_zero/sessions/trictrac-classique-sparse-v4-arena96x16", __DIR__),
+  name: "TricTracZero"
 
 config :esbuild,
   version: "0.25.1",
-  backgammon: [
+  hermes_trictrac: [
     args: ~w(
         js/app.js
         --bundle

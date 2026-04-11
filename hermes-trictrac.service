@@ -1,0 +1,16 @@
+[Unit]
+Description=HERMES Trictrac
+
+[Service]
+Type=simple
+User=hermes-trictrac
+Group=hermes-trictrac
+Restart=on-failure
+Environment=MIX_ENV=prod "PORT=4793"
+Environment=LANG=en_US.UTF-8
+
+WorkingDirectory=/home/hermes-trictrac/hermes_trictrac
+ExecStart=/home/hermes-trictrac/hermes_trictrac/start.sh
+
+[Install]
+WantedBy=multi-user.target

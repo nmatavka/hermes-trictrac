@@ -5,7 +5,7 @@ export PORT=4793
 
 echo "Stopping old copy of app, if any..."
 
-_build/prod/rel/backgammon/bin/backgammon stop || true
+_build/prod/rel/hermes_trictrac/bin/hermes_trictrac stop || true
 
 echo "Starting app..."
 
@@ -13,5 +13,5 @@ echo "Starting app..."
 #_build/prod/rel/memory/bin/memory start
 
 # Foreground for testing and for systemd
-_build/prod/rel/backgammon/bin/backgammon foreground
+_build/prod/rel/hermes_trictrac/bin/hermes_trictrac foreground
 

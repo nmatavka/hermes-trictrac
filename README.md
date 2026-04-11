@@ -1,4 +1,4 @@
-# Backgammon
+# HERMES Trictrac
 
 Modern Phoenix 1.8 app with a React frontend over Phoenix Channels.
 
@@ -17,7 +17,7 @@ To build production assets:
 To build a release:
 
   * Run `MIX_ENV=prod mix release`
-  * Start it with `PHX_SERVER=true SECRET_KEY_BASE=$(mix phx.gen.secret) _build/prod/rel/backgammon/bin/backgammon start`
+  * Start it with `PHX_SERVER=true SECRET_KEY_BASE=$(mix phx.gen.secret) _build/prod/rel/hermes_trictrac/bin/hermes_trictrac start`
 
 Ready to deploy? Please [check Phoenix deployment guides](https://hexdocs.pm/phoenix/deployment.html).
 

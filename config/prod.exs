@@ -1,6 +1,6 @@
 import Config
 
-config :backgammon, BackgammonWeb.Endpoint,
+config :hermes_trictrac, HermesTrictracWeb.Endpoint,
   cache_static_manifest: "priv/static/cache_manifest.json"
 
 config :logger, level: :info

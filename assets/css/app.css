@@ -70,7 +70,7 @@ select {
 form[action="/game"] {
   display: grid;
   gap: 18px;
-  max-width: 640px;
+  max-width: 760px;
   padding: 28px;
   margin-bottom: 48px;
   border: 1px solid var(--card-border);
@@ -83,6 +83,124 @@ form[action="/game"] label {
   display: grid;
   gap: 8px;
   color: var(--ink-muted);
+}
+
+form[action="/game"] fieldset {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 18px;
+  border: 1px solid rgba(216, 178, 119, 0.12);
+  border-radius: 18px;
+  background: rgba(255, 248, 236, 0.04);
+}
+
+form[action="/game"] legend {
+  padding: 0 8px;
+  color: var(--ink);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.variant-fieldset {
+  gap: 14px;
+}
+
+.variant-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.variant-grid-headline {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.variant-grid-secondary {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding-top: 12px;
+}
+
+.variant-option {
+  display: block;
+}
+
+.variant-choice {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.variant-chip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 56px;
+  padding: 12px 14px;
+  border: 1px solid rgba(216, 178, 119, 0.16);
+  border-radius: 16px;
+  color: var(--ink);
+  background: rgba(255, 248, 236, 0.05);
+  text-align: center;
+  line-height: 1.3;
+  transition:
+    transform 140ms ease,
+    border-color 140ms ease,
+    background-color 140ms ease,
+    box-shadow 140ms ease,
+    color 140ms ease;
+  cursor: pointer;
+}
+
+.variant-chip:hover {
+  transform: translateY(-1px);
+  border-color: rgba(216, 178, 119, 0.34);
+  background: rgba(255, 248, 236, 0.09);
+}
+
+.variant-choice:checked + .variant-chip {
+  color: #2b120c;
+  border-color: rgba(255, 231, 191, 0.35);
+  background: linear-gradient(180deg, #f6d59a 0%, #d8b277 100%);
+  box-shadow: 0 10px 22px rgba(216, 178, 119, 0.16);
+}
+
+.variant-choice:focus-visible + .variant-chip {
+  outline: 2px solid rgba(255, 236, 188, 0.85);
+  outline-offset: 2px;
+}
+
+.variant-chip-secondary {
+  min-height: 52px;
+}
+
+.variant-disclosure {
+  border-top: 1px solid rgba(216, 178, 119, 0.12);
+  padding-top: 12px;
+}
+
+.variant-disclosure summary {
+  color: var(--ink-muted);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  list-style: none;
+}
+
+.variant-disclosure summary::-webkit-details-marker {
+  display: none;
+}
+
+.variant-disclosure summary::after {
+  content: "Show";
+  margin-left: 10px;
+  color: var(--gold);
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.variant-disclosure[open] summary::after {
+  content: "Hide";
 }
 
 input,
@@ -253,9 +371,35 @@ button:disabled {
   background: rgba(255, 248, 236, 0.06);
 }
 
+.opening-roll-entry {
+  align-items: center;
+}
+
+.opening-roll-waiting {
+  width: 52px;
+  height: 52px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  border: 1px dashed var(--card-border);
+  background: rgba(255, 250, 240, 0.06);
+  color: var(--ink-muted);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .notice {
   padding: 12px 14px;
   border-radius: 16px;
+}
+
+@media (max-width: 720px) {
+  .variant-grid-headline,
+  .variant-grid-secondary {
+    grid-template-columns: 1fr;
+  }
 }
 
 .notice.error {
@@ -486,8 +630,8 @@ button:disabled {
 }
 
 .bar-column {
-  left: 47%;
-  width: 6%;
+  left: 46.2%;
+  width: 6.4%;
 }
 
 .home-column {
@@ -507,7 +651,7 @@ button:disabled {
 }
 
 .bar-pocket {
-  width: 52%;
+  width: 90%;
   margin: 0 auto;
   background: transparent;
   box-shadow: none;
@@ -516,7 +660,7 @@ button:disabled {
 .bar-pocket::before {
   content: "";
   position: absolute;
-  inset: 8% 22%;
+  inset: 8% 7%;
   z-index: 0;
   border-radius: 18px;
   background: linear-gradient(180deg, rgba(22, 8, 5, 0.18), rgba(255, 255, 255, 0.06) 24%, rgba(22, 8, 5, 0.2));
@@ -546,6 +690,18 @@ button:disabled {
 .bar-pocket strong,
 .home-pocket strong {
   font-size: 1.35rem;
+}
+
+.bar-pocket strong {
+  align-self: center;
+  min-width: 2.15rem;
+  padding: 0.18rem 0.58rem;
+  border-radius: 999px;
+  color: rgba(255, 244, 223, 0.96);
+  background: rgba(39, 17, 11, 0.76);
+  box-shadow: inset 0 0 0 1px rgba(255, 231, 191, 0.14);
+  text-align: center;
+  line-height: 1.15;
 }
 
 .dice-row {
