@@ -2,7 +2,7 @@
   <div class="row">
     <div class="column">
       <h1 id="index-page">Start or Join a Table</h1>
-      <form action={~p"/game"} method="post">
+      <form action={~p"/game"} method="post" data-lobby-form>
         <input type="hidden" name="_csrf_token" value={get_csrf_token()} />
 
         <label>
@@ -24,6 +24,7 @@
                   type="radio"
                   name="variant"
                   value={variant.id}
+                  data-computer-bot={Map.get(@computer_variant_bots, variant.id)}
                   checked={variant.id == "backgammon"}
                 />
                 <span class="variant-chip"><%= raw(variant.label) %></span>
@@ -31,7 +32,7 @@
             <% end %>
           </div>
 
-          <details class="variant-disclosure">
+          <details class="variant-disclosure" data-human-only-variants>
             <summary>More games</summary>
             <div class="variant-grid variant-grid-secondary">
               <%= for variant <- @secondary_variants do %>
@@ -42,35 +43,64 @@
               <% end %>
             </div>
           </details>
+
+          <p class="muted-copy computer-only-note" data-computer-variants-note hidden>
+            More games are not available for computer play yet.
+          </p>
         </fieldset>
 
-        <fieldset>
-          <legend>Model Opponent</legend>
+        <fieldset class="opponent-fieldset">
+          <legend>Opponent</legend>
 
-          <label>
-            <input type="radio" name="bot" value="" checked />
-            Human opponent
-          </label>
+          <input type="hidden" name="bot" value="" data-bot-input />
 
-          <label>
-            <input type="radio" name="bot" value="backgammon_ai" />
-            Play English backgammon against BackgammonAI
-          </label>
+          <div class="segmented-line">
+            <span class="segmented-label">Play against</span>
+            <div class="segmented-control" role="radiogroup" aria-label="Opponent">
+              <label class="segment-option">
+                <input
+                  class="segment-choice"
+                  type="radio"
+                  name="opponent"
+                  value="human"
+                  checked
+                  data-opponent-choice
+                />
+                <span class="segment-chip">Human</span>
+              </label>
 
-          <label>
-            <input type="radio" name="bot" value="trictrac_zero" />
-            Play against the current TricTrac model
-          </label>
+              <label class="segment-option">
+                <input
+                  class="segment-choice"
+                  type="radio"
+                  name="opponent"
+                  value="computer"
+                  data-opponent-choice
+                />
+                <span class="segment-chip">Computer</span>
+              </label>
+            </div>
+          </div>
 
-          <label>
-            Margot:
-            <select name="bot_margot">
-              <option value="no">Margot off</option>
-              <option value="yes">Margot on</option>
-            </select>
-          </label>
+          <div class="segmented-line margot-line" data-margot-options hidden>
+            <span class="segmented-label">Margot</span>
+            <div class="segmented-control" role="radiogroup" aria-label="Margot">
+              <label class="segment-option">
+                <input class="segment-choice" type="radio" name="bot_margot" value="no" checked />
+                <span class="segment-chip">Off</span>
+              </label>
 
-          <p>BackgammonAI supports English backgammon. The TricTrac model supports Trictrac classique, Trictrac &agrave; &eacute;crire, Trictrac combin&eacute;, Toc, and Toccategli.</p>
+              <label class="segment-option">
+                <input class="segment-choice" type="radio" name="bot_margot" value="yes" />
+                <span class="segment-chip">On</span>
+              </label>
+            </div>
+          </div>
+
+          <p class="muted-copy">
+            Computer play uses BackgammonAI for English backgammon and the current TricTrac model for Trictrac classique,
+            Trictrac &agrave; &eacute;crire, Trictrac combin&eacute;, Toc, and Toccategli.
+          </p>
         </fieldset>
 
         <button type="submit">Enter Lobby</button>

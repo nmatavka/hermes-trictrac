@@ -689,6 +689,12 @@ function OpeningRollDie({ color, value }) {
 export default function gameInit(root, channel, options = {}) {
   const joinTimeoutMs = options.joinTimeoutMs ?? 15000;
   const onJoinComplete = options.onJoinComplete ?? (() => {});
+  const onJoinError = options.onJoinError ?? ((resp) => {
+    root.textContent = `Unable to join game: ${resp?.msg || "unknown error"}`;
+  });
+  const onJoinTimeout = options.onJoinTimeout ?? (() => {
+    root.textContent = "Joining the table timed out. If you requested the model opponent, it may still be warming up.";
+  });
   const botMargotPreference = options.botMargotPreference ?? "";
   const reactRoot = createRoot(root);
 
@@ -709,11 +715,11 @@ export default function gameInit(root, channel, options = {}) {
     })
     .receive("error", (resp) => {
       onJoinComplete();
-      root.innerHTML = `<p>Unable to join game: ${resp?.msg || "unknown error"}</p>`;
+      onJoinError(resp);
     })
     .receive("timeout", () => {
       onJoinComplete();
-      root.innerHTML = "<p>Joining the table timed out. If you requested the model opponent, it may still be warming up.</p>";
+      onJoinTimeout();
     });
 }
 

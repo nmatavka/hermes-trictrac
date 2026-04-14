@@ -213,7 +213,7 @@ defmodule HermesTrictracWeb.GamesChannelBotTest do
     assert host_reply.game["bot"]["name"] == "FakeTricTracZero"
   end
 
-  test "joining with a Margot bot keeps trictrac classique at consent with the bot voting yes" do
+  test "joining with a Margot bot applies the lobby choice and starts trictrac classique" do
     lobby = "tt-bot-margot-#{System.unique_integer([:positive])}"
 
     {:ok, host_reply, _host_socket} =
@@ -228,13 +228,16 @@ defmodule HermesTrictracWeb.GamesChannelBotTest do
       })
 
     assert host_reply.player["color"] == "white"
-    assert host_reply.game["status"] == "awaiting_match_options"
-    assert host_reply.game["pending_match_options"]["kind"] == "trictrac_margot_consent"
-    assert host_reply.game["pending_match_options"]["responses"]["black"] == "yes"
+    assert host_reply.game["status"] == "playing"
+    assert host_reply.game["pending_match_options"] == nil
+    assert host_reply.game["match"]["options"]["margotEnabled"] == true
+    assert host_reply.game["opening_roll"]["pending"] == true
+    assert is_integer(host_reply.game["opening_roll"]["rolls"]["black"])
+    assert is_nil(host_reply.game["opening_roll"]["rolls"]["white"])
     assert host_reply.game["bot"]["enabled"] == true
   end
 
-  test "joining with bot is exposed for toc and includes Margot in match options" do
+  test "joining with bot is exposed for toc and applies default match options" do
     lobby = "toc-bot-#{System.unique_integer([:positive])}"
 
     {:ok, host_reply, _host_socket} =
@@ -248,17 +251,19 @@ defmodule HermesTrictracWeb.GamesChannelBotTest do
         "client_id" => "toc-bot-host"
       })
 
-    option_keys =
-      host_reply.game["pending_match_options"]["options"]
-      |> Enum.map(& &1["key"])
-
     assert host_reply.player["color"] == "white"
     assert host_reply.game["bot"]["enabled"] == true
-    assert host_reply.game["status"] == "awaiting_match_options"
-    assert option_keys == ["holeTarget", "doublesMode", "margotEnabled"]
+    assert host_reply.game["status"] == "playing"
+    assert host_reply.game["pending_match_options"] == nil
+    assert host_reply.game["match"]["options"]["holeTarget"] == "1"
+    assert host_reply.game["match"]["options"]["doublesMode"] == "on"
+    assert host_reply.game["match"]["options"]["margotEnabled"] == true
+    assert host_reply.game["opening_roll"]["pending"] == true
+    assert is_integer(host_reply.game["opening_roll"]["rolls"]["black"])
+    assert is_nil(host_reply.game["opening_roll"]["rolls"]["white"])
   end
 
-  test "joining with bot is exposed for trictrac combine and auto-fills the bot partie length response" do
+  test "joining with bot is exposed for trictrac combine and applies default match options" do
     lobby = "combine-bot-#{System.unique_integer([:positive])}"
 
     {:ok, host_reply, _host_socket} =
@@ -273,12 +278,16 @@ defmodule HermesTrictracWeb.GamesChannelBotTest do
 
     assert host_reply.player["color"] == "white"
     assert host_reply.game["bot"]["enabled"] == true
-    assert host_reply.game["status"] == "awaiting_match_options"
-    assert host_reply.game["pending_match_options"]["kind"] == "trictrac_partie_length_consent"
-    assert host_reply.game["pending_match_options"]["responses"]["black"] == "16"
+    assert host_reply.game["status"] == "playing"
+    assert host_reply.game["pending_match_options"] == nil
+    assert host_reply.game["match"]["options"]["aEcrirePartieLength"] == "16"
+    assert host_reply.game["match"]["options"]["margotEnabled"] == false
+    assert host_reply.game["opening_roll"]["pending"] == true
+    assert is_integer(host_reply.game["opening_roll"]["rolls"]["black"])
+    assert is_nil(host_reply.game["opening_roll"]["rolls"]["white"])
   end
 
-  test "aecrire bot takes its opening roll after the host resolves match options" do
+  test "aecrire bot applies default match options and takes its opening roll" do
     lobby = "aecrire-bot-opening-#{System.unique_integer([:positive])}"
     GameServer.reg(lobby)
     GameServer.start(lobby, "trictrac_aecrire")
@@ -288,24 +297,16 @@ defmodule HermesTrictracWeb.GamesChannelBotTest do
                "bot" => "trictrac_zero"
              })
 
-    assert game["pending_match_options"]["kind"] == "trictrac_partie_length_consent"
-    assert game["pending_match_options"]["responses"]["black"] == "16"
-
-    assert {:ok, game} =
-             GameServer.submit_match_options(
-               lobby,
-               %{"aEcrirePartieLengthConsent" => "16"},
-               "nick",
-               "aecrire-bot-host"
-             )
-
     assert game["status"] == "playing"
+    assert game["pending_match_options"] == nil
+    assert game["match"]["options"]["aEcrirePartieLength"] == "16"
+    assert game["match"]["options"]["margotEnabled"] == false
     assert game["opening_roll"]["pending"] == true
     assert is_integer(game["opening_roll"]["rolls"]["black"])
     assert is_nil(game["opening_roll"]["rolls"]["white"])
   end
 
-  test "joining with a Margot bot keeps toccategli at consent with the bot voting yes" do
+  test "joining with a Margot bot applies the lobby choice and starts toccategli" do
     lobby = "tocc-bot-margot-#{System.unique_integer([:positive])}"
 
     {:ok, host_reply, _host_socket} =
@@ -321,9 +322,12 @@ defmodule HermesTrictracWeb.GamesChannelBotTest do
 
     assert host_reply.player["color"] == "white"
     assert host_reply.game["bot"]["enabled"] == true
-    assert host_reply.game["status"] == "awaiting_match_options"
-    assert host_reply.game["pending_match_options"]["kind"] == "trictrac_margot_consent"
-    assert host_reply.game["pending_match_options"]["responses"]["black"] == "yes"
+    assert host_reply.game["status"] == "playing"
+    assert host_reply.game["pending_match_options"] == nil
+    assert host_reply.game["match"]["options"]["margotEnabled"] == true
+    assert host_reply.game["opening_roll"]["pending"] == true
+    assert is_integer(host_reply.game["opening_roll"]["rolls"]["black"])
+    assert is_nil(host_reply.game["opening_roll"]["rolls"]["white"])
   end
 
   test "peek can advance a bot game when the model is to roll" do

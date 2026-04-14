@@ -4,7 +4,7 @@ defmodule HermesTrictracWeb do
   such as controllers, channels, and HTML components.
   """
 
-  def static_paths, do: ~w(assets favicon.ico robots.txt)
+  def static_paths, do: ~w(assets fonts favicon.ico robots.txt)
 
   def router do
     quote do

@@ -2142,6 +2142,79 @@ defmodule HermesTrictrac.EngineTest do
     assert get_in(snapshot, ["trictrac", "score", Access.at(1), "points"]) == 4
   end
 
+  test "trictrac awards dame impuissante for an unplayable leftover die" do
+    engine = Engine.new("tt-imp-leftover", "trictrac_classique")
+    assert {:ok, engine, _} = Engine.join(engine, "nick", "tab-a")
+    assert {:ok, engine, _} = Engine.join(engine, "jane", "tab-b")
+
+    points =
+      Enum.map(0..23, fn index ->
+        cond do
+          index == 6 -> %{white: 15, black: 0}
+          index in [0, 1] -> %{white: 0, black: 2}
+          true -> %{white: 0, black: 0}
+        end
+      end)
+
+    board = %{engine.board | points: points}
+    dice = %{values: [1, 6], moves: [1, 6], moves_left: [1, 6], moves_played: []}
+
+    trictrac =
+      HermesTrictrac.Rules.Trictrac.Classique.begin_turn(
+        engine.trictrac,
+        board,
+        engine.variant,
+        :white,
+        dice
+      )
+
+    runtime =
+      engine.runtime
+      |> Map.put(:trictrac, trictrac)
+      |> Map.put(:board, board)
+      |> Map.put(:dice, dice)
+      |> Map.put(:turn_color, :white)
+      |> Map.put(:turn_number, 1)
+      |> Map.put(:match, engine.match)
+      |> Map.put(:history, [])
+
+    runtime =
+      Map.put(
+        runtime,
+        :legal_moves,
+        HermesTrictrac.Rules.Trictrac.Classique.legal_moves(runtime, engine.variant, :white)
+      )
+
+    engine = %{
+      engine
+      | runtime: runtime,
+        trictrac: trictrac,
+        board: board,
+        turn_color: :white,
+        turn_number: 1,
+        dice: dice,
+        legal_moves: runtime.legal_moves,
+        history: [],
+        status: :playing,
+        pending_match_options: nil
+    }
+
+    assert get_in(engine.trictrac, [:pending_impuissance_by_type, :white]) == 0
+
+    assert {:ok, engine} =
+             Engine.move(engine, %{"from" => 6, "to" => 5, "sequence" => nil}, "nick", "tab-a")
+
+    snapshot = Engine.snapshot(engine)
+    assert snapshot["ui_actions"]["can_end_turn"] == true
+    assert snapshot["ui_actions"]["end_turn_reason"] == "impuissance"
+    assert snapshot["ui_actions"]["end_turn_points"] == 2
+
+    assert {:ok, engine} = Engine.confirm(engine, "nick", "tab-a")
+    snapshot = Engine.snapshot(engine)
+    assert "impuissance" in get_in(snapshot, ["trictrac", "last_events"])
+    assert get_in(snapshot, ["trictrac", "score", Access.at(1), "points"]) == 2
+  end
+
   test "trictrac pile de misere can conserve on a later still-blocked turn" do
     engine = Engine.new("tt-pile", "trictrac_classique")
     assert {:ok, engine, _} = Engine.join(engine, "nick", "tab-a")

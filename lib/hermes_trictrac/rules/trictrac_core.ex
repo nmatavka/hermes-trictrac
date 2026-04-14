@@ -1,6 +1,6 @@
 defmodule HermesTrictrac.Rules.TrictracCore do
   alias HermesTrictrac.Rules.RaceCore
-  alias HermesTrictrac.Rules.Trictrac.{AEcrire, Classique, Combine, Plein, Toc}
+  alias HermesTrictrac.Rules.Trictrac.{AEcrire, Classique, Combine, Plein, Toc, VariantRules}
 
   @reprise_variants ["trictrac_classique", "trictrac_aecrire", "trictrac_combine", "toccategli"]
   @aecrire_variants ["trictrac_aecrire", "trictrac_combine"]
@@ -53,7 +53,7 @@ defmodule HermesTrictrac.Rules.TrictracCore do
     runtime = ensure_state(runtime, variant)
 
     with {:ok, runtime} <- RaceCore.move(runtime, variant, color, move) do
-      {:ok, runtime}
+      {:ok, refresh_pending_impuissance(runtime, variant, color)}
     end
   end
 
@@ -78,6 +78,7 @@ defmodule HermesTrictrac.Rules.TrictracCore do
 
       true ->
         with runtime <- ensure_turn_seed(runtime, previous, variant, color),
+             runtime <- refresh_pending_impuissance(runtime, variant, color),
              {:ok, _analysis} <- validate_turn_before_confirm(runtime, variant, color) do
           runtime =
             runtime
@@ -352,6 +353,29 @@ defmodule HermesTrictrac.Rules.TrictracCore do
     update_trictrac(runtime, fn trictrac ->
       put_in(trictrac, [:pending_impuissance_by_type, color], 0)
     end)
+  end
+
+  defp refresh_pending_impuissance(runtime, variant, color) do
+    moves_left = get_in(runtime, [:dice, :moves_left]) || []
+
+    cond do
+      is_nil(runtime.dice) ->
+        runtime
+
+      moves_left == [] ->
+        runtime
+
+      remaining_checker_moves?(runtime, variant, color) ->
+        runtime
+
+      true ->
+        points = VariantRules.impuissance_points(variant, runtime.dice, length(moves_left))
+
+        update_trictrac(runtime, fn trictrac ->
+          pending = get_in(trictrac, [:pending_impuissance_by_type, color]) || 0
+          put_in(trictrac, [:pending_impuissance_by_type, color], max(pending, points))
+        end)
+    end
   end
 
   defp maybe_queue_turn_events(runtime, previous, variant, color) do

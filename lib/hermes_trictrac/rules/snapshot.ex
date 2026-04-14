@@ -1,6 +1,6 @@
 defmodule HermesTrictrac.Rules.Snapshot do
   alias HermesTrictrac.Rules.RaceCore
-  alias HermesTrictrac.Rules.Trictrac.Classique
+  alias HermesTrictrac.Rules.Trictrac.{Classique, VariantRules}
 
   def build(engine) do
     variant = engine.variant
@@ -269,8 +269,27 @@ defmodule HermesTrictrac.Rules.Snapshot do
   defp end_turn_points(engine) do
     trictrac = engine.trictrac || %{}
     pending = Map.get(trictrac, :pending_impuissance_by_type, %{})
-    Map.get(pending, engine.turn_color, 0) || 0
+    stored = Map.get(pending, engine.turn_color, 0) || 0
+
+    if stored > 0 do
+      stored
+    else
+      actual_unplayable_points(engine)
+    end
   end
+
+  defp actual_unplayable_points(%{variant: %{family: :trictrac}, dice: dice} = engine)
+       when not is_nil(dice) do
+    moves_left = dice.moves_left || []
+
+    if moves_left != [] and Enum.empty?(engine.legal_moves || []) do
+      VariantRules.impuissance_points(engine.variant, dice, length(moves_left))
+    else
+      0
+    end
+  end
+
+  defp actual_unplayable_points(_engine), do: 0
 
   defp can_end_turn?(engine, end_turn_points) do
     engine.status == :playing and

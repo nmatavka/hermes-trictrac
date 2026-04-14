@@ -8,6 +8,14 @@ defmodule HermesTrictracWeb.PageController do
     "toc",
     "toccategli"
   ]
+  @computer_variant_bots %{
+    "backgammon" => "backgammon_ai",
+    "trictrac_classique" => "trictrac_zero",
+    "trictrac_aecrire" => "trictrac_zero",
+    "trictrac_combine" => "trictrac_zero",
+    "toc" => "trictrac_zero",
+    "toccategli" => "trictrac_zero"
+  }
   @headline_variants [
     %{id: "backgammon", label: "Backgammon"},
     %{id: "trictrac_classique", label: "Trictrac classique"},
@@ -19,20 +27,21 @@ defmodule HermesTrictracWeb.PageController do
   @secondary_variants [
     %{id: "tapa", label: "Tapa / Plakoto"},
     %{id: "jacquet", label: "Jacquet / Pheuga"},
-    %{id: "garanguet", label: "Garanguet"},
     %{id: "tavli", label: "Tavli"},
+    %{id: "brade", label: "Bräde"},
+    %{id: "garanguet", label: "Garanguet"},
     %{id: "sbaraglio", label: "Sbaraglio"},
     %{id: "sbaraglino", label: "Sbaraglino"},
+    %{id: "plein", label: "Plein"},
     %{id: "tourne_case", label: "Tourne-Case"},
-    %{id: "dames_rabattues", label: "Dames Rabattues"},
-    %{id: "plein", label: "Jeu du Plein"},
-    %{id: "brade", label: "Brade Suedois"}
+    %{id: "dames_rabattues", label: "Dames Rabattues"}
   ]
 
   def index(conn, _params) do
     render(conn, :index,
       headline_variants: @headline_variants,
-      secondary_variants: @secondary_variants
+      secondary_variants: @secondary_variants,
+      computer_variant_bots: @computer_variant_bots
     )
   end
 

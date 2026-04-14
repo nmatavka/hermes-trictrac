@@ -18,18 +18,26 @@ defmodule HermesTrictracWeb.PageControllerTest do
     assert body =~ "Jacquet / Pheuga"
     assert body =~ "Garanguet"
     assert body =~ "Tavli"
+    assert body =~ ~s(name="bot")
+    assert body =~ "Play against"
+    assert body =~ "Human"
+    assert body =~ "Computer"
     assert body =~ ~s(name="bot_margot")
-    assert body =~ "Margot off"
-    assert body =~ "Margot on"
+    assert body =~ "Margot"
+    assert body =~ "Off"
+    assert body =~ "On"
     assert body =~ "Tourne-Case"
     assert body =~ "Dames Rabattues"
     assert body =~ "Sbaraglio"
     assert body =~ "Sbaraglino"
-    assert body =~ "Brade Suedois"
+    assert body =~ "Bräde"
+    assert body =~ "Plein"
+    refute body =~ "Brade Suedois"
+    refute body =~ "Jeu du Plein"
 
-    assert body =~ "Play English backgammon against BackgammonAI"
-    assert body =~ "BackgammonAI supports English backgammon."
-    assert body =~ "The TricTrac model supports Trictrac classique"
+    assert body =~ "More games are not available for computer play yet."
+    assert body =~ "Computer play uses BackgammonAI for English backgammon"
+    assert body =~ "the current TricTrac model for Trictrac classique"
   end
 
   test "POST /game renders the game root", %{conn: conn} do

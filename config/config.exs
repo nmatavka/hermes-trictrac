@@ -39,6 +39,7 @@ config :esbuild,
         --loader:.gif=file
         --loader:.ico=file
         --loader:.mp3=file
+        --external:/fonts/*
       ),
     cd: Path.expand("../assets", __DIR__)
   ]

@@ -93,7 +93,8 @@ defmodule HermesTrictrac.GameServer do
          {:ok, engine, player} <-
            normalize_engine_join(Engine.join(state.engine, user, client_id)),
          {:ok, updated} <- maybe_configure_bot(%{state | engine: engine}, player, requested_bot),
-         {:ok, updated} <- maybe_run_bot_turns(updated, strict: not is_nil(requested_bot)) do
+         {:ok, updated} <-
+           maybe_prepare_bot_game(updated, user, client_id, requested_bot) do
       persist(updated)
       {:reply, {:ok, %{game: snapshot(updated), player: player}}, updated}
     else
@@ -306,6 +307,76 @@ defmodule HermesTrictrac.GameServer do
         end
     end
   end
+
+  defp maybe_prepare_bot_game(state, _user, _client_id, nil), do: {:ok, state}
+
+  defp maybe_prepare_bot_game(state, user, client_id, _requested_bot) do
+    settle_bot_pregame(state, user, client_id, 0)
+  end
+
+  defp settle_bot_pregame(state, _user, _client_id, steps) when steps >= 8 do
+    maybe_run_bot_turns(state, strict: true)
+  end
+
+  defp settle_bot_pregame(state, user, client_id, steps) do
+    with {:ok, bot_updated} <- maybe_run_bot_turns(state, strict: true),
+         {:ok, host_updated, host_changed?} <-
+           maybe_submit_host_bot_options(bot_updated, user, client_id) do
+      if host_changed? do
+        settle_bot_pregame(host_updated, user, client_id, steps + 1)
+      else
+        {:ok, host_updated}
+      end
+    end
+  end
+
+  defp maybe_submit_host_bot_options(%{bot: nil} = state, _user, _client_id),
+    do: {:ok, state, false}
+
+  defp maybe_submit_host_bot_options(state, user, client_id) do
+    case host_bot_options(state.engine.pending_match_options, state.bot) do
+      nil ->
+        {:ok, state, false}
+
+      options ->
+        case Engine.submit_match_options(state.engine, options, user, client_id) do
+          {:ok, engine} -> {:ok, %{state | engine: engine}, true}
+          {:error, msg} -> {:error, msg}
+        end
+    end
+  end
+
+  defp host_bot_options(nil, _bot), do: nil
+
+  defp host_bot_options(%{"kind" => "trictrac_margot_consent"} = pending, bot) do
+    responses = pending["responses"] || %{}
+
+    if is_nil(Map.get(responses, "white")) do
+      %{"margotConsent" => if(bot_margot_enabled?(bot), do: "yes", else: "no")}
+    end
+  end
+
+  defp host_bot_options(%{"kind" => "trictrac_partie_length_consent"} = pending, _bot) do
+    responses = pending["responses"] || %{}
+
+    if is_nil(Map.get(responses, "white")) do
+      %{"aEcrirePartieLengthConsent" => "16"}
+    end
+  end
+
+  defp host_bot_options(%{"options" => options}, %{kind: @trictrac_bot} = bot)
+       when is_list(options) do
+    Enum.into(options, %{}, fn option ->
+      key = option["key"]
+
+      value =
+        if key == "margotEnabled", do: bot_margot_enabled?(bot), else: option["defaultValue"]
+
+      {key, value}
+    end)
+  end
+
+  defp host_bot_options(_pending, _bot), do: nil
 
   defp run_bot_turns(state, steps, _broadcast) when steps >= @max_bot_steps do
     {:error, "Bot exceeded #{@max_bot_steps} consecutive actions.", state}
