@@ -2,6 +2,13 @@ import "../css/app.css";
 import "phoenix_html"
 import socket from "./socket";
 import gameInit from "./HermesTrictracApp";
+import {
+  attachLanguageControls,
+  localizeError,
+  localizeStaticPage,
+  subscribeLanguage,
+  t
+} from "./i18n";
 
 function initLobbyForm() {
   const form = document.querySelector("[data-lobby-form]");
@@ -69,19 +76,27 @@ function initLobbyForm() {
   syncLobbyForm();
 }
 
-function renderJoinStatus(root, message) {
+function renderJoinStatus(root, message, detail = "") {
   const card = document.createElement("section");
   card.className = "rail-card join-status-card";
 
   const label = document.createElement("p");
   label.className = "rail-label";
-  label.textContent = "Joining Table";
+  label.textContent = t("join.joiningLabel");
 
   const copy = document.createElement("p");
   copy.className = "status-line";
   copy.textContent = message;
 
-  card.replaceChildren(label, copy);
+  if (detail) {
+    const detailCopy = document.createElement("p");
+    detailCopy.className = "muted-copy";
+    detailCopy.textContent = detail;
+    card.replaceChildren(label, copy, detailCopy);
+  } else {
+    card.replaceChildren(label, copy);
+  }
+
   root.replaceChildren(card);
 }
 
@@ -111,7 +126,7 @@ function renderJoinError(root, { title, detail, hint }) {
 
   const label = document.createElement("p");
   label.className = "rail-label";
-  label.textContent = "Join Failed";
+  label.textContent = t("join.joinFailed");
 
   const heading = document.createElement("h2");
   heading.textContent = title;
@@ -129,13 +144,13 @@ function renderJoinError(root, { title, detail, hint }) {
 
   const retry = document.createElement("button");
   retry.type = "button";
-  retry.textContent = "Try Again";
+  retry.textContent = t("join.tryAgain");
   retry.addEventListener("click", () => window.location.reload());
 
   const lobbyLink = document.createElement("a");
   lobbyLink.className = "button-link";
   lobbyLink.href = "/";
-  lobbyLink.textContent = "Back to Lobby";
+  lobbyLink.textContent = t("join.backToLobby");
 
   actions.replaceChildren(retry, lobbyLink);
   card.replaceChildren(label, heading, detailCopy, hintCopy, actions);
@@ -144,6 +159,9 @@ function renderJoinError(root, { title, detail, hint }) {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  attachLanguageControls(document);
+  localizeStaticPage(document);
+  subscribeLanguage(() => localizeStaticPage(document));
   initLobbyForm();
 
   const root = document.getElementById("root");
@@ -175,44 +193,69 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const joinTimeoutMs = root.dataset.bot ? 120000 : 15000;
   const loadingMessage = root.dataset.bot
-    ? "Connecting to table and warming the model. The first bot game can take around a minute."
-    : "Connecting to table...";
+    ? t("join.connectingBot")
+    : t("join.connecting");
   const slowMessage = root.dataset.bot
-    ? "Still warming the model. The first bot connection can take a little while."
-    : "Still connecting to table...";
+    ? t("join.slowBot")
+    : t("join.slow");
 
-  renderJoinStatus(root, loadingMessage);
+  const attemptJoin = (statusMessage = loadingMessage, detail = "") => {
+    renderJoinStatus(root, statusMessage, detail);
 
-  const channel = socket.channel(root.dataset.joinTopic, payload);
-  let joinComplete = false;
-  const slowJoinTimer = window.setTimeout(() => {
-    if (!joinComplete) {
-      renderJoinStatus(root, slowMessage);
-    }
-  }, 8000);
+    const channel = socket.channel(root.dataset.joinTopic, payload);
+    let joinComplete = false;
+    const slowJoinTimer = window.setTimeout(() => {
+      if (!joinComplete) {
+        renderJoinStatus(root, slowMessage, detail);
+      }
+    }, 8000);
 
-  gameInit(root, channel, {
-    joinTimeoutMs,
-    botMargotPreference: root.dataset.botMargot || "",
-    onJoinComplete: () => {
-      joinComplete = true;
-      window.clearTimeout(slowJoinTimer);
-    },
-    onJoinError: (resp) => {
-      renderJoinError(root, {
-        title: "Unable to Join Table",
-        detail: resp?.msg || "The table rejected this join request.",
-        hint: "Try a different lobby name, match the existing table's game type, or ask a seated player to make room."
-      });
-    },
-    onJoinTimeout: () => {
-      renderJoinError(root, {
-        title: "Join Timed Out",
-        detail: root.dataset.bot
-          ? "The model opponent may still be warming up."
-          : "The table did not respond before the join timeout.",
-        hint: "Try again in a moment. If this keeps happening, return to the lobby and create a fresh table."
-      });
-    }
-  });
+    gameInit(root, channel, {
+      joinTimeoutMs,
+      botMargotPreference: root.dataset.botMargot || "",
+      onJoinComplete: () => {
+        joinComplete = true;
+        window.clearTimeout(slowJoinTimer);
+      },
+      onJoinError: (resp) => {
+        if (resp?.code === "seat_reclaim_pending" && resp?.retry_after_ms != null) {
+          const retryAfterMs = Math.max(1_000, Number(resp.retry_after_ms) || 1_000);
+          const retrySeconds = Math.ceil(retryAfterMs / 1000);
+
+          renderJoinStatus(
+            root,
+            localizeError(resp, "errors.seat_reclaim_pending"),
+            t("join.reclaimRetry", { seconds: retrySeconds })
+          );
+
+          const retryButton = document.createElement("button");
+          retryButton.type = "button";
+          retryButton.textContent = t("join.tryAgain");
+          retryButton.addEventListener("click", () => {
+            attemptJoin(t("join.reclaiming"));
+          });
+          root.querySelector(".join-status-card")?.appendChild(retryButton);
+
+          return;
+        }
+
+        renderJoinError(root, {
+          title: t("join.unable"),
+          detail: localizeError(resp, "errors.unknown") || t("join.rejected"),
+          hint: t("join.hint")
+        });
+      },
+      onJoinTimeout: () => {
+        renderJoinError(root, {
+          title: t("join.timedOut"),
+          detail: root.dataset.bot
+            ? t("join.botMayWarm")
+            : t("join.noResponse"),
+          hint: t("join.timeoutHint")
+        });
+      }
+    });
+  };
+
+  attemptJoin();
 });

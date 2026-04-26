@@ -67,7 +67,7 @@ defmodule HermesTrictracWeb.GamesChannelTest do
 
     assert host_reply.game["variant"]["id"] == "tapa"
 
-    assert {:error, %{msg: msg}} =
+    assert {:error, %{msg: msg, code: "variant_mismatch"}} =
              UserSocket
              |> socket("user:62", %{})
              |> subscribe_and_join(HermesTrictracWeb.GamesChannel, "games:#{lobby}", %{
@@ -82,6 +82,11 @@ defmodule HermesTrictracWeb.GamesChannelTest do
     assert snapshot["variant"]["id"] == "tapa"
     assert snapshot["players"]["host"]["name"] == "nick"
     assert snapshot["players"]["guest"] == nil
+  end
+
+  test "channel action errors preserve msg and include a stable code", %{guest_socket: socket} do
+    ref = push(socket, "confirm", %{})
+    assert_reply ref, :error, %{msg: "Not your turn.", code: "not_your_turn"}
   end
 
   test "rejoining with the same submitted client id reuses the same seat" do
@@ -112,6 +117,89 @@ defmodule HermesTrictracWeb.GamesChannelTest do
     assert rejoin_reply.game["players"]["host"]["name"] == "nick"
     assert rejoin_reply.game["players"]["guest"] == nil
     assert rejoin_reply.game["status"] == "waiting_for_opponent"
+  end
+
+  test "same-name rejoin on a full lobby starts a reclaim warning that the seated browser can cancel",
+       %{
+         lobby: lobby,
+         host_socket: host_socket
+       } do
+    original = Application.get_env(:hermes_trictrac, :seat_reclaim_window_ms)
+    Application.put_env(:hermes_trictrac, :seat_reclaim_window_ms, 50)
+
+    on_exit(fn ->
+      if is_nil(original) do
+        Application.delete_env(:hermes_trictrac, :seat_reclaim_window_ms)
+      else
+        Application.put_env(:hermes_trictrac, :seat_reclaim_window_ms, original)
+      end
+    end)
+
+    assert {:error, %{code: "seat_reclaim_pending", retry_after_ms: retry_after_ms}} =
+             UserSocket
+             |> socket("user:65", %{})
+             |> subscribe_and_join(HermesTrictracWeb.GamesChannel, "games:#{lobby}", %{
+               "user" => "nick",
+               "variant" => "backgammon",
+               "client_id" => "nick-reclaim-client"
+             })
+
+    assert retry_after_ms > 0
+
+    assert_broadcast "update", %{
+      game: %{
+        "seat_reclaim" => %{
+          "seat_color" => "white",
+          "claimant_name" => "nick",
+          "defender_name" => "nick"
+        }
+      }
+    }
+
+    push(host_socket, "remain_seated", %{})
+
+    assert_broadcast "update", %{game: %{"seat_reclaim" => nil}}
+
+    assert {:error, "Player not found in lobby."} =
+             GameServer.roll(lobby, "nick", "nick-reclaim-client")
+  end
+
+  test "same-name reclaim transfers the seat after the grace window", %{lobby: lobby} do
+    original = Application.get_env(:hermes_trictrac, :seat_reclaim_window_ms)
+    Application.put_env(:hermes_trictrac, :seat_reclaim_window_ms, 25)
+
+    on_exit(fn ->
+      if is_nil(original) do
+        Application.delete_env(:hermes_trictrac, :seat_reclaim_window_ms)
+      else
+        Application.put_env(:hermes_trictrac, :seat_reclaim_window_ms, original)
+      end
+    end)
+
+    assert {:error, %{code: "seat_reclaim_pending"}} =
+             UserSocket
+             |> socket("user:66", %{})
+             |> subscribe_and_join(HermesTrictracWeb.GamesChannel, "games:#{lobby}", %{
+               "user" => "nick",
+               "variant" => "backgammon",
+               "client_id" => "nick-new-browser"
+             })
+
+    assert_broadcast "update", %{game: %{"seat_reclaim" => %{"seat_color" => "white"}}}
+    Process.sleep(60)
+    assert_broadcast "update", %{game: %{"seat_reclaim" => nil}}
+
+    {:ok, rejoin_reply, _rejoin_socket} =
+      UserSocket
+      |> socket("user:67", %{})
+      |> subscribe_and_join(HermesTrictracWeb.GamesChannel, "games:#{lobby}", %{
+        "user" => "nick",
+        "variant" => "backgammon",
+        "client_id" => "nick-new-browser"
+      })
+
+    assert rejoin_reply.player["color"] == "white"
+    assert {:error, "Player not found in lobby."} = GameServer.roll(lobby, "nick", "client-1")
   end
 
   test "first backgammon roll updates the opening roll state", %{

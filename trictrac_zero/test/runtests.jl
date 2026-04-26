@@ -359,6 +359,7 @@ end
     TricTracScriptCPU.ENV_NUM_ITERS => "9",
     TricTracScriptCPU.ENV_MOVE_CAP => "620",
     TricTracScriptCPU.ENV_VALUE_TARGET_GAIN => "1.75",
+    TricTracScriptCPU.ENV_PARTIE_LENGTH_REPEATS => "4",
     TricTracScriptCPU.ENV_GAME => "toc"
   )
 
@@ -374,6 +375,8 @@ end
       "0",
       "--target-gain",
       "0.5",
+      "--partie-length-repeats",
+      "auto",
       "--game",
       "combine-margot",
       "--gpu",
@@ -400,6 +403,8 @@ end
   @test parsed.move_cap.source == :cli
   @test parsed.value_target_gain.value == 0.5
   @test parsed.value_target_gain.source == :cli
+  @test parsed.partie_length_repeats.value == TricTracScriptCPU.AUTO
+  @test parsed.partie_length_repeats.source == :cli
   @test parsed.game.value == "combine-margot"
   @test parsed.game.source == :cli
 
@@ -424,6 +429,7 @@ end
   @test occursin("--iterations", help_text)
   @test occursin("--move-cap", help_text)
   @test occursin("--target-gain", help_text)
+  @test occursin("--partie-length-repeats", help_text)
   @test occursin("--game", help_text)
   @test occursin("--reset-memory", help_text)
   @test occursin("CLI values override environment variables", help_text)
@@ -433,7 +439,107 @@ end
   @test_throws ArgumentError TricTracScriptCPU.parse_startup(:train, ["--iterations=0"]; env = Dict{String, String}())
   @test_throws ArgumentError TricTracScriptCPU.parse_startup(:train, ["--move-cap=-1"]; env = Dict{String, String}())
   @test_throws ArgumentError TricTracScriptCPU.parse_startup(:train, ["--target-gain=-1"]; env = Dict{String, String}())
+  @test_throws ArgumentError TricTracScriptCPU.parse_startup(:train, ["--partie-length-repeats=0"]; env = Dict{String, String}())
   @test_throws ArgumentError TricTracScriptCPU.parse_startup(:train, ["--game=bogus"]; env = Dict{String, String}())
+end
+
+@testset "AEcrire Partie-Length Scheduling" begin
+  spec = TricTracGameSpec(variant_id = "trictrac_aecrire")
+  try
+    TricTracZero.install_partie_length_schedule!(spec)
+    seen = [
+      TricTracZero.resolved_match_options_for_new_game(spec)["aEcrirePartieLength"]
+      for _ in 1:30
+    ]
+    counts = Dict(length => count(==(length), seen) for length in TricTracZero.AECRIRE_PARTIE_LENGTH_CHOICES)
+    @test all(get(counts, length, 0) == 3 for length in TricTracZero.AECRIRE_PARTIE_LENGTH_CHOICES)
+  finally
+    TricTracZero.remove_partie_length_schedule!(spec)
+  end
+end
+
+@testset "AEcrire Partie-Length Training Counts" begin
+  @test isnothing(TricTracZero.resolve_partie_length_repeats(
+    preset = "classique",
+    smoke = false,
+    use_gpu = false
+  ))
+  @test TricTracZero.resolve_partie_length_repeats(
+    preset = "aecrire",
+    smoke = false,
+    use_gpu = false
+  ) == 10
+  @test TricTracZero.resolve_partie_length_repeats(
+    preset = "aecrire",
+    smoke = false,
+    use_gpu = true
+  ) == 4
+  @test TricTracZero.resolve_partie_length_repeats(
+    preset = "combine",
+    smoke = true,
+    use_gpu = false
+  ) == 1
+
+  @test TricTracZero.build_params(
+    smoke = false,
+    preset = "classique",
+    use_gpu = false,
+    partie_length_repeats = 4
+  ).self_play.sim.num_games == 96
+
+  @test TricTracZero.build_params(
+    smoke = false,
+    preset = "aecrire",
+    use_gpu = false
+  ).self_play.sim.num_games == 100
+
+  @test TricTracZero.build_params(
+    smoke = false,
+    preset = "aecrire",
+    use_gpu = true
+  ).self_play.sim.num_games == 40
+
+  @test TricTracZero.build_params(
+    smoke = false,
+    preset = "combine",
+    use_gpu = false,
+    partie_length_repeats = 4
+  ).self_play.sim.num_games == 40
+
+  @test TricTracZero.build_params(
+    smoke = true,
+    preset = "combine",
+    use_gpu = false
+  ).self_play.sim.num_games == 10
+end
+
+@testset "AEcrire Partie-Length Feature Exposure" begin
+  spec = TricTracGameSpec(variant_id = "trictrac_aecrire")
+  game = GI.init(spec)
+  state = GI.current_state(game)
+  runtime6 = deepcopy(TricTracZero.state_runtime(state))
+  runtime24 = deepcopy(TricTracZero.state_runtime(state))
+  runtime6["trictrac"]["track_aecrire"]["partie_length"] = 6
+  runtime24["trictrac"]["track_aecrire"]["partie_length"] = 24
+
+  state6 = synthetic_state(
+    runtime6;
+    phase = TricTracZero.state_phase(state),
+    terminal = TricTracZero.state_terminal(state),
+    white_to_play = TricTracZero.state_white_to_play(state),
+    legal_actions = TricTracZero.state_legal_actions(state)
+  )
+  state24 = synthetic_state(
+    runtime24;
+    phase = TricTracZero.state_phase(state),
+    terminal = TricTracZero.state_terminal(state),
+    white_to_play = TricTracZero.state_white_to_play(state),
+    legal_actions = TricTracZero.state_legal_actions(state)
+  )
+
+  features6 = GI.vectorize_state(spec, state6)
+  features24 = GI.vectorize_state(spec, state24)
+  @test features6 != features24
 end
 
 @testset "Reset Replay Buffer" begin

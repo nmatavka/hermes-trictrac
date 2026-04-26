@@ -54,6 +54,19 @@ const DEFAULT_VALUE_TARGET_GAIN = 2.0
 const DEFAULT_AECRIRE_SHAPING_WEIGHT = 0.15
 const DEFAULT_COMBINE_HONNEUR_WEIGHT = 0.10
 const DEFAULT_COMBINE_PARTIE_WEIGHT = 0.05
+const AECRIRE_PARTIE_LENGTH_CHOICES = ("6", "8", "10", "12", "14", "16", "18", "20", "22", "24")
+
+mutable struct PartieLengthSchedule
+  lengths::Vector{String}
+  next_index::Int
+  lock::ReentrantLock
+end
+
+PartieLengthSchedule(lengths) =
+  PartieLengthSchedule(String[length for length in lengths], 1, ReentrantLock())
+
+const ACTIVE_PARTIE_LENGTH_SCHEDULE_LOCK = ReentrantLock()
+const ACTIVE_PARTIE_LENGTH_SCHEDULES = Dict{String, PartieLengthSchedule}()
 
 configured_straggler_timeout_seconds() =
   parse_nonnegative_float_env(STRAGGLER_TIMEOUT_SECONDS_ENV, DEFAULT_STRAGGLER_TIMEOUT_SECONDS)
@@ -174,6 +187,62 @@ end
 variant_family(gspec::TricTracGameSpec) = variant_family(gspec.variant_id)
 aecrire_like_variant(gspec::TricTracGameSpec) = variant_family(gspec) in (:aecrire, :combine)
 combine_variant(gspec::TricTracGameSpec) = variant_family(gspec) == :combine
+
+partie_length_schedule_key(gspec::TricTracGameSpec) = gspec.storage
+
+function install_partie_length_schedule!(
+  gspec::TricTracGameSpec;
+  lengths = AECRIRE_PARTIE_LENGTH_CHOICES
+)
+  lock(ACTIVE_PARTIE_LENGTH_SCHEDULE_LOCK)
+  try
+    ACTIVE_PARTIE_LENGTH_SCHEDULES[partie_length_schedule_key(gspec)] = PartieLengthSchedule(lengths)
+  finally
+    unlock(ACTIVE_PARTIE_LENGTH_SCHEDULE_LOCK)
+  end
+  return nothing
+end
+
+function remove_partie_length_schedule!(gspec::TricTracGameSpec)
+  lock(ACTIVE_PARTIE_LENGTH_SCHEDULE_LOCK)
+  try
+    pop!(ACTIVE_PARTIE_LENGTH_SCHEDULES, partie_length_schedule_key(gspec), nothing)
+  finally
+    unlock(ACTIVE_PARTIE_LENGTH_SCHEDULE_LOCK)
+  end
+  return nothing
+end
+
+function active_partie_length_schedule(gspec::TricTracGameSpec)
+  lock(ACTIVE_PARTIE_LENGTH_SCHEDULE_LOCK)
+  try
+    return get(ACTIVE_PARTIE_LENGTH_SCHEDULES, partie_length_schedule_key(gspec), nothing)
+  finally
+    unlock(ACTIVE_PARTIE_LENGTH_SCHEDULE_LOCK)
+  end
+end
+
+function next_partie_length!(schedule::PartieLengthSchedule)
+  lock(schedule.lock)
+  try
+    length_choice = schedule.lengths[schedule.next_index]
+    schedule.next_index = schedule.next_index == length(schedule.lengths) ? 1 : schedule.next_index + 1
+    return length_choice
+  finally
+    unlock(schedule.lock)
+  end
+end
+
+function resolved_match_options_for_new_game(gspec::TricTracGameSpec)
+  options = copy(gspec.match_options)
+  if aecrire_like_variant(gspec)
+    schedule = active_partie_length_schedule(gspec)
+    if !isnothing(schedule)
+      options["aEcrirePartieLength"] = next_partie_length!(schedule)
+    end
+  end
+  return options
+end
 
 function feature_shape(gspec::TricTracGameSpec)
   return aecrire_like_variant(gspec) ? AECRIRE_LIKE_FEATURE_SHAPE : BASE_FEATURE_SHAPE
@@ -300,6 +369,57 @@ function AlphaZero.max_game_length(gspec::TricTracGameSpec)
   cap = configured_temp_max_game_length()
   cap > 0 || return nothing
   return cap
+end
+
+function AlphaZero.self_play_step!(
+  env::AlphaZero.Env{TricTracGameSpec, N, TricTracState},
+  handler
+) where {N}
+  params = env.params.self_play
+  AlphaZero.Handlers.self_play_started(handler)
+  make_oracle() =
+    AlphaZero.Network.copy(env.bestnn, on_gpu = params.sim.use_gpu, test_mode = true)
+  simulator = AlphaZero.Simulator(make_oracle, AlphaZero.self_play_measurements) do oracle
+    return AlphaZero.MctsPlayer(env.gspec, oracle, params.mcts)
+  end
+
+  schedule_installed = false
+  if aecrire_like_variant(env.gspec)
+    install_partie_length_schedule!(env.gspec)
+    schedule_installed = true
+  end
+
+  try
+    results, elapsed = @timed AlphaZero.simulate_distributed(
+      simulator,
+      env.gspec,
+      params.sim,
+      game_simulated = () -> AlphaZero.Handlers.game_played(handler),
+      straggler_policy = AlphaZero.self_play_straggler_policy(env.gspec)
+    )
+
+    AlphaZero.new_batch!(env.memory)
+    for x in results
+      AlphaZero.push_trace!(env.memory, x.trace, params.mcts.gamma)
+    end
+
+    dropped_games = params.sim.num_games - length(results)
+    if dropped_games > 0
+      @warn "$dropped_games self-play game(s) were aborted before completion and omitted from the replay buffer."
+    end
+
+    speed = iszero(elapsed) ? 0.0 : AlphaZero.cur_batch_size(env.memory) / elapsed
+    edepth = isempty(results) ? 0.0 : sum(x.edepth for x in results) / length(results)
+    mem_footprint = isempty(results) ? 0 : maximum(x.mem for x in results)
+    memsize, memdistinct = AlphaZero.simple_memory_stats(env)
+    report = AlphaZero.Report.SelfPlay(
+      speed, edepth, mem_footprint, memsize, memdistinct
+    )
+    AlphaZero.Handlers.self_play_finished(handler, report)
+    return report
+  finally
+    schedule_installed && remove_partie_length_schedule!(env.gspec)
+  end
 end
 
 function GI.vectorize_state(gspec::TricTracGameSpec, state::TricTracState)

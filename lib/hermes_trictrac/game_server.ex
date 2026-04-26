@@ -18,6 +18,7 @@ defmodule HermesTrictrac.GameServer do
     "toccategli"
   ]
   @max_bot_steps 64
+  @seat_reclaim_code "seat_reclaim_pending"
 
   def reg(name) do
     {:via, Registry, {HermesTrictrac.GameReg, name}}
@@ -82,24 +83,49 @@ defmodule HermesTrictrac.GameServer do
     GenServer.call(reg(name), :reset, @call_timeout)
   end
 
+  def remain_seated(name, user, client_id) do
+    GenServer.call(reg(name), {:remain_seated, user, client_id}, @call_timeout)
+  end
+
   def init({name, variant}) do
     engine = Engine.new(name, variant)
-    {:ok, %{name: name, chat: [], engine: engine, bot: nil}}
+    {:ok, %{name: name, chat: [], engine: engine, bot: nil, seat_reclaim: nil}}
   end
 
   def handle_call({:join, user, client_id, requested_variant, opts}, _from, state) do
     with :ok <- ensure_variant_match(state.engine, requested_variant, state.name),
-         {:ok, requested_bot} <- normalize_requested_bot(opts, state.engine.variant.id),
-         {:ok, engine, player} <-
-           normalize_engine_join(Engine.join(state.engine, user, client_id)),
-         {:ok, updated} <- maybe_configure_bot(%{state | engine: engine}, player, requested_bot),
-         {:ok, updated} <-
-           maybe_prepare_bot_game(updated, user, client_id, requested_bot) do
-      persist(updated)
-      {:reply, {:ok, %{game: snapshot(updated), player: player}}, updated}
+         {:ok, requested_bot} <- normalize_requested_bot(opts, state.engine.variant.id) do
+      case normalize_engine_join(Engine.join(state.engine, user, client_id)) do
+        {:ok, engine, player} ->
+          with {:ok, cleared} <- maybe_clear_seat_reclaim(state, player),
+               {:ok, updated} <-
+                 maybe_configure_bot(%{cleared | engine: engine}, player, requested_bot),
+               {:ok, updated} <-
+                 maybe_prepare_bot_game(updated, user, client_id, requested_bot) do
+            persist(updated)
+            {:reply, {:ok, %{game: snapshot(updated), player: player}}, updated}
+          else
+            {:error, msg} ->
+              {:reply, {:error, error_payload(msg)}, state}
+          end
+
+        {:error, "Lobby is full."} ->
+          case maybe_start_seat_reclaim(state, user, client_id) do
+            {:ok, updated, error} ->
+              persist(updated)
+              broadcast_snapshot(updated)
+              {:reply, {:error, error}, updated}
+
+            {:error, error, updated} ->
+              {:reply, {:error, error}, updated}
+          end
+
+        {:error, msg} ->
+          {:reply, {:error, error_payload(msg)}, state}
+      end
     else
       {:error, msg} ->
-        {:reply, {:error, msg}, state}
+        {:reply, {:error, error_payload(msg)}, state}
     end
   end
 
@@ -131,6 +157,17 @@ defmodule HermesTrictrac.GameServer do
     proxy(state, Engine.resign(state.engine, user, client_id))
   end
 
+  def handle_call({:remain_seated, user, client_id}, _from, state) do
+    case maybe_cancel_seat_reclaim(state, user, client_id) do
+      {:ok, updated} ->
+        persist(updated)
+        {:reply, {:ok, snapshot(updated)}, updated}
+
+      {:error, msg} ->
+        {:reply, {:error, msg}, state}
+    end
+  end
+
   def handle_call({:chat, chat, _user}, _from, state) do
     updated = %{state | chat: state.chat ++ [chat]}
     persist(updated)
@@ -146,12 +183,29 @@ defmodule HermesTrictrac.GameServer do
   def handle_call(:reset, _from, state) do
     if state.engine.match.is_over do
       engine = Engine.reset(state.engine)
-      updated = %{state | engine: engine, chat: []}
+      updated = clear_seat_reclaim(%{state | engine: engine, chat: []})
       {:ok, updated} = maybe_run_bot_turns(updated)
       persist(updated)
       {:reply, {:ok, snapshot(updated)}, updated}
     else
       {:reply, {:error, "Reset is only available after the match is over."}, state}
+    end
+  end
+
+  def handle_info({:seat_reclaim_expired, seat_key, claimant_client_id}, state) do
+    case state.seat_reclaim do
+      %{seat_key: ^seat_key, claimant_client_id: ^claimant_client_id} = reclaim ->
+        updated =
+          state
+          |> reclaim_seat(reclaim)
+          |> clear_seat_reclaim()
+
+        persist(updated)
+        broadcast_snapshot(updated)
+        {:noreply, updated}
+
+      _ ->
+        {:noreply, state}
     end
   end
 
@@ -169,6 +223,11 @@ defmodule HermesTrictrac.GameServer do
     |> Engine.snapshot()
     |> GameSnapshot.with_chat(state.chat)
     |> GameSnapshot.with_bot(state.bot)
+    |> GameSnapshot.with_seat_reclaim(state.seat_reclaim)
+  end
+
+  defp broadcast_snapshot(state) do
+    HermesTrictracWeb.Endpoint.broadcast("games:#{state.name}", "update", %{game: snapshot(state)})
   end
 
   defp maybe_publish_bot_progress(state, false), do: state
@@ -184,6 +243,9 @@ defmodule HermesTrictrac.GameServer do
   defp persist(state) do
     HermesTrictrac.BackupAgent.put(state.name, state)
   end
+
+  defp error_payload(msg) when is_binary(msg), do: %{msg: msg}
+  defp error_payload(payload) when is_map(payload), do: payload
 
   defp normalize_requested_bot(opts, variant_id) when is_map(opts) do
     case Map.get(opts, "bot", Map.get(opts, :bot)) do
@@ -230,6 +292,159 @@ defmodule HermesTrictrac.GameServer do
 
   defp normalize_engine_join({:ok, engine, player}), do: {:ok, engine, player}
   defp normalize_engine_join({:error, msg}), do: {:error, msg}
+
+  defp maybe_start_seat_reclaim(state, user, client_id) do
+    case reclaimable_seat(state.engine, user, client_id, state.bot) do
+      nil ->
+        {:error, error_payload("Lobby is full."), state}
+
+      {seat_key, defender} ->
+        case state.seat_reclaim do
+          %{seat_key: ^seat_key, claimant_client_id: ^client_id} = reclaim ->
+            {:ok, state,
+             seat_reclaim_error(
+               reclaim,
+               "Still waiting for the seated browser to confirm the seat."
+             )}
+
+          %{seat_key: ^seat_key} = reclaim ->
+            {:error,
+             seat_reclaim_error(reclaim, "A seat reclaim is already pending for this table."),
+             state}
+
+          _ ->
+            seat_reclaim = %{
+              seat_key: seat_key,
+              seat_color: Atom.to_string(defender.color),
+              defender_name: defender.name,
+              claimant_name: user,
+              claimant_client_id: client_id,
+              expires_at_ms: System.system_time(:millisecond) + seat_reclaim_window_ms(),
+              timer_ref:
+                Process.send_after(
+                  self(),
+                  {:seat_reclaim_expired, seat_key, client_id},
+                  seat_reclaim_window_ms()
+                )
+            }
+
+            updated = %{state | seat_reclaim: seat_reclaim}
+
+            {:ok, updated,
+             seat_reclaim_error(seat_reclaim, reclaim_warning_message(defender.name))}
+        end
+    end
+  end
+
+  defp maybe_cancel_seat_reclaim(%{seat_reclaim: nil}, _user, _client_id) do
+    {:error, "No seat reclaim warning is waiting for this browser."}
+  end
+
+  defp maybe_cancel_seat_reclaim(state, user, client_id) do
+    seat_key = state.seat_reclaim.seat_key
+    defender = seat_player(state.engine, seat_key)
+
+    cond do
+      is_nil(defender) ->
+        {:error, "No seated player is available to confirm this seat."}
+
+      defender.client_id != client_id ->
+        {:error, "Only the currently seated browser can keep this seat."}
+
+      defender.name != user ->
+        {:error, "Only the currently seated browser can keep this seat."}
+
+      true ->
+        {:ok, clear_seat_reclaim(state)}
+    end
+  end
+
+  defp maybe_clear_seat_reclaim(%{seat_reclaim: nil} = state, _player), do: {:ok, state}
+
+  defp maybe_clear_seat_reclaim(state, %{"color" => color}) do
+    current_reclaim = state.seat_reclaim
+
+    if current_reclaim && current_reclaim.seat_color == color do
+      {:ok, clear_seat_reclaim(state)}
+    else
+      {:ok, state}
+    end
+  end
+
+  defp clear_seat_reclaim(%{seat_reclaim: nil} = state), do: state
+
+  defp clear_seat_reclaim(state) do
+    if timer_ref = get_in(state, [:seat_reclaim, :timer_ref]) do
+      Process.cancel_timer(timer_ref)
+    end
+
+    %{state | seat_reclaim: nil}
+  end
+
+  defp reclaimable_seat(engine, user, client_id, bot) do
+    cond do
+      eligible_reclaim_player?(engine.players.host, user, client_id, bot) ->
+        {:host, engine.players.host}
+
+      eligible_reclaim_player?(engine.players.guest, user, client_id, bot) ->
+        {:guest, engine.players.guest}
+
+      true ->
+        nil
+    end
+  end
+
+  defp eligible_reclaim_player?(nil, _user, _client_id, _bot), do: false
+
+  defp eligible_reclaim_player?(player, user, client_id, bot) do
+    player.name == user &&
+      player.client_id != client_id &&
+      not bot_client?(player, bot)
+  end
+
+  defp bot_client?(_player, nil), do: false
+  defp bot_client?(player, bot), do: player.client_id == bot.client_id
+
+  defp seat_reclaim_error(reclaim, msg) do
+    %{
+      code: @seat_reclaim_code,
+      msg: msg,
+      retry_after_ms: max(0, reclaim.expires_at_ms - System.system_time(:millisecond))
+    }
+  end
+
+  defp reclaim_warning_message(name) do
+    "#{name} is already seated here. A warning was sent to the current browser. Try again after the grace window if no one clicks Remain Seated."
+  end
+
+  defp seat_reclaim_window_ms do
+    Application.get_env(:hermes_trictrac, :seat_reclaim_window_ms, 15_000)
+  end
+
+  defp seat_player(engine, :host), do: engine.players.host
+  defp seat_player(engine, :guest), do: engine.players.guest
+
+  defp reclaim_seat(state, reclaim) do
+    player = seat_player(state.engine, reclaim.seat_key)
+
+    if player do
+      updated_player = %{
+        player
+        | name: reclaim.claimant_name,
+          client_id: reclaim.claimant_client_id
+      }
+
+      updated_engine =
+        case reclaim.seat_key do
+          :host -> put_in(state.engine, [:players, :host], updated_player)
+          :guest -> put_in(state.engine, [:players, :guest], updated_player)
+        end
+
+      %{state | engine: updated_engine}
+    else
+      state
+    end
+  end
 
   defp maybe_configure_bot(state, _player, nil), do: {:ok, state}
 
@@ -356,13 +571,7 @@ defmodule HermesTrictrac.GameServer do
     end
   end
 
-  defp host_bot_options(%{"kind" => "trictrac_partie_length_consent"} = pending, _bot) do
-    responses = pending["responses"] || %{}
-
-    if is_nil(Map.get(responses, "white")) do
-      %{"aEcrirePartieLengthConsent" => "16"}
-    end
-  end
+  defp host_bot_options(%{"kind" => "trictrac_partie_length_consent"}, _bot), do: nil
 
   defp host_bot_options(%{"options" => options}, %{kind: @trictrac_bot} = bot)
        when is_list(options) do
@@ -457,7 +666,13 @@ defmodule HermesTrictrac.GameServer do
       engine.pending_match_options &&
         engine.pending_match_options["kind"] == "trictrac_partie_length_consent" &&
           is_nil(Map.get(responses, Atom.to_string(bot.color))) ->
-        {:submit_match_options, %{"aEcrirePartieLengthConsent" => "16"}}
+        case Map.get(responses, "white") do
+          value when value in ["6", "8", "10", "12", "14", "16", "18", "20", "22", "24"] ->
+            {:submit_match_options, %{"aEcrirePartieLengthConsent" => value}}
+
+          _ ->
+            nil
+        end
 
       bot_playable_variant?(bot.kind, engine.variant.id) &&
           opening_roll_pending_for_bot?(engine, bot.color) ->

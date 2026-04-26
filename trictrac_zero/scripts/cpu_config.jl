@@ -12,6 +12,7 @@ const ENV_ARENA_WORKERS = "TRICTRAC_ZERO_ARENA_WORKERS"
 const ENV_NUM_ITERS = "TRICTRAC_ZERO_NUM_ITERS"
 const ENV_MOVE_CAP = "TRICTRAC_ZERO_TEMP_MAX_GAME_LENGTH"
 const ENV_VALUE_TARGET_GAIN = "TRICTRAC_ZERO_VALUE_TARGET_GAIN"
+const ENV_PARTIE_LENGTH_REPEATS = "TRICTRAC_ZERO_PARTIE_LENGTH_REPEATS"
 const ENV_GAME = "TRICTRAC_ZERO_GAME"
 const VALID_GAMES = (
   "classique",
@@ -44,6 +45,7 @@ Base.@kwdef struct StartupConfig
   num_iters::Setting
   move_cap::Setting
   value_target_gain::Setting
+  partie_length_repeats::Setting
   game::Setting{String}
   target_threads::Int
   relaunch_status::Symbol
@@ -142,6 +144,7 @@ function parse_startup(command::Symbol, args::Vector{String}; env::AbstractDict 
   cli_num_iters = nothing
   cli_move_cap = nothing
   cli_value_target_gain = nothing
+  cli_partie_length_repeats = nothing
   cli_game = nothing
 
   index = 1
@@ -177,6 +180,9 @@ function parse_startup(command::Symbol, args::Vector{String}; env::AbstractDict 
     elseif startswith(arg, "--value-target-gain")
       value, index = take_flag_value(args, index, "--value-target-gain")
       cli_value_target_gain = parse_nonnegative_float(value, "--value-target-gain")
+    elseif startswith(arg, "--partie-length-repeats")
+      value, index = take_flag_value(args, index, "--partie-length-repeats")
+      cli_partie_length_repeats = parse_auto_or_int(value, "--partie-length-repeats")
     elseif startswith(arg, "--game")
       value, index = take_flag_value(args, index, "--game")
       cli_game = parse_game(value, "--game")
@@ -203,6 +209,7 @@ function parse_startup(command::Symbol, args::Vector{String}; env::AbstractDict 
     num_iters = resolve_setting(cli_num_iters, env, ENV_NUM_ITERS, nothing, parse_positive_int),
     move_cap = resolve_setting(cli_move_cap, env, ENV_MOVE_CAP, nothing, parse_nonnegative_int),
     value_target_gain = resolve_setting(cli_value_target_gain, env, ENV_VALUE_TARGET_GAIN, nothing, parse_nonnegative_float),
+    partie_length_repeats = resolve_setting(cli_partie_length_repeats, env, ENV_PARTIE_LENGTH_REPEATS, AUTO, parse_auto_or_int),
     game = resolve_setting(cli_game, env, ENV_GAME, "classique", parse_game),
     target_threads = Threads.nthreads(),
     relaunch_status = :none
@@ -295,6 +302,7 @@ end
 worker_override(setting::Setting) = setting.value === AUTO ? nothing : setting.value
 iterations_override(setting::Setting) = isnothing(setting.value) ? nothing : setting.value
 move_cap_override(setting::Setting) = isnothing(setting.value) ? nothing : setting.value
+partie_length_repeats_override(setting::Setting) = setting.value === AUTO ? nothing : setting.value
 
 function positional_usage(command::Symbol)
   command == :train && return "[profile] [dir]"
@@ -328,6 +336,8 @@ Options:
       Set the temporary hard cap on game length. Use 0 to disable.
   --target-gain <N>
       Set the tanh gain used for value-target shaping. Lower is less slope-y.
+  --partie-length-repeats <auto|N>
+      For a ecrire/combine training, use N self-play games at each marque target.
   --game <$(join(VALID_GAMES, "|"))>
       Choose the training target. Default: classique.
   --help
@@ -341,6 +351,7 @@ Environment:
   $ENV_NUM_ITERS
   $ENV_MOVE_CAP
   $ENV_VALUE_TARGET_GAIN
+  $ENV_PARTIE_LENGTH_REPEATS
   $ENV_GAME
 
 Precedence:
@@ -369,6 +380,7 @@ function prepare_startup(
     num_iters = parsed.num_iters,
     move_cap = parsed.move_cap,
     value_target_gain = parsed.value_target_gain,
+    partie_length_repeats = parsed.partie_length_repeats,
     game = parsed.game,
     target_threads = resolve_target_threads(parsed),
     relaunch_status = relaunch_status(parsed; env)
@@ -385,6 +397,9 @@ function prepare_startup(
   if config.value_target_gain.source == :cli
     ENV[ENV_VALUE_TARGET_GAIN] = string(config.value_target_gain.value)
   end
+  if config.partie_length_repeats.source == :cli && config.partie_length_repeats.value !== AUTO
+    ENV[ENV_PARTIE_LENGTH_REPEATS] = string(config.partie_length_repeats.value)
+  end
 
   allow_relaunch && maybe_relaunch!(config, script_path, args)
   return config
@@ -397,6 +412,7 @@ function print_startup_summary(
   arena_workers::Int,
   move_cap = nothing,
   value_target_gain = nothing,
+  partie_length_repeats = nothing,
   game::Union{Nothing, String} = nothing,
   self_play_clamped::Bool = false,
   arena_clamped::Bool = false
@@ -424,6 +440,9 @@ function print_startup_summary(
   end
   if !isnothing(value_target_gain)
     println(io, "  Value target gain: ", value_target_gain)
+  end
+  if !isnothing(partie_length_repeats)
+    println(io, "  Partie-length repeats: ", partie_length_repeats)
   end
   println(io)
 end

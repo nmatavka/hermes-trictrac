@@ -1471,6 +1471,29 @@ defmodule HermesTrictrac.EngineTest do
     assert trictrac.track_aecrire.rounded_gain == 20
   end
 
+  test "aecrire final settlement rounds half to even" do
+    twenty_five =
+      HermesTrictrac.Rules.Trictrac.AEcrire.ensure(%{})
+      |> put_in([:track_aecrire, :coups_played], 6)
+      |> put_in([:track_aecrire, :partie_length], 6)
+      |> put_in([:track_aecrire, :marques], %{white: 0, black: 0})
+      |> put_in([:track_aecrire, :points_total], %{white: 25, black: 0})
+      |> HermesTrictrac.Rules.Trictrac.AEcrire.sync_settlement()
+
+    thirty_five =
+      HermesTrictrac.Rules.Trictrac.AEcrire.ensure(%{})
+      |> put_in([:track_aecrire, :coups_played], 6)
+      |> put_in([:track_aecrire, :partie_length], 6)
+      |> put_in([:track_aecrire, :marques], %{white: 0, black: 0})
+      |> put_in([:track_aecrire, :points_total], %{white: 35, black: 0})
+      |> HermesTrictrac.Rules.Trictrac.AEcrire.sync_settlement()
+
+    assert twenty_five.track_aecrire.gross_gain == 25
+    assert twenty_five.track_aecrire.rounded_gain == 20
+    assert thirty_five.track_aecrire.gross_gain == 35
+    assert thirty_five.track_aecrire.rounded_gain == 40
+  end
+
   test "aecrire primaute stays with the previous starter on refait and otherwise passes to the winner" do
     won_coup =
       HermesTrictrac.Rules.Trictrac.AEcrire.ensure(%{})

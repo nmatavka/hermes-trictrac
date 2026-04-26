@@ -11,4 +11,16 @@ defmodule HermesTrictrac.GameSnapshot do
       "color" => Atom.to_string(bot.color)
     })
   end
+
+  def with_seat_reclaim(snapshot, nil) when is_map(snapshot),
+    do: Map.put(snapshot, "seat_reclaim", nil)
+
+  def with_seat_reclaim(snapshot, reclaim) when is_map(snapshot) and is_map(reclaim) do
+    public_reclaim =
+      reclaim
+      |> Map.take([:seat_color, :defender_name, :claimant_name, :expires_at_ms])
+      |> Enum.into(%{}, fn {key, value} -> {Atom.to_string(key), value} end)
+
+    Map.put(snapshot, "seat_reclaim", public_reclaim)
+  end
 end

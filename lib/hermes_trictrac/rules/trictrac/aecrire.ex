@@ -503,10 +503,13 @@ defmodule HermesTrictrac.Rules.Trictrac.AEcrire do
     case Map.get(options, "aEcrirePartieLength") || Map.get(options, :aEcrirePartieLength) do
       value when value in [6, "6"] -> 6
       value when value in [8, "8"] -> 8
+      value when value in [10, "10"] -> 10
       value when value in [12, "12"] -> 12
+      value when value in [14, "14"] -> 14
       value when value in [16, "16"] -> 16
       value when value in [18, "18"] -> 18
       value when value in [20, "20"] -> 20
+      value when value in [22, "22"] -> 22
       value when value in [24, "24"] -> 24
       _ -> default
     end
@@ -757,7 +760,25 @@ defmodule HermesTrictrac.Rules.Trictrac.AEcrire do
   defp winning_color(_totals), do: nil
 
   defp rounded_gain(0), do: 0
-  defp rounded_gain(value), do: div(value + 5, 10) * 10
+
+  defp rounded_gain(value) do
+    tens = div(value, 10)
+    remainder = rem(value, 10)
+
+    cond do
+      remainder < 5 ->
+        tens * 10
+
+      remainder > 5 ->
+        (tens + 1) * 10
+
+      rem(tens, 2) == 0 ->
+        tens * 10
+
+      true ->
+        (tens + 1) * 10
+    end
+  end
 
   defp interrupted_run_entry(nil), do: nil
 

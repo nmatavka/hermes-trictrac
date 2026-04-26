@@ -51,10 +51,10 @@ function close_cached_bridges!()
   return nothing
 end
 
-function bridge_config(spec)
+function bridge_config(spec; match_options = spec.match_options)
   return Dict{String, Any}(
     "variant_id" => spec.variant_id,
-    "match_options" => copy(spec.match_options)
+    "match_options" => copy(match_options)
   )
 end
 
@@ -63,11 +63,12 @@ function ping!(client::BridgeClient)
 end
 
 function new_game!(client::BridgeClient, spec)
+  match_options = resolved_match_options_for_new_game(spec)
   return request!(
     client,
     Dict{String, Any}(
       "cmd" => "new_game",
-      "config" => bridge_config(spec)
+      "config" => bridge_config(spec; match_options)
     )
   )
 end

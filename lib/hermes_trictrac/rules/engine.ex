@@ -1,5 +1,14 @@
 defmodule HermesTrictrac.Rules.Engine do
-  alias HermesTrictrac.Rules.{Dice, RaceCore, Rabattues, Registry, Snapshot, TourneCase, TrictracCore}
+  alias HermesTrictrac.Rules.{
+    Dice,
+    RaceCore,
+    Rabattues,
+    Registry,
+    Snapshot,
+    TourneCase,
+    TrictracCore
+  }
+
   alias HermesTrictrac.Rules.Trictrac.Classique
 
   @trictrac_margot_variants [
@@ -452,7 +461,8 @@ defmodule HermesTrictrac.Rules.Engine do
 
   defp actor(engine, user, client_id) do
     Enum.find([engine.players.host, engine.players.guest], fn player ->
-      player && (player.client_id == client_id || player.name == user)
+      player &&
+        if(is_nil(client_id), do: player.name == user, else: player.client_id == client_id)
     end)
   end
 
@@ -792,8 +802,8 @@ defmodule HermesTrictrac.Rules.Engine do
            "aEcrirePartieLengthConsent",
            Map.get(options, :aEcrirePartieLengthConsent)
          ) do
-      value when value in ["6", "8", "12", "16", "18", "20", "24"] -> value
-      value when value in [6, 8, 12, 16, 18, 20, 24] -> Integer.to_string(value)
+      value when value in ["6", "8", "10", "12", "14", "16", "18", "20", "22", "24"] -> value
+      value when value in [6, 8, 10, 12, 14, 16, 18, 20, 22, 24] -> Integer.to_string(value)
       _ -> nil
     end
   end
@@ -836,15 +846,18 @@ defmodule HermesTrictrac.Rules.Engine do
     %{
       "kind" => "trictrac_partie_length_consent",
       "rule" => rule,
-      "prompt" => "Choose the marque target. If you disagree, the match defaults to 16.",
-      "choices" => ["6", "8", "12", "16", "18", "20", "24"],
+      "prompt" => "Choose the marque target.",
+      "choices" => ["6", "8", "10", "12", "14", "16", "18", "20", "22", "24"],
       "choiceLabels" => %{
         "6" => "6 marques",
         "8" => "8 marques",
+        "10" => "10 marques",
         "12" => "12 marques",
+        "14" => "14 marques",
         "16" => "16 marques",
         "18" => "18 marques",
         "20" => "20 marques",
+        "22" => "22 marques",
         "24" => "24 marques"
       },
       "responses" => %{"white" => nil, "black" => nil}

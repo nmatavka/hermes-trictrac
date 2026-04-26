@@ -229,12 +229,70 @@ function warn_on_clamped_workers(worker_settings)
   end
   return nothing
 end
+
+function partie_length_mix_enabled(preset::Union{String, Symbol})
+  return preset_config(preset).variant_id in ("trictrac_aecrire", "trictrac_combine")
+end
+
+function base_self_play_game_count(; smoke::Bool, use_gpu::Bool)
+  if smoke
+    return 4
+  elseif use_gpu
+    return 32
+  else
+    return 96
+  end
+end
+
+function default_partie_length_repeats(; smoke::Bool, use_gpu::Bool)
+  if smoke
+    return 1
+  elseif use_gpu
+    return 4
+  else
+    return 10
+  end
+end
+
+function resolve_partie_length_repeats(;
+  preset::Union{String, Symbol},
+  smoke::Bool,
+  use_gpu::Bool,
+  partie_length_repeats::Union{Nothing, Int} = nothing
+)
+  partie_length_mix_enabled(preset) || return nothing
+  if !isnothing(partie_length_repeats)
+    return partie_length_repeats
+  end
+  return default_partie_length_repeats(smoke = smoke, use_gpu = use_gpu)
+end
+
+function resolve_self_play_game_count(;
+  preset::Union{String, Symbol},
+  smoke::Bool,
+  use_gpu::Bool,
+  partie_length_repeats::Union{Nothing, Int} = nothing
+)
+  if !partie_length_mix_enabled(preset)
+    return base_self_play_game_count(smoke = smoke, use_gpu = use_gpu)
+  end
+  repeats = resolve_partie_length_repeats(
+    preset = preset,
+    smoke = smoke,
+    use_gpu = use_gpu,
+    partie_length_repeats = partie_length_repeats
+  )
+  return length(AECRIRE_PARTIE_LENGTH_CHOICES) * repeats
+end
+
 function build_params(;
   smoke::Bool,
+  preset::Union{String, Symbol} = DEFAULT_PRESET,
   use_gpu::Bool = false,
   num_iters::Union{Nothing, Int} = nothing,
   self_play_workers::Union{Nothing, Int} = nothing,
-  arena_workers::Union{Nothing, Int} = nothing
+  arena_workers::Union{Nothing, Int} = nothing,
+  partie_length_repeats::Union{Nothing, Int} = nothing
 )
   worker_settings = resolve_worker_settings(
     smoke = smoke,
@@ -244,6 +302,12 @@ function build_params(;
   warn_on_clamped_workers(worker_settings)
 
   cpu_mode = !use_gpu
+  self_play_games = resolve_self_play_game_count(
+    preset = preset,
+    smoke = smoke,
+    use_gpu = use_gpu,
+    partie_length_repeats = partie_length_repeats
+  )
 
   self_play_mcts =
     smoke ?
@@ -281,7 +345,7 @@ function build_params(;
   self_play_sim =
     smoke ?
       SimParams(
-        num_games = 4,
+        num_games = self_play_games,
         num_workers = resolved_self_play_workers,
         batch_size = 1,
         use_gpu = use_gpu,
@@ -291,7 +355,7 @@ function build_params(;
         alternate_colors = false
       ) :
       SimParams(
-        num_games = cpu_mode ? 96 : 32,
+        num_games = self_play_games,
         num_workers = resolved_self_play_workers,
         batch_size = cpu_mode ? 1 : 4,
         use_gpu = use_gpu,
@@ -415,7 +479,8 @@ function default_experiment(;
   use_gpu::Bool = false,
   num_iters::Union{Nothing, Int} = nothing,
   self_play_workers::Union{Nothing, Int} = nothing,
-  arena_workers::Union{Nothing, Int} = nothing
+  arena_workers::Union{Nothing, Int} = nothing,
+  partie_length_repeats::Union{Nothing, Int} = nothing
 )
   config = preset_config(preset)
   gspec = game_spec_for_preset(repo_root = repo_root, preset = preset)
@@ -424,10 +489,12 @@ function default_experiment(;
     gspec,
     build_params(
       smoke = false,
+      preset = preset,
       use_gpu = use_gpu,
       num_iters = num_iters,
       self_play_workers = self_play_workers,
-      arena_workers = arena_workers
+      arena_workers = arena_workers,
+      partie_length_repeats = partie_length_repeats
     ),
     network_factory(source_dir = source_session_dir_for_preset(config.key)),
     netparams(),
@@ -441,7 +508,8 @@ function smoke_experiment(;
   use_gpu::Bool = false,
   num_iters::Union{Nothing, Int} = nothing,
   self_play_workers::Union{Nothing, Int} = nothing,
-  arena_workers::Union{Nothing, Int} = nothing
+  arena_workers::Union{Nothing, Int} = nothing,
+  partie_length_repeats::Union{Nothing, Int} = nothing
 )
   config = preset_config(preset)
   gspec = game_spec_for_preset(repo_root = repo_root, preset = preset)
@@ -450,10 +518,12 @@ function smoke_experiment(;
     gspec,
     build_params(
       smoke = true,
+      preset = preset,
       use_gpu = use_gpu,
       num_iters = num_iters,
       self_play_workers = self_play_workers,
-      arena_workers = arena_workers
+      arena_workers = arena_workers,
+      partie_length_repeats = partie_length_repeats
     ),
     network_factory(source_dir = source_session_dir_for_preset(config.key)),
     netparams(),
@@ -494,7 +564,8 @@ function register_experiments!(;
   use_gpu::Bool = false,
   num_iters::Union{Nothing, Int} = nothing,
   self_play_workers::Union{Nothing, Int} = nothing,
-  arena_workers::Union{Nothing, Int} = nothing
+  arena_workers::Union{Nothing, Int} = nothing,
+  partie_length_repeats::Union{Nothing, Int} = nothing
 )
   for preset in available_presets()
     config = preset_config(preset)
@@ -508,7 +579,8 @@ function register_experiments!(;
         use_gpu = use_gpu,
         num_iters = num_iters,
         self_play_workers = self_play_workers,
-        arena_workers = arena_workers
+        arena_workers = arena_workers,
+        partie_length_repeats = partie_length_repeats
       )
     AlphaZero.Examples.experiments[string(config.experiment, "-smoke")] =
       smoke_experiment(
@@ -516,7 +588,8 @@ function register_experiments!(;
         use_gpu = use_gpu,
         num_iters = num_iters,
         self_play_workers = self_play_workers,
-        arena_workers = arena_workers
+        arena_workers = arena_workers,
+        partie_length_repeats = partie_length_repeats
       )
   end
   return nothing
@@ -531,9 +604,13 @@ function run_train(;
   reset_memory::Bool = false,
   num_iters::Union{Nothing, Int} = nothing,
   self_play_workers::Union{Nothing, Int} = nothing,
-  arena_workers::Union{Nothing, Int} = nothing
+  arena_workers::Union{Nothing, Int} = nothing,
+  partie_length_repeats::Union{Nothing, Int} = nothing
 )
   use_gpu && require_gpu_available()
+  if !partie_length_mix_enabled(preset) && !isnothing(partie_length_repeats)
+    @warn "Partie-length repeats were requested for preset $(normalize_preset_name(preset)), but only trictrac_aecrire and trictrac_combine use marque-length self-play mixing."
+  end
   experiment =
     profile == "smoke" ?
       smoke_experiment(
@@ -541,20 +618,23 @@ function run_train(;
         use_gpu = use_gpu,
         num_iters = num_iters,
         self_play_workers = self_play_workers,
-        arena_workers = arena_workers
+        arena_workers = arena_workers,
+        partie_length_repeats = partie_length_repeats
       ) :
       default_experiment(
         preset = preset,
         use_gpu = use_gpu,
         num_iters = num_iters,
         self_play_workers = self_play_workers,
-        arena_workers = arena_workers
+        arena_workers = arena_workers,
+        partie_length_repeats = partie_length_repeats
       )
   register_experiments!(
     use_gpu = use_gpu,
     num_iters = num_iters,
     self_play_workers = self_play_workers,
-    arena_workers = arena_workers
+    arena_workers = arena_workers,
+    partie_length_repeats = partie_length_repeats
   )
   session_dir = isnothing(dir) ? default_session_dir(experiment) : dir
   if reset_memory
@@ -580,7 +660,8 @@ function run_smoke(;
   reset_memory::Bool = false,
   num_iters::Union{Nothing, Int} = nothing,
   self_play_workers::Union{Nothing, Int} = nothing,
-  arena_workers::Union{Nothing, Int} = nothing
+  arena_workers::Union{Nothing, Int} = nothing,
+  partie_length_repeats::Union{Nothing, Int} = nothing
 )
   session_dir =
     isnothing(dir) ?
@@ -590,7 +671,8 @@ function run_smoke(;
           use_gpu = use_gpu,
           num_iters = num_iters,
           self_play_workers = self_play_workers,
-          arena_workers = arena_workers
+          arena_workers = arena_workers,
+          partie_length_repeats = partie_length_repeats
         )
       ) :
       dir
@@ -603,7 +685,8 @@ function run_smoke(;
     reset_memory = reset_memory,
     num_iters = num_iters,
     self_play_workers = self_play_workers,
-    arena_workers = arena_workers
+    arena_workers = arena_workers,
+    partie_length_repeats = partie_length_repeats
   )
 end
 

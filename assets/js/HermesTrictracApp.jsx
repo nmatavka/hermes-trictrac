@@ -1,6 +1,21 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import ChatPanel from "./ChatPanel";
+import {
+  boolLabel,
+  colorLabel as i18nColorLabel,
+  getLanguage,
+  languageSelectOptions,
+  localizeError,
+  optionChoiceLabel,
+  optionLabel,
+  setLanguage,
+  subscribeLanguage,
+  t,
+  tx,
+  variantTitle
+} from "./i18n";
+import { SOUND_PACK_OPTIONS, createSoundController } from "./sound";
 import BoardWood from "../static/images/6besh/board-wood.jpg";
 import CheckerGreen from "../static/images/6besh/checker-green.png";
 import CheckerRed from "../static/images/6besh/checker-red.png";
@@ -41,15 +56,8 @@ const DICE_IMAGES = {
   }
 };
 
-const COLOR_LABELS = {
-  white: "White",
-  black: "Black"
-};
-
-const SCORE_TOAST_COLOR_LABELS = {
-  white: "White",
-  black: "Black"
-};
+const TRICTRAC_BOT_KIND = "trictrac_zero";
+const TRICTRAC_BOT_DISPLAY_NAME = "Dr Toutabas, Vicomte de la Case";
 
 const BAR_LABEL_HIDDEN_VARIANTS = new Set([
   "trictrac_classique",
@@ -68,6 +76,15 @@ const BAR_GRAPHICS_HIDDEN_VARIANTS = new Set([
 ]);
 
 const TOAST_LIFETIME_MS = 4200;
+const ENGLAND_FLAG = String.fromCodePoint(0x1f3f4, 0xe0067, 0xe0062, 0xe0065, 0xe006e, 0xe0067, 0xe007f);
+const LANGUAGE_FLAG_LABELS = {
+  en: ENGLAND_FLAG,
+  fr: "🇫🇷",
+  da: "🇩🇰",
+  sv: "🇸🇪",
+  de: "🇩🇪"
+};
+const LANGUAGE_BUTTON_ORDER = ["en", "fr", "da", "sv", "de"];
 
 const BOARD_LAYOUTS = {
   white: {
@@ -105,6 +122,14 @@ function capitalizeFirst(value) {
   return `${value.charAt(0).toUpperCase()}${value.slice(1)}`;
 }
 
+function uiMarqueCopy(text) {
+  return String(text || "")
+    .replace(/\bMarques\b/g, "Marqués")
+    .replace(/\bmarques\b/g, "marqués")
+    .replace(/\bMarque\b/g, "Marqué")
+    .replace(/\bmarque\b/g, "marqué");
+}
+
 function scoreEventSignature(event) {
   return JSON.stringify(event || null);
 }
@@ -118,7 +143,7 @@ function scoreEventDetail(event) {
     return humanizeToken(String(event.source).toLowerCase());
   }
 
-  return "score event";
+  return t("score.event");
 }
 
 function buildTrictracToast(event) {
@@ -126,42 +151,270 @@ function buildTrictracToast(event) {
   const points = Number(event?.points ?? 0);
 
   return {
-    title: `${SCORE_TOAST_COLOR_LABELS[beneficiary]} wins ${points} ${points === 1 ? "point" : "points"}`,
+    title: t("score.wins", { color: colorLabel(beneficiary), points }),
     detail: scoreEventDetail(event)
   };
 }
 
-function decisionPrompt(payload) {
-  if (payload?.prompt) {
-    return payload.prompt;
+function stableSignature(value) {
+  try {
+    return JSON.stringify(value || null);
+  } catch (_error) {
+    return "unserializable";
+  }
+}
+
+function boardSoundSignature(game) {
+  const board = game?.board || {};
+
+  return stableSignature({
+    points: (board.points || []).map((point) => ({
+      index: point.index,
+      white: point.white || 0,
+      black: point.black || 0
+    })),
+    bar: board.bar || {},
+    outside: board.outside || {}
+  });
+}
+
+function diceValuesSignature(game) {
+  const dice = game?.dice;
+
+  if (!dice) {
+    return "";
   }
 
+  return stableSignature({
+    color: game?.turn?.color || "",
+    values: dice.values || []
+  });
+}
+
+function movesPlayedCount(game) {
+  return (game?.dice?.moves_played || []).length;
+}
+
+function openingRollSignature(game) {
+  return stableSignature(game?.opening_roll?.rolls || {});
+}
+
+function decisionSignature(game) {
+  const decision = game?.pending_turn_decision;
+
+  if (!decision) {
+    return "";
+  }
+
+  return stableSignature({
+    key: decision.key,
+    actorColor: decision.actorColor || game?.turn?.color || "",
+    choices: decision.choices || []
+  });
+}
+
+function chatMessageSignature(message) {
+  return stableSignature({
+    author: message?.author ?? message?.player ?? "",
+    text: message?.data?.text ?? message?.text ?? ""
+  });
+}
+
+function gameSoundSignature(game) {
+  const scoreHistory = Array.isArray(game?.trictrac?.score_history) ? game.trictrac.score_history : [];
+  const chat = Array.isArray(game?.chat) ? game.chat : [];
+
+  return stableSignature({
+    board: boardSoundSignature(game),
+    dice: diceValuesSignature(game),
+    movesPlayed: movesPlayedCount(game),
+    openingRoll: openingRollSignature(game),
+    decision: decisionSignature(game),
+    turn: {
+      color: game?.turn?.color || "",
+      number: game?.turn?.number || 0,
+      player: game?.turn?.player_name || ""
+    },
+    match: {
+      over: !!game?.match?.is_over,
+      winner: game?.match?.winner || "",
+      winnerKind: game?.match?.winner_kind || ""
+    },
+    scoreLength: scoreHistory.length,
+    scoreLast: scoreEventSignature(scoreHistory[scoreHistory.length - 1]),
+    chatLength: chat.length,
+    chatLast: chatMessageSignature(chat[chat.length - 1])
+  });
+}
+
+function pendingDecisionActor(game) {
+  return game?.pending_turn_decision?.actorColor || game?.turn?.color || "";
+}
+
+function latestAction(lastActionRef) {
+  const action = lastActionRef.current;
+
+  if (!action || Date.now() - action.time > 5000) {
+    lastActionRef.current = null;
+    return null;
+  }
+
+  lastActionRef.current = null;
+  return action.event;
+}
+
+function newIncomingChat(previousGame, nextGame, playerColor) {
+  const previousChat = Array.isArray(previousGame?.chat) ? previousGame.chat : [];
+  const nextChat = Array.isArray(nextGame?.chat) ? nextGame.chat : [];
+
+  if (nextChat.length <= previousChat.length) {
+    return false;
+  }
+
+  return nextChat.slice(previousChat.length).some((message) => {
+    const author = message?.author ?? message?.player;
+    return author !== playerColor;
+  });
+}
+
+function detectSoundCues(previousGame, nextGame, options) {
+  if (!previousGame || !nextGame) {
+    return [];
+  }
+
+  const cues = [];
+  const localAction = options.lastAction;
+
+  const boardChanged = boardSoundSignature(previousGame) !== boardSoundSignature(nextGame);
+  const previousMovesPlayed = movesPlayedCount(previousGame);
+  const nextMovesPlayed = movesPlayedCount(nextGame);
+  const turnChanged = previousGame?.turn?.color !== nextGame?.turn?.color;
+  const diceChanged = diceValuesSignature(previousGame) !== diceValuesSignature(nextGame);
+  const winnerChanged =
+    previousGame?.match?.winner !== nextGame?.match?.winner ||
+    previousGame?.match?.winner_kind !== nextGame?.match?.winner_kind;
+  const matchRestarted = !!previousGame?.match?.is_over && !nextGame?.match?.is_over;
+  const matchEnded =
+    (!previousGame?.match?.is_over && !!nextGame?.match?.is_over) ||
+    (localAction === "resign" && !!nextGame?.match?.is_over) ||
+    (!!nextGame?.match?.is_over && winnerChanged);
+  const confirmResolved =
+    localAction === "confirm" ||
+    (previousGame?.dice && !nextGame?.dice) ||
+    (previousGame?.turn?.color && turnChanged);
+
+  if (localAction === "reset" || matchRestarted) {
+    cues.push(nextGame?.opening_roll?.pending ? "openingRoll" : "turnStart");
+    return cues;
+  }
+
+  if (openingRollSignature(previousGame) !== openingRollSignature(nextGame)) {
+    cues.push("openingRoll");
+  }
+
+  if (diceChanged && nextGame?.dice) {
+    cues.push("roll");
+  }
+
+  if (boardChanged && !confirmResolved && nextMovesPlayed < previousMovesPlayed) {
+    cues.push("undo");
+  } else if (boardChanged && !confirmResolved && nextMovesPlayed > previousMovesPlayed) {
+    cues.push(localAction === "move" || previousGame?.turn?.color === options.playerColor ? "move" : "botMove");
+  } else if (boardChanged && !confirmResolved && localAction === "undo") {
+    cues.push("undo");
+  } else if (boardChanged && !confirmResolved) {
+    cues.push(previousGame?.turn?.color === options.playerColor ? "move" : "opponentMove");
+  }
+
+  if (confirmResolved) {
+    cues.push("confirm");
+  }
+
+  if (
+    previousGame?.turn?.color !== options.playerColor &&
+    nextGame?.turn?.color === options.playerColor &&
+    !nextGame?.pending_match_options &&
+    !nextGame?.pending_turn_decision &&
+    !nextGame?.match?.is_over
+  ) {
+    cues.push("turnStart");
+  }
+
+  if (
+    !previousGame?.pending_turn_decision &&
+    nextGame?.pending_turn_decision &&
+    pendingDecisionActor(nextGame) === options.playerColor
+  ) {
+    cues.push("decision");
+  }
+
+  if (options.scoreEventsCount > 0) {
+    cues.push("score");
+  }
+
+  if (newIncomingChat(previousGame, nextGame, options.playerColor)) {
+    cues.push("chat");
+  }
+
+  if (matchEnded) {
+    cues.push("matchWin");
+  }
+
+  return cues;
+}
+
+function decisionPrompt(payload) {
   switch (payload?.key) {
     case "reprise":
-      return "Choose whether to continue the game or take a reprise.";
+      return t("decision.reprise");
     case "suspension":
-      return "Choose which track to suspend.";
+      return t("decision.suspension");
     default:
-      return capitalizeFirst(humanizeToken(payload?.key || "turn decision"));
+      if (payload?.prompt === "Suspend one track?") {
+        return t("decision.suspendOneTrack");
+      }
+
+      return tx(`decision.prompt.${payload?.key}`, payload?.prompt || capitalizeFirst(humanizeToken(payload?.key || "turn decision")));
   }
 }
 
 function decisionChoiceLabel(choice) {
-  return capitalizeFirst(humanizeToken(choice));
+  return tx(`decision.${choice}`, capitalizeFirst(humanizeToken(choice)));
 }
 
 function colorLabel(color) {
-  return SCORE_TOAST_COLOR_LABELS[color] || capitalizeFirst(humanizeToken(color || "unknown"));
+  return i18nColorLabel(color) || capitalizeFirst(humanizeToken(color || "unknown"));
+}
+
+function colorSubjectLabel(color) {
+  return tx(`colorSubject.${color || "unknown"}`, colorLabel(color));
+}
+
+function trictracBotDisplayName(game) {
+  return game?.bot?.enabled && game?.bot?.kind === TRICTRAC_BOT_KIND
+    ? TRICTRAC_BOT_DISPLAY_NAME
+    : null;
+}
+
+function seatName(game, seat) {
+  const player = game?.players?.[seat];
+  const botName = trictracBotDisplayName(game);
+
+  if (botName && player?.name === game?.bot?.name) {
+    return botName;
+  }
+
+  return player?.name;
 }
 
 function playerNameForColor(game, color) {
   if (!color) {
-    return "Current player";
+    return t("game.currentPlayer");
   }
 
   return color === "white"
-    ? game?.players?.host?.name || colorLabel(color)
-    : game?.players?.guest?.name || colorLabel(color);
+    ? seatName(game, "host") || colorLabel(color)
+    : seatName(game, "guest") || colorLabel(color);
 }
 
 function oppositeColor(color) {
@@ -177,7 +430,8 @@ function effectiveVariantId(game) {
 }
 
 function effectiveVariantTitle(game) {
-  return game?.variant?.active_leg?.title || game?.variant?.title || "";
+  const id = game?.variant?.active_leg?.id || game?.variant?.id || "";
+  return variantTitle(id, game?.variant?.active_leg?.title || game?.variant?.title || "");
 }
 
 function trictracScoreEntry(trictrac, color) {
@@ -190,14 +444,14 @@ function holderFromFlags(flags) {
   const black = !!(flags?.black ?? flags?.Black);
 
   if (white && !black) {
-    return "White";
+    return colorLabel("white");
   }
 
   if (black && !white) {
-    return "Black";
+    return colorLabel("black");
   }
 
-  return "None";
+  return t("none");
 }
 
 function formatCompactClasses(classes) {
@@ -212,7 +466,15 @@ function aecrirePartieLength(game) {
     16;
   const parsed = Number(rawValue);
 
-  return [6, 8, 12, 16, 18, 20, 24].includes(parsed) ? parsed : 16;
+  return [6, 8, 10, 12, 14, 16, 18, 20, 22, 24].includes(parsed) ? parsed : 16;
+}
+
+function aecrireRoundedGain(game) {
+  return Number(game?.trictrac?.track_aecrire?.rounded_gain || 0);
+}
+
+function aecrireGrossGain(game) {
+  return Number(game?.trictrac?.track_aecrire?.gross_gain || 0);
 }
 
 function aecrireSettlementEntry(game, color) {
@@ -237,11 +499,39 @@ function aecrireSettlementLines(game, color) {
   const ledger = aecrireSettlementEntry(game, color);
 
   return [
-    `Queue des jetons ${formatSignedValue(ledger.queue_jetons || 0)}`,
-    `Marqués ${formatSignedValue(ledger.marque_points || 0)}`,
-    `Queue des marqués ${formatSignedValue(ledger.queue_paris || 0)}`,
-    `Final ${ledger.final_total || 0}`
+    t("detail.queueJetons", { value: formatSignedValue(ledger.queue_jetons || 0) }),
+    t("detail.marques", { value: formatSignedValue(ledger.marque_points || 0) }),
+    t("detail.queueMarques", { value: formatSignedValue(ledger.queue_paris || 0) }),
+    t("detail.final", { value: ledger.final_total || 0 })
   ];
+}
+
+function formatPoints(count) {
+  return t("units.point", { count: Number(count || 0) });
+}
+
+function formatTrous(count) {
+  return t("units.trou", { count: Number(count || 0) });
+}
+
+function formatHonneurs(count) {
+  return t("units.honneur", { count: Number(count || 0) });
+}
+
+function formatJetons(count) {
+  return t("units.jeton", { count: Number(count || 0) });
+}
+
+function formatMarquesProgress(count, total) {
+  return t("detail.marquesProgress", { count: Number(count || 0), total: Number(total || 0) });
+}
+
+function formatColorTrous(color, count) {
+  return t("detail.colorTrous", { color: colorLabel(color), holes: formatTrous(count) });
+}
+
+function formatPointsAndTrous(points, trous) {
+  return t("detail.pointsAndTrous", { points: formatPoints(points), holes: formatTrous(trous) });
 }
 
 function aecrireLastMarqueLines(game) {
@@ -250,24 +540,24 @@ function aecrireLastMarqueLines(game) {
   const nextConsolation = ((aecrire.refait_streak || 0) + 1) * 2;
 
   if (!result) {
-    return ["No marqué settled yet."];
+    return [t("detail.noMarque")];
   }
 
   if (result.refait) {
-    return ["Refait", `Next consolation ${nextConsolation}`];
+    return [t("detail.refait"), t("detail.nextConsolation", { value: nextConsolation })];
   }
 
   const lines = [
-    `${colorLabel(result.winner)} ${formatSignedValue(result.points_awarded)} pts`,
-    `${result.winner_trous || 0} trous against ${result.loser_trous || 0}`
+    `${colorLabel(result.winner)} ${formatSignedValue(result.points_awarded)} ${t("units.point", { count: Math.abs(Number(result.points_awarded || 0)) }).replace(/^-?\d+\s*/, "")}`,
+    t("detail.trouAgainst", { winner: result.winner_trous || 0, loser: result.loser_trous || 0 })
   ];
 
   if (result.bredouille) {
     lines.push(`${capitalizeFirst(result.bredouille)} bredouille x${result.multiplier}`);
   } else if (result.voluntary_loss) {
-    lines.push("Voluntary loss");
+    lines.push(t("detail.voluntaryLoss"));
   } else {
-    lines.push("Simple marque");
+    lines.push(t("detail.simpleMarque"));
   }
 
   return lines;
@@ -282,9 +572,9 @@ function aecrireResultLines(game) {
   }
 
   return [
-    winner ? `${colorLabel(winner)} wins by jetons` : "Drawn settlement",
-    `Gain brut ${aecrire.gross_gain || 0}`,
-    `Gain arrondi ${aecrire.rounded_gain || 0}`
+    winner ? t("game.wonByPoints", { winner: colorSubjectLabel(winner), points: aecrireRoundedGain(game) }) : t("game.drawnSettlement"),
+    t("detail.gainExact", { value: aecrireGrossGain(game) }),
+    t("detail.gainArrondi", { value: aecrireRoundedGain(game) })
   ];
 }
 
@@ -292,15 +582,15 @@ function combineLastPartieLines(game) {
   const result = game?.trictrac?.track_classique_honneurs?.last_partie_result;
 
   if (!result) {
-    return ["No honneurs partie settled yet."];
+    return [t("detail.noHonneurs")];
   }
 
   const carried = Number(result.carried_trous || 0);
 
   return [
-    `${colorLabel(result.winner)} won ${humanizeToken(result.class)}`,
-    `${result.value || 0} honneurs`,
-    carried > 0 ? `${carried} trou${carried === 1 ? "" : "s"} carried` : "No carry"
+    t("detail.wonClass", { color: colorLabel(result.winner), klass: humanizeToken(result.class) }),
+    formatHonneurs(result.value),
+    carried > 0 ? t("detail.carried", { count: carried }) : t("detail.noCarry")
   ];
 }
 
@@ -311,9 +601,9 @@ function combineStateLines(game) {
   const black = Number(current.trous?.black || 0);
 
   return [
-    `Current partie White ${white}`,
-    `Current partie Black ${black}`,
-    white >= 11 || black >= 11 ? "Honneurs near settlement" : "Honneurs in progress"
+    t("detail.currentPartieWhite", { value: formatTrous(white) }),
+    t("detail.currentPartieBlack", { value: formatTrous(black) }),
+    white >= 11 || black >= 11 ? t("detail.honneursNear") : t("detail.honneursProgress")
   ];
 }
 
@@ -321,7 +611,7 @@ function combineSuspensionLines(game) {
   const suspension = game?.trictrac?.suspension_state || {};
 
   if (!suspension.resume_pending || !suspension.suspended_track) {
-    return ["None"];
+    return [t("none")];
   }
 
   const trackLabel =
@@ -332,26 +622,26 @@ function combineSuspensionLines(game) {
         : humanizeToken(suspension.suspended_track);
 
   return [
-    `${trackLabel} suspended`,
-    `Frozen by ${colorLabel(suspension.frozen_by)}`,
-    "Resumes on releve"
+    t("detail.suspended", { track: trackLabel }),
+    t("detail.frozenBy", { color: colorLabel(suspension.frozen_by) }),
+    t("detail.resumesOnReleve")
   ];
 }
 
 function matchOptionLabel(key) {
   switch (key) {
     case "tavliTarget":
-      return "Points to play";
+      return t("options.pointsToPlay");
     case "aEcrirePartieLength":
-      return "Marques to play";
+      return t("options.marquesToPlay");
     case "holeTarget":
-      return "Holes to play";
+      return t("options.holesToPlay");
     case "matchLength":
-      return "Match length";
+      return t("options.matchLength");
     case "doublesMode":
-      return "Doubles mode";
+      return t("options.doublesMode");
     case "margotEnabled":
-      return "Margot la fendue";
+      return t("options.margot");
     default:
       return capitalizeFirst(humanizeToken(key));
   }
@@ -359,23 +649,33 @@ function matchOptionLabel(key) {
 
 function matchOptionValue(key, value) {
   if (typeof value === "boolean") {
-    return value ? "Yes" : "No";
+    return boolLabel(value);
   }
 
   switch (key) {
     case "tavliTarget":
-      return `${value} point${String(value) === "1" ? "" : "s"}`;
+      return t("units.point", { count: value });
     case "aEcrirePartieLength":
-      return `${value} marques`;
+      return t("units.marque", { count: value });
     case "holeTarget":
-      return `${value} hole${String(value) === "1" ? "" : "s"}`;
+      return t("units.hole", { count: value });
     case "matchLength":
-      return `${value} game${String(value) === "1" ? "" : "s"}`;
+      return t("units.game", { count: value });
     case "doublesMode":
-      return value === "on" ? "On" : "Off";
+      return value === "on" ? t("on") : t("off");
     default:
       return String(value);
   }
+}
+
+function aecrireMatchResultText(game) {
+  const winner = game?.match?.winner || game?.trictrac?.track_aecrire?.winner;
+
+  if (!winner) {
+    return null;
+  }
+
+  return t("game.wonByPoints", { winner: colorSubjectLabel(winner), points: aecrireRoundedGain(game) });
 }
 
 function matchResultSummary(result, index) {
@@ -389,10 +689,20 @@ function matchResultSummary(result, index) {
   const legLabel = result?.leg ? `${capitalizeFirst(humanizeToken(result.leg))}: ` : "";
 
   if (!result?.winner) {
-    return `Game ${index + 1}: ${legLabel}${humanizeToken(result?.kind || "draw")}${awardText}`;
+    return t("matchResult.gameDraw", {
+      number: index + 1,
+      kind: `${legLabel}${humanizeToken(result?.kind || "draw")}`,
+      award: awardText
+    });
   }
 
-  return `Game ${index + 1}: ${legLabel}${colorLabel(result.winner)} won${awardText} by ${humanizeToken(result.kind)}`;
+  return t("matchResult.gameWin", {
+    number: index + 1,
+    leg: legLabel,
+    winner: colorSubjectLabel(result.winner),
+    award: awardText,
+    kind: humanizeToken(result.kind)
+  });
 }
 
 function trictracStatusLineItems(game) {
@@ -410,29 +720,29 @@ function trictracStatusLineItems(game) {
     case "toccategli":
     case "plein":
       return [
-        { label: "White", value: `${whiteScore.trous || 0}/${whiteScore.points || 0}` },
-        { label: "Black", value: `${blackScore.trous || 0}/${blackScore.points || 0}` }
+        { label: colorLabel("white"), value: `${whiteScore.trous || 0}/${whiteScore.points || 0}` },
+        { label: colorLabel("black"), value: `${blackScore.trous || 0}/${blackScore.points || 0}` }
       ];
 
     case "toc":
       return [
-        { label: "White", value: `${game?.match?.score?.white ?? 0} hole${(game?.match?.score?.white ?? 0) === 1 ? "" : "s"}` },
-        { label: "Black", value: `${game?.match?.score?.black ?? 0} hole${(game?.match?.score?.black ?? 0) === 1 ? "" : "s"}` }
+        { label: colorLabel("white"), value: t("units.hole", { count: game?.match?.score?.white ?? 0 }) },
+        { label: colorLabel("black"), value: t("units.hole", { count: game?.match?.score?.black ?? 0 }) }
       ];
 
     case "tavli": {
       const target = game?.match?.length ?? 7;
 
       return [
-        { label: "White", value: `${game?.match?.score?.white ?? 0}/${target}` },
-        { label: "Black", value: `${game?.match?.score?.black ?? 0}/${target}` }
+        { label: colorLabel("white"), value: `${game?.match?.score?.white ?? 0}/${target}` },
+        { label: colorLabel("black"), value: `${game?.match?.score?.black ?? 0}/${target}` }
       ];
     }
 
     case "trictrac_aecrire": {
       return [
-        { label: "White", value: `${whiteAecrireTotal}` },
-        { label: "Black", value: `${blackAecrireTotal}` }
+        { label: colorLabel("white"), value: `${whiteAecrireTotal}` },
+        { label: colorLabel("black"), value: `${blackAecrireTotal}` }
       ];
     }
 
@@ -442,20 +752,20 @@ function trictracStatusLineItems(game) {
 
       return [
         {
-          label: "White",
-          value: `${marques.white || 0} marques / ${honneurs.white || 0} honneurs / ${whiteAecrireTotal} jetons`
+          label: colorLabel("white"),
+          value: `${t("units.marque", { count: marques.white || 0 })} / ${formatHonneurs(honneurs.white)} / ${formatJetons(whiteAecrireTotal)}`
         },
         {
-          label: "Black",
-          value: `${marques.black || 0} marques / ${honneurs.black || 0} honneurs / ${blackAecrireTotal} jetons`
+          label: colorLabel("black"),
+          value: `${t("units.marque", { count: marques.black || 0 })} / ${formatHonneurs(honneurs.black)} / ${formatJetons(blackAecrireTotal)}`
         }
       ];
     }
 
     default:
       return [
-        { label: "White", value: game?.match?.score?.white ?? 0 },
-        { label: "Black", value: game?.match?.score?.black ?? 0 }
+        { label: colorLabel("white"), value: game?.match?.score?.white ?? 0 },
+        { label: colorLabel("black"), value: game?.match?.score?.black ?? 0 }
       ];
   }
 }
@@ -478,11 +788,11 @@ function trictracDetailCards(game) {
     case "trictrac_classique":
       return [
         {
-          title: "Bredouille",
+          title: t("detail.bredouille"),
           lines: [holderFromFlags({ white: whiteScore.bredouille, black: blackScore.bredouille })]
         },
         {
-          title: "Grande bredouille",
+          title: t("detail.grandeBredouille"),
           lines: [
             holderFromFlags({
               white: whiteScore.grande_bredouille,
@@ -494,14 +804,14 @@ function trictracDetailCards(game) {
 
     case "plein":
       return [
-        { title: "White", lines: [`${whiteScore.points || 0} pts`, `${whiteScore.trous || 0} trous`] },
-        { title: "Black", lines: [`${blackScore.points || 0} pts`, `${blackScore.trous || 0} trous`] },
+        { title: colorLabel("white"), lines: [formatPoints(whiteScore.points), formatTrous(whiteScore.trous)] },
+        { title: colorLabel("black"), lines: [formatPoints(blackScore.points), formatTrous(blackScore.trous)] },
         {
-          title: "Bredouille",
+          title: t("detail.bredouille"),
           lines: [holderFromFlags({ white: whiteScore.bredouille, black: blackScore.bredouille })]
         },
         {
-          title: "Grande bredouille",
+          title: t("detail.grandeBredouille"),
           lines: [
             holderFromFlags({
               white: whiteScore.grande_bredouille,
@@ -513,36 +823,36 @@ function trictracDetailCards(game) {
 
     case "toccategli":
       return [
-        { title: "White", lines: [`${whiteScore.points || 0} pts`, `${whiteScore.trous || 0} trous`] },
-        { title: "Black", lines: [`${blackScore.points || 0} pts`, `${blackScore.trous || 0} trous`] }
+        { title: colorLabel("white"), lines: [formatPoints(whiteScore.points), formatTrous(whiteScore.trous)] },
+        { title: colorLabel("black"), lines: [formatPoints(blackScore.points), formatTrous(blackScore.trous)] }
       ];
 
     case "toc":
       return [
         {
-          title: "White",
+          title: colorLabel("white"),
           lines: [
-            `${game?.match?.score?.white ?? 0} hole${(game?.match?.score?.white ?? 0) === 1 ? "" : "s"}`,
+            t("units.hole", { count: game?.match?.score?.white ?? 0 }),
             ...((whiteScore.points || 0) > 0 || (whiteScore.trous || 0) > 0
-              ? [`${whiteScore.points || 0} pts / ${whiteScore.trous || 0} trous`]
+              ? [formatPointsAndTrous(whiteScore.points, whiteScore.trous)]
               : [])
           ]
         },
         {
-          title: "Black",
+          title: colorLabel("black"),
           lines: [
-            `${game?.match?.score?.black ?? 0} hole${(game?.match?.score?.black ?? 0) === 1 ? "" : "s"}`,
+            t("units.hole", { count: game?.match?.score?.black ?? 0 }),
             ...((blackScore.points || 0) > 0 || (blackScore.trous || 0) > 0
-              ? [`${blackScore.points || 0} pts / ${blackScore.trous || 0} trous`]
+              ? [formatPointsAndTrous(blackScore.points, blackScore.trous)]
               : [])
           ]
         },
         {
-          title: "Bredouille",
+          title: t("detail.bredouille"),
           lines: [holderFromFlags({ white: whiteScore.bredouille, black: blackScore.bredouille })]
         },
         {
-          title: "Grande bredouille",
+          title: t("detail.grandeBredouille"),
           lines: [
             holderFromFlags({
               white: whiteScore.grande_bredouille,
@@ -560,29 +870,29 @@ function trictracDetailCards(game) {
 
       return [
         {
-          title: "White",
+          title: colorLabel("white"),
           lines: [
-            `${marques.white || 0}/${partieLength} marques`,
-            `${aecrirePoints.white || 0} before queues`,
-            ...(aecrireOver ? [`${whiteLedger.final_total || 0} final`] : [])
+            formatMarquesProgress(marques.white, partieLength),
+            t("detail.beforeQueues", { value: aecrirePoints.white || 0 }),
+            ...(aecrireOver ? [t("detail.finalValue", { value: whiteLedger.final_total || 0 })] : [])
           ]
         },
         {
-          title: "Black",
+          title: colorLabel("black"),
           lines: [
-            `${marques.black || 0}/${partieLength} marques`,
-            `${aecrirePoints.black || 0} before queues`,
-            ...(aecrireOver ? [`${blackLedger.final_total || 0} final`] : [])
+            formatMarquesProgress(marques.black, partieLength),
+            t("detail.beforeQueues", { value: aecrirePoints.black || 0 }),
+            ...(aecrireOver ? [t("detail.finalValue", { value: blackLedger.final_total || 0 })] : [])
           ]
         },
-        { title: "Current coup", lines: [`White ${coupTrous.white || 0}`, `Black ${coupTrous.black || 0}`] },
-        { title: "Consolation", lines: [`${nextConsolation} jetons next`, refaitStreak > 0 ? `${refaitStreak} refait${refaitStreak === 1 ? "" : "s"}` : "No refait"] },
-        { title: "Last marqué", lines: aecrireLastMarqueLines(game) },
+        { title: t("detail.currentCoup"), lines: [formatColorTrous("white", coupTrous.white), formatColorTrous("black", coupTrous.black)] },
+        { title: t("detail.consolation"), lines: [t("detail.nextJetons", { value: nextConsolation }), refaitStreak > 0 ? t("detail.refaitCount", { count: refaitStreak }) : t("detail.noRefait")] },
+        { title: t("detail.lastMarque"), lines: aecrireLastMarqueLines(game) },
         ...(aecrireOver
           ? [
-              { title: "White settlement", lines: aecrireSettlementLines(game, "white") },
-              { title: "Black settlement", lines: aecrireSettlementLines(game, "black") },
-              { title: "Result", lines: aecrireResult }
+              { title: t("detail.whiteSettlement"), lines: aecrireSettlementLines(game, "white") },
+              { title: t("detail.blackSettlement"), lines: aecrireSettlementLines(game, "black") },
+              { title: t("detail.result"), lines: aecrireResult }
             ]
           : [])
       ];
@@ -599,48 +909,48 @@ function trictracDetailCards(game) {
 
       return [
         {
-          title: "White a ecrire",
+          title: t("detail.whiteAEcrire"),
           lines: [
-            `${marques.white || 0}/${partieLength} marques`,
-            `${aecrirePoints.white || 0} before queues`,
-            ...(aecrireOver ? [`${whiteLedger.final_total || 0} final`] : [])
+            formatMarquesProgress(marques.white, partieLength),
+            t("detail.beforeQueues", { value: aecrirePoints.white || 0 }),
+            ...(aecrireOver ? [t("detail.finalValue", { value: whiteLedger.final_total || 0 })] : [])
           ]
         },
         {
-          title: "Black a ecrire",
+          title: t("detail.blackAEcrire"),
           lines: [
-            `${marques.black || 0}/${partieLength} marques`,
-            `${aecrirePoints.black || 0} before queues`,
-            ...(aecrireOver ? [`${blackLedger.final_total || 0} final`] : [])
+            formatMarquesProgress(marques.black, partieLength),
+            t("detail.beforeQueues", { value: aecrirePoints.black || 0 }),
+            ...(aecrireOver ? [t("detail.finalValue", { value: blackLedger.final_total || 0 })] : [])
           ]
         },
         {
-          title: "White honneurs",
+          title: t("detail.whiteHonneurs"),
           lines: [
-            `${honneurs.white || 0} honneurs`,
-            `${partieTrous.white || 0} partie trous`,
-            `S/D/T/Q ${formatCompactClasses(classes.white)}`
+            formatHonneurs(honneurs.white),
+            t("detail.partieTrous", { count: partieTrous.white || 0 }),
+            t("detail.compactClasses", { value: formatCompactClasses(classes.white) })
           ]
         },
         {
-          title: "Black honneurs",
+          title: t("detail.blackHonneurs"),
           lines: [
-            `${honneurs.black || 0} honneurs`,
-            `${partieTrous.black || 0} partie trous`,
-            `S/D/T/Q ${formatCompactClasses(classes.black)}`
+            formatHonneurs(honneurs.black),
+            t("detail.partieTrous", { count: partieTrous.black || 0 }),
+            t("detail.compactClasses", { value: formatCompactClasses(classes.black) })
           ]
         },
-        { title: "Honneurs state", lines: combineStateLines(game) },
-        { title: "Suspension", lines: combineSuspensionLines(game) },
-        { title: "Last honneurs", lines: combineLastPartieLines(game) },
-        { title: "Current coup", lines: [`White ${coupTrous.white || 0}`, `Black ${coupTrous.black || 0}`] },
-        { title: "Consolation", lines: [`${nextConsolation} jetons next`, refaitStreak > 0 ? `${refaitStreak} refait${refaitStreak === 1 ? "" : "s"}` : "No refait"] },
-        { title: "Last marqué", lines: aecrireLastMarqueLines(game) },
+        { title: t("detail.honneursState"), lines: combineStateLines(game) },
+        { title: t("detail.suspension"), lines: combineSuspensionLines(game) },
+        { title: t("detail.lastHonneurs"), lines: combineLastPartieLines(game) },
+        { title: t("detail.currentCoup"), lines: [formatColorTrous("white", coupTrous.white), formatColorTrous("black", coupTrous.black)] },
+        { title: t("detail.consolation"), lines: [t("detail.nextJetons", { value: nextConsolation }), refaitStreak > 0 ? t("detail.refaitCount", { count: refaitStreak }) : t("detail.noRefait")] },
+        { title: t("detail.lastMarque"), lines: aecrireLastMarqueLines(game) },
         ...(aecrireOver
           ? [
-              { title: "White settlement", lines: aecrireSettlementLines(game, "white") },
-              { title: "Black settlement", lines: aecrireSettlementLines(game, "black") },
-              { title: "Result", lines: aecrireResult }
+              { title: t("detail.whiteSettlement"), lines: aecrireSettlementLines(game, "white") },
+              { title: t("detail.blackSettlement"), lines: aecrireSettlementLines(game, "black") },
+              { title: t("detail.result"), lines: aecrireResult }
             ]
           : [])
       ];
@@ -653,35 +963,53 @@ function trictracDetailCards(game) {
 
 function pendingChoiceLabel(payload, answer) {
   if (answer == null) {
-    return "Waiting";
+    return t("waiting");
   }
 
-  const labeledChoice = payload?.choiceLabels?.[answer];
+  const labeledChoice =
+    payload?.kind === "trictrac_partie_length_consent"
+      ? t("units.marque", { count: answer })
+      : payload?.kind === "tavli_target_consent"
+        ? t("units.point", { count: answer })
+        : payload?.choiceLabels?.[answer];
 
   if (labeledChoice) {
-    return labeledChoice;
+    return uiMarqueCopy(labeledChoice);
   }
 
   switch (answer) {
     case "yes":
-      return "Yes";
+      return t("yes");
     case "no":
-      return "No";
+      return t("no");
     default:
       return decisionChoiceLabel(answer);
   }
 }
 
+function pendingPrompt(payload) {
+  switch (payload?.kind) {
+    case "tavli_target_consent":
+      return t("options.tavliPrompt");
+    case "trictrac_margot_consent":
+      return t("options.margotPrompt");
+    case "trictrac_partie_length_consent":
+      return t("options.partieLengthPrompt");
+    default:
+      return uiMarqueCopy(payload?.prompt || t("game.choosePregame"));
+  }
+}
+
 function OpeningRollDie({ color, value }) {
   if (value == null) {
-    return <span className="opening-roll-waiting">Waiting</span>;
+    return <span className="opening-roll-waiting">{t("waiting")}</span>;
   }
 
   return (
     <img
       className="themed-die"
       src={DICE_IMAGES[color][value]}
-      alt={`${colorLabel(color)} opening die ${value}`}
+      alt={t("game.openingDieAlt", { color: colorLabel(color), value })}
     />
   );
 }
@@ -690,10 +1018,10 @@ export default function gameInit(root, channel, options = {}) {
   const joinTimeoutMs = options.joinTimeoutMs ?? 15000;
   const onJoinComplete = options.onJoinComplete ?? (() => {});
   const onJoinError = options.onJoinError ?? ((resp) => {
-    root.textContent = `Unable to join game: ${resp?.msg || "unknown error"}`;
+    root.textContent = localizeError(resp, "errors.unknown");
   });
   const onJoinTimeout = options.onJoinTimeout ?? (() => {
-    root.textContent = "Joining the table timed out. If you requested the model opponent, it may still be warming up.";
+    root.textContent = t("join.timedOut");
   });
   const botMargotPreference = options.botMargotPreference ?? "";
   const reactRoot = createRoot(root);
@@ -725,7 +1053,15 @@ export default function gameInit(root, channel, options = {}) {
 
 function HermesTrictracApp({ channel, initialGame, player, playerName, lobbyName, requestedBotMargot }) {
   const playerColor = player?.color ?? "white";
+  const soundControllerRef = useRef(null);
+
+  if (!soundControllerRef.current) {
+    soundControllerRef.current = createSoundController();
+  }
+
   const [game, setGame] = useState(initialGame);
+  const [language, setLanguageState] = useState(getLanguage());
+  const [soundState, setSoundState] = useState(() => soundControllerRef.current.getSnapshot());
   const [selectedFrom, setSelectedFrom] = useState(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [optionsDraft, setOptionsDraft] = useState({});
@@ -741,8 +1077,13 @@ function HermesTrictracApp({ channel, initialGame, player, playerName, lobbyName
   const initialScoreHistory = Array.isArray(initialGame?.trictrac?.score_history) ? initialGame.trictrac.score_history : [];
   const toastIdRef = useRef(0);
   const toastTimersRef = useRef(new Map());
+  const latestGameRef = useRef(initialGame);
+  const gameSoundSignatureRef = useRef(gameSoundSignature(initialGame));
+  const lastActionRef = useRef(null);
+  const pendingActionRef = useRef(null);
   const scoreHistoryCursorRef = useRef(initialScoreHistory.length);
   const lastSeenScoreEventRef = useRef(scoreEventSignature(initialScoreHistory[initialScoreHistory.length - 1]));
+  const [pendingAction, setPendingAction] = useState(null);
 
   const dismissToast = (toastId) => {
     const timerId = toastTimersRef.current.get(toastId);
@@ -776,13 +1117,13 @@ function HermesTrictracApp({ channel, initialGame, player, playerName, lobbyName
     if (nextHistory.length === 0) {
       scoreHistoryCursorRef.current = 0;
       lastSeenScoreEventRef.current = scoreEventSignature(null);
-      return;
+      return [];
     }
 
     if (nextHistory.length < previousLength) {
       scoreHistoryCursorRef.current = nextHistory.length;
       lastSeenScoreEventRef.current = scoreEventSignature(nextHistory[nextHistory.length - 1]);
-      return;
+      return [];
     }
 
     if (previousLength > 0) {
@@ -791,23 +1132,76 @@ function HermesTrictracApp({ channel, initialGame, player, playerName, lobbyName
       if (currentPrefixSignature !== previousSignature) {
         scoreHistoryCursorRef.current = nextHistory.length;
         lastSeenScoreEventRef.current = scoreEventSignature(nextHistory[nextHistory.length - 1]);
-        return;
+        return [];
       }
     }
 
+    const newEvents = nextHistory.length > previousLength ? nextHistory.slice(previousLength) : [];
+
     if (nextHistory.length > previousLength) {
-      nextHistory.slice(previousLength).forEach((event) => {
+      newEvents.forEach((event) => {
         queueToast(buildTrictracToast(event));
       });
     }
 
     scoreHistoryCursorRef.current = nextHistory.length;
     lastSeenScoreEventRef.current = scoreEventSignature(nextHistory[nextHistory.length - 1]);
+    return newEvents;
   };
+
+  useEffect(() => subscribeLanguage(setLanguageState), []);
+
+  useEffect(() => {
+    const controller = soundControllerRef.current;
+    const unsubscribe = controller.subscribe(setSoundState);
+    const unlock = () => {
+      controller.unlock();
+    };
+    const unlockWhenVisible = () => {
+      if (document.visibilityState === "visible") {
+        controller.unlock();
+      }
+    };
+
+    window.addEventListener("pointerdown", unlock, { passive: true });
+    window.addEventListener("keydown", unlock);
+    window.addEventListener("focus", unlockWhenVisible);
+    window.addEventListener("pageshow", unlockWhenVisible);
+    document.addEventListener("visibilitychange", unlockWhenVisible);
+
+    return () => {
+      unsubscribe();
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+      window.removeEventListener("focus", unlockWhenVisible);
+      window.removeEventListener("pageshow", unlockWhenVisible);
+      document.removeEventListener("visibilitychange", unlockWhenVisible);
+    };
+  }, []);
 
   useEffect(() => {
     const updateRef = channel.on("update", (resp) => {
-      syncTrictracToasts(resp.game);
+      const previousGame = latestGameRef.current;
+      const nextSignature = gameSoundSignature(resp.game);
+      const isDuplicateUpdate = nextSignature === gameSoundSignatureRef.current;
+      const scoreEvents = syncTrictracToasts(resp.game);
+
+      if (!isDuplicateUpdate) {
+        const cues = detectSoundCues(previousGame, resp.game, {
+          playerColor,
+          lastAction: latestAction(lastActionRef),
+          scoreEventsCount: scoreEvents.length
+        });
+
+        soundControllerRef.current.playMany(cues);
+      } else {
+        latestAction(lastActionRef);
+      }
+
+      latestGameRef.current = resp.game;
+      gameSoundSignatureRef.current = nextSignature;
+      pendingActionRef.current = null;
+      setPendingAction(null);
       setGame(resp.game);
       setErrorMessage("");
       setSelectedFrom(null);
@@ -816,7 +1210,7 @@ function HermesTrictracApp({ channel, initialGame, player, playerName, lobbyName
     return () => {
       channel.off("update", updateRef);
     };
-  }, [channel]);
+  }, [channel, playerColor]);
 
   useEffect(() => {
     return () => {
@@ -907,10 +1301,29 @@ function HermesTrictracApp({ channel, initialGame, player, playerName, lobbyName
   const clearSelection = () => setSelectedFrom(null);
 
   const pushWithError = (event, payload = {}) => {
+    if (pendingActionRef.current) {
+      return;
+    }
+
+    pendingActionRef.current = event;
+    setPendingAction(event);
+    lastActionRef.current = { event, time: Date.now() };
+
     channel
       .push(event, payload)
       .receive("error", (resp) => {
-        setErrorMessage(resp?.msg || "Action failed.");
+        pendingActionRef.current = null;
+        setPendingAction(null);
+        lastActionRef.current = null;
+        soundControllerRef.current.play("error");
+        setErrorMessage(localizeError(resp, "errors.action_failed"));
+      })
+      .receive("timeout", () => {
+        pendingActionRef.current = null;
+        setPendingAction(null);
+        lastActionRef.current = null;
+        soundControllerRef.current.play("error");
+        setErrorMessage(t("errors.action_failed"));
       });
   };
 
@@ -966,31 +1379,48 @@ function HermesTrictracApp({ channel, initialGame, player, playerName, lobbyName
       }
     });
   };
+  const onRemainSeated = () => {
+    pushWithError("remain_seated");
+  };
 
   const diceTheme = game.turn?.color || playerColor;
+  const botDisplayName = trictracBotDisplayName(game) || game.bot?.name || t("lobby.computer");
   const heroCopy = game.bot?.enabled
-    ? `You are playing as ${COLOR_LABELS[playerColor]} against ${game.bot.name}.`
-    : `You are playing as ${COLOR_LABELS[playerColor]}. Share this lobby name with your opponent to join the same table.`;
+    ? t("game.againstBot", { color: colorLabel(playerColor), bot: botDisplayName })
+    : t("game.againstHuman", { color: colorLabel(playerColor) });
+  const toggleSound = () => {
+    soundControllerRef.current.setEnabled(!soundState.enabled);
+  };
+  const selectSoundPack = (packId) => {
+    soundControllerRef.current.setPack(packId);
+  };
+  const selectLanguage = (locale) => {
+    setLanguageState(setLanguage(locale));
+  };
 
   return (
     <div className="app-shell">
       {toasts.length > 0 ? <ToastStack toasts={toasts} /> : null}
       <section className="hero-panel">
         <div>
-          <p className="eyebrow">{game.variant?.title || "Table Game"}</p>
+          <p className="eyebrow">{variantTitle(game.variant?.id, game.variant?.title || t("game.tableGame"))}</p>
           <h1>{lobbyName}</h1>
           <p className="hero-copy">{heroCopy}</p>
         </div>
         <div className="hero-meta">
-          <span>Host: {game.players?.host?.name || "Waiting..."}</span>
-          <span>Guest: {game.players?.guest?.name || "Waiting..."}</span>
-          <span>Turn {game.turn?.number || 0}</span>
+          <span>{t("game.host")}: {seatName(game, "host") || t("waiting")}</span>
+          <span>{t("game.guest")}: {seatName(game, "guest") || t("waiting")}</span>
+          <span>{t("game.turn", { number: game.turn?.number || 0 })}</span>
+          <SoundToggle state={soundState} onToggle={toggleSound} />
+          <SoundPackSelect state={soundState} onChange={selectSoundPack} />
+          <LanguageSelect language={language} onChange={selectLanguage} />
         </div>
       </section>
 
       <div className="game-layout">
         <aside className="action-rail">
           <StatusCard game={game} playerColor={playerColor} playerName={playerName} />
+          <SeatReclaimCard payload={game.seat_reclaim} playerColor={playerColor} onRemainSeated={onRemainSeated} />
           <DiceCard color={displayedDiceColor} dice={displayedDice} isCurrentRoll={displayedDiceIsCurrent} />
           {isOpeningRollPending ? <OpeningRollCard payload={openingRoll} playerColor={playerColor} /> : null}
           <ActionCard
@@ -999,6 +1429,7 @@ function HermesTrictracApp({ channel, initialGame, player, playerName, lobbyName
             isTurnPlayer={isTurnPlayer}
             playerColor={playerColor}
             openingRoll={openingRoll}
+            pendingAction={pendingAction}
             onRoll={() => pushWithError("roll")}
             onUndo={() => {
               pushWithError("undo");
@@ -1009,7 +1440,7 @@ function HermesTrictracApp({ channel, initialGame, player, playerName, lobbyName
               clearSelection();
             }}
             onResign={() => {
-              if (window.confirm("Resign the match?")) {
+              if (window.confirm(t("game.resignConfirm"))) {
                 pushWithError("resign");
                 clearSelection();
               }
@@ -1100,45 +1531,124 @@ function HermesTrictracApp({ channel, initialGame, player, playerName, lobbyName
               />
             </div>
           </div>
-          <ChatPanel messages={messageList} onSendMessage={onMessageWasSent} />
+          <ChatPanel messages={messageList} onSendMessage={onMessageWasSent} t={t} />
         </main>
       </div>
     </div>
   );
 }
 
+function SoundToggle({ state, onToggle }) {
+  const label = !state.supported
+    ? t("game.soundUnavailable")
+    : state.enabled
+      ? t("game.soundOn")
+      : t("game.soundOff");
+  const title = !state.supported
+    ? t("game.soundUnavailableTitle")
+    : state.enabled
+      ? state.unlocked
+        ? t("game.soundOffTitle")
+        : t("game.soundOffLockedTitle")
+      : t("game.soundOnTitle");
+
+  return (
+    <button
+      type="button"
+      className="sound-toggle"
+      onClick={onToggle}
+      disabled={!state.supported}
+      aria-pressed={state.enabled}
+      title={title}
+    >
+      {label}
+    </button>
+  );
+}
+
+function SoundPackSelect({ state, onChange }) {
+  return (
+    <label className="sound-pack-select">
+      <span>{t("game.pack")}</span>
+      <select
+        value={state.packId}
+        onChange={(event) => onChange(event.target.value)}
+        disabled={!state.supported}
+        title={t("game.packTitle")}
+      >
+        {SOUND_PACK_OPTIONS.map((option) => (
+          <option key={option.id} value={option.id}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function LanguageSelect({ language, onChange }) {
+  const optionsById = new Map(languageSelectOptions().map((option) => [option.id, option]));
+
+  return (
+    <div className="language-button-group hero-language-select" role="group" aria-label={t("language")}>
+      {LANGUAGE_BUTTON_ORDER.map((id) => {
+        const option = optionsById.get(id);
+        const label = option?.label || id;
+        const active = language === id;
+        return (
+          <button
+            key={id}
+            type="button"
+            className={`language-flag-button ${active ? "active" : ""}`}
+            onClick={() => onChange(id)}
+            aria-label={label}
+            aria-pressed={active}
+            title={label}
+          >
+            {LANGUAGE_FLAG_LABELS[id] || label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function StatusCard({ game, playerColor, playerName }) {
   const summaryItems = trictracStatusLineItems(game);
-  const winnerLabel = colorLabel(game.match?.winner);
+  const winnerLabel = colorSubjectLabel(game.match?.winner);
   const activeLegTitle = game?.variant?.id === "tavli" ? effectiveVariantTitle(game) : null;
   const pendingDecisionActorColor = game.pending_turn_decision?.actorColor || game.turn?.color;
   const pendingDecisionActorName = playerNameForColor(game, pendingDecisionActorColor);
+  const aecrireResultText =
+    ["trictrac_aecrire", "trictrac_combine"].includes(game.variant?.id) && game.match?.winner_kind === "jetons"
+      ? aecrireMatchResultText(game)
+      : null;
   const whoseTurn =
     game.match?.is_over
-      ? `${winnerLabel} won${game.match?.winner_kind ? ` by ${humanizeToken(game.match.winner_kind)}` : ""}.`
+      ? aecrireResultText || t("game.wonBy", { winner: winnerLabel, kind: humanizeToken(game.match?.winner_kind || "") })
       : game.status === "waiting_for_opponent"
-      ? "Waiting for an opponent to join."
+      ? t("game.waitingOpponent")
       : game.opening_roll?.pending
-        ? game.opening_roll.prompt || "Roll to decide who starts."
+        ? t("game.rollToStart")
       : game.pending_match_options?.kind === "tavli_target_consent"
-        ? "Tavli target must be agreed before play starts."
+        ? t("game.tavliAgreement")
       : game.pending_match_options?.kind === "trictrac_margot_consent"
-        ? "Margot la fendue must be agreed before play starts."
+        ? t("game.margotAgreement")
         : game.pending_match_options
-          ? "Match options need to be confirmed before play starts."
+          ? t("game.optionsAgreement")
         : game.pending_turn_decision
-          ? `${pendingDecisionActorName} must resolve a turn decision.`
+          ? t("game.decisionRequired", { player: pendingDecisionActorName })
           : game.turn?.player_name
-            ? `${game.turn.player_name} to move`
-            : "Table is setting up.";
+            ? t("game.toMove", { player: playerNameForColor(game, game.turn?.color) })
+            : t("game.settingUp");
 
   return (
     <section className="rail-card">
-      <p className="rail-label">Seat</p>
+      <p className="rail-label">{t("game.seat")}</p>
       <h2>{playerName}</h2>
-      <p className="seat-tag">You are {COLOR_LABELS[playerColor]}</p>
+      <p className="seat-tag">{t("game.youAre", { color: colorLabel(playerColor) })}</p>
       <p className="status-line">{whoseTurn}</p>
-      {activeLegTitle ? <p className="muted-copy">Current leg: {activeLegTitle}</p> : null}
+      {activeLegTitle ? <p className="muted-copy">{t("game.currentLeg", { leg: activeLegTitle })}</p> : null}
       <div className="score-row">
         {summaryItems.map((item) => (
           <span key={item.label}>
@@ -1150,26 +1660,52 @@ function StatusCard({ game, playerColor, playerName }) {
   );
 }
 
+function SeatReclaimCard({ payload, playerColor, onRemainSeated }) {
+  if (!payload || payload.seat_color !== playerColor) {
+    return null;
+  }
+
+  const secondsLeft = Math.max(0, Math.ceil((Number(payload.expires_at_ms || 0) - Date.now()) / 1000));
+
+  return (
+    <section className="rail-card">
+      <p className="rail-label">{t("game.seatWarning")}</p>
+      <h2>{t("game.seatWanted")}</h2>
+      <p className="status-line">
+        {t("game.reclaimingSeat", { name: payload.claimant_name || t("someone") })}
+      </p>
+      <p className="muted-copy">
+        {t("game.remainWithin", { seconds: secondsLeft })}
+      </p>
+      <div className="button-grid">
+        <button type="button" onClick={onRemainSeated}>
+          {t("game.remainSeated")}
+        </button>
+      </div>
+    </section>
+  );
+}
+
 function DiceCard({ color, dice, isCurrentRoll }) {
   if (!dice) {
     return (
       <section className="rail-card">
-        <p className="rail-label">Dice</p>
-        <p className="muted-copy">No dice rolled yet.</p>
+        <p className="rail-label">{t("game.dice")}</p>
+        <p className="muted-copy">{t("game.noDice")}</p>
       </section>
     );
   }
 
   return (
     <section className="rail-card">
-      <p className="rail-label">Dice</p>
+      <p className="rail-label">{t("game.dice")}</p>
       <div className="dice-row">
         {(dice.values || []).map((value, index) => (
-          <img key={`${value}-${index}`} className="themed-die" src={DICE_IMAGES[color][value]} alt={`Die ${value}`} />
+          <img key={`${value}-${index}`} className="themed-die" src={DICE_IMAGES[color][value]} alt={t("game.dieAlt", { value })} />
         ))}
       </div>
       <p className="muted-copy">
-        {isCurrentRoll ? `Moves left: ${(dice.moves_left || []).join(", ") || "none"}` : "Awaiting next roll."}
+        {isCurrentRoll ? t("game.movesLeft", { moves: (dice.moves_left || []).join(", ") || t("game.noMovesLeft") }) : t("game.awaitingRoll")}
       </p>
     </section>
   );
@@ -1181,8 +1717,8 @@ function OpeningRollCard({ payload, playerColor }) {
 
   return (
     <section className="rail-card">
-      <p className="rail-label">Opening Roll</p>
-      <h2>{payload?.prompt || "Roll to decide who starts."}</h2>
+      <p className="rail-label">{t("game.openingRoll")}</p>
+      <h2>{t("game.rollToStart")}</h2>
       <div className="trictrac-grid">
         <div className="opening-roll-entry">
           <strong>{colorLabel(playerColor)}</strong>
@@ -1197,7 +1733,8 @@ function OpeningRollCard({ payload, playerColor }) {
   );
 }
 
-function ActionCard({ game, isSeatedPlayer, isTurnPlayer, playerColor, openingRoll, onRoll, onUndo, onConfirm, onResign, onNewMatch }) {
+function ActionCard({ game, isSeatedPlayer, isTurnPlayer, playerColor, openingRoll, pendingAction, onRoll, onUndo, onConfirm, onResign, onNewMatch }) {
+  const actionPending = !!pendingAction;
   const openingRollPending = !!openingRoll?.pending;
   const endTurnPoints = Number(game.ui_actions?.end_turn_points || 0);
   const isImpuissanceEndTurn = game.ui_actions?.end_turn_reason === "impuissance";
@@ -1215,8 +1752,8 @@ function ActionCard({ game, isSeatedPlayer, isTurnPlayer, playerColor, openingRo
     !game.match?.is_over &&
     !game.pending_match_options &&
     !game.pending_turn_decision;
-  const canRoll = canOpeningRoll || (canPlay && !game.dice && !game.pending_match_options && !game.pending_turn_decision);
-  const canUndo = canPlay && !!game.dice && (game.dice.moves_played || []).length > 0 && !game.pending_turn_decision;
+  const canRoll = !actionPending && (canOpeningRoll || (canPlay && !game.dice && !game.pending_match_options && !game.pending_turn_decision));
+  const canUndo = !actionPending && canPlay && !!game.dice && (game.dice.moves_played || []).length > 0 && !game.pending_turn_decision;
   const canEndTurn =
     canPlay &&
     !!game.ui_actions?.can_end_turn &&
@@ -1230,8 +1767,10 @@ function ActionCard({ game, isSeatedPlayer, isTurnPlayer, playerColor, openingRo
     !hasLegalMoves &&
     !!game.ui_actions?.can_confirm &&
     !game.pending_turn_decision &&
-    !canEndTurn;
+    !canEndTurn &&
+    !actionPending;
   const canConfirm =
+    !actionPending &&
     canPlay &&
     !!game.dice &&
     !hasMovesLeft &&
@@ -1239,25 +1778,25 @@ function ActionCard({ game, isSeatedPlayer, isTurnPlayer, playerColor, openingRo
     !game.pending_turn_decision &&
     !canEndTurn;
   const showNewMatch = !!game.match?.is_over;
-  const secondaryActionLabel = showNewMatch ? "New Match" : canEndTurn ? "End Turn" : "Resign";
+  const secondaryActionLabel = showNewMatch ? t("game.newMatch") : canEndTurn ? t("game.endTurn") : t("game.resign");
   const secondaryAction = showNewMatch ? onNewMatch : canEndTurn ? onConfirm : onResign;
-  const secondaryDisabled = showNewMatch ? false : canEndTurn ? !canEndTurn : !isSeatedPlayer;
+  const secondaryDisabled = showNewMatch ? actionPending : canEndTurn ? !canEndTurn || actionPending : !isSeatedPlayer || actionPending;
   const undoAction = canPassDice ? onConfirm : onUndo;
   const undoDisabled = canPassDice ? false : !canUndo;
-  const undoLabel = canPassDice ? "Pass Dice" : "Undo";
+  const undoLabel = canPassDice ? t("game.passDice") : t("game.undo");
 
   return (
     <section className="rail-card">
-      <p className="rail-label">Actions</p>
+      <p className="rail-label">{t("game.actions")}</p>
       <div className="button-grid">
         <button type="button" onClick={onRoll} disabled={!canRoll}>
-          Roll
+          {t("game.roll")}
         </button>
         <button type="button" onClick={undoAction} disabled={undoDisabled}>
           {undoLabel}
         </button>
         <button type="button" onClick={onConfirm} disabled={!canConfirm}>
-          Confirm
+          {t("game.confirm")}
         </button>
         <button
           type="button"
@@ -1269,12 +1808,12 @@ function ActionCard({ game, isSeatedPlayer, isTurnPlayer, playerColor, openingRo
       </div>
       {canEndTurn ? (
         <p className="muted-copy">
-          Dame impuissante: {endTurnPoints} point{endTurnPoints === 1 ? "" : "s"} to {colorLabel(oppositeColor(playerColor))}.
+          {t("game.impuissance", { points: endTurnPoints, color: colorLabel(oppositeColor(playerColor)) })}
         </p>
       ) : null}
       {canPassDice ? (
         <p className="muted-copy">
-          No legal moves are available; pass the dice to your opponent.
+          {t("game.passDiceHint")}
         </p>
       ) : null}
     </section>
@@ -1284,16 +1823,16 @@ function ActionCard({ game, isSeatedPlayer, isTurnPlayer, playerColor, openingRo
 function OptionsCard({ payload, values, onChange, onSubmit }) {
   return (
     <section className="rail-card">
-      <p className="rail-label">Match Options</p>
+      <p className="rail-label">{t("game.matchOptions")}</p>
       <form className="stack-form" onSubmit={onSubmit}>
         {(payload.options || []).map((option) => (
           <label key={option.key} className="option-row">
-            <span>{option.label}</span>
+            <span>{uiMarqueCopy(optionLabel(option))}</span>
             {Array.isArray(option.choices) ? (
               <select value={values[option.key] ?? option.defaultValue} onChange={(event) => onChange(option.key, event.target.value)}>
                 {option.choices.map((choice) => (
                   <option key={choice.value} value={choice.value}>
-                    {choice.label}
+                    {uiMarqueCopy(optionChoiceLabel(option.key, choice))}
                   </option>
                 ))}
               </select>
@@ -1308,7 +1847,7 @@ function OptionsCard({ payload, values, onChange, onSubmit }) {
             )}
           </label>
         ))}
-        <button type="submit">Start Match</button>
+        <button type="submit">{t("game.startMatch")}</button>
       </form>
     </section>
   );
@@ -1320,35 +1859,84 @@ function PregameChoiceCard({ payload, playerColor, onChoose }) {
 
   return (
     <section className="rail-card">
-      <p className="rail-label">Pregame</p>
-      <h2>{payload?.prompt || "Choose the pregame option."}</h2>
+      <p className="rail-label">{t("game.pregame")}</p>
+      <h2>{pendingPrompt(payload)}</h2>
       <div className="trictrac-grid">
         <div>
-          <strong>Your choice</strong>
+          <strong>{t("game.yourChoice")}</strong>
           <span>{pendingChoiceLabel(payload, responses[playerColor])}</span>
         </div>
         <div>
-          <strong>{colorLabel(opponent)} choice</strong>
+          <strong>{t("game.colorChoice", { color: colorLabel(opponent) })}</strong>
           <span>{pendingChoiceLabel(payload, responses[opponent])}</span>
         </div>
       </div>
-      <div className="button-grid">
-        {(payload?.choices || []).map((choice) => (
-          <button key={choice} type="button" onClick={() => onChoose(choice)}>
-            {pendingChoiceLabel(payload, choice)}
-          </button>
-        ))}
-      </div>
+      {payload?.kind === "trictrac_partie_length_consent" ? (
+        <PartieLengthConsentSlider payload={payload} playerColor={playerColor} onChoose={onChoose} />
+      ) : (
+        <div className="button-grid">
+          {(payload?.choices || []).map((choice) => (
+            <button key={choice} type="button" onClick={() => onChoose(choice)}>
+              {pendingChoiceLabel(payload, choice)}
+            </button>
+          ))}
+        </div>
+      )}
     </section>
+  );
+}
+
+function PartieLengthConsentSlider({ payload, playerColor, onChoose }) {
+  const choices = payload?.choices || [];
+  const responses = payload?.responses || {};
+  const currentChoice = responses[playerColor];
+  const fallbackChoice = currentChoice && choices.includes(currentChoice) ? currentChoice : choices[0] || "16";
+  const [selectedChoice, setSelectedChoice] = useState(fallbackChoice);
+  const selectedIndex = Math.max(0, choices.indexOf(selectedChoice));
+
+  useEffect(() => {
+    setSelectedChoice(fallbackChoice);
+  }, [fallbackChoice]);
+
+  return (
+    <div className="partie-length-slider">
+      <p className="muted-copy">{t("game.selectedTarget", { target: pendingChoiceLabel(payload, selectedChoice) })}</p>
+      <div className="partie-length-control">
+        <input
+          type="range"
+          min="0"
+          max={String(Math.max(choices.length - 1, 0))}
+          step="1"
+          value={String(selectedIndex)}
+          onChange={(event) => {
+            const nextChoice = choices[Number(event.target.value)] || fallbackChoice;
+            setSelectedChoice(nextChoice);
+          }}
+        />
+        <div className="partie-length-marks" aria-hidden="true">
+          {choices.map((choice, index) => (
+            <span
+              key={choice}
+              style={{ "--mark-position": `${choices.length <= 1 ? 0 : (index / (choices.length - 1)) * 100}%` }}
+            >
+              {choice}
+            </span>
+          ))}
+        </div>
+      </div>
+      <button type="button" onClick={() => onChoose(selectedChoice)}>
+        {t("game.chooseTarget", { target: pendingChoiceLabel(payload, selectedChoice) })}
+      </button>
+    </div>
   );
 }
 
 function TurnDecisionCard({ payload, onChoose }) {
   return (
     <section className="rail-card">
-      <p className="rail-label">Decision</p>
+      <p className="rail-label">{t("game.decision")}</p>
       <h2>{decisionPrompt(payload)}</h2>
-      {payload?.key ? <p className="muted-copy">Decision key: {humanizeToken(payload.key)}</p> : null}
+      {payload?.key ? <p className="muted-copy">{t("game.decisionKey", { key: humanizeToken(payload.key) })}</p> : null}
       <div className="button-grid">
         {(payload.choices || []).map((choice) => (
           <button key={choice} type="button" onClick={() => onChoose(choice)}>
@@ -1382,7 +1970,7 @@ function TrictracCard({ game }) {
 
   return (
     <section className="rail-card">
-      <p className="rail-label">Trictrac Track</p>
+      <p className="rail-label">{t("game.trictracTrack")}</p>
       <div className="trictrac-grid">
         {cards.map((card) => (
           <div key={card.title}>
@@ -1413,40 +2001,35 @@ function MatchCard({ game }) {
 
   return (
     <section className="rail-card">
-      <p className="rail-label">Match</p>
-      {game.match?.winner_kind ? (
-        <p className="muted-copy">
-          {colorLabel(game.match?.winner)} by {humanizeToken(game.match.winner_kind)}
-        </p>
-      ) : null}
+      <p className="rail-label">{t("game.match")}</p>
       {showTocScore ? (
         <div className="trictrac-grid">
           <div>
-            <strong>White</strong>
-            <span>{game.match?.score?.white ?? 0} holes</span>
+            <strong>{colorLabel("white")}</strong>
+            <span>{t("units.hole", { count: game.match?.score?.white ?? 0 })}</span>
           </div>
           <div>
-            <strong>Black</strong>
-            <span>{game.match?.score?.black ?? 0} holes</span>
+            <strong>{colorLabel("black")}</strong>
+            <span>{t("units.hole", { count: game.match?.score?.black ?? 0 })}</span>
           </div>
         </div>
       ) : null}
       {showTavliScore ? (
         <div className="trictrac-grid">
           <div>
-            <strong>White</strong>
-            <span>{game.match?.score?.white ?? 0} points</span>
+            <strong>{colorLabel("white")}</strong>
+            <span>{t("units.point", { count: game.match?.score?.white ?? 0 })}</span>
           </div>
           <div>
-            <strong>Black</strong>
-            <span>{game.match?.score?.black ?? 0} points</span>
+            <strong>{colorLabel("black")}</strong>
+            <span>{t("units.point", { count: game.match?.score?.black ?? 0 })}</span>
           </div>
           <div>
-            <strong>Target</strong>
-            <span>{game.match?.length ?? 7} points</span>
+            <strong>{t("game.target")}</strong>
+            <span>{t("units.point", { count: game.match?.length ?? 7 })}</span>
           </div>
           <div>
-            <strong>Current leg</strong>
+            <strong>{t("game.currentLeg", { leg: "" }).replace(/:\s*$/, "")}</strong>
             <span>{activeLegTitle || "Tavli"}</span>
           </div>
         </div>
@@ -1580,7 +2163,7 @@ function BarPocket({ color, count, isTop, isSelected, isSource, onSelect, showLa
       className={`bar-pocket ${isTop ? "top" : "bottom"} ${isSelected ? "selected" : ""} ${isSource ? "source" : ""}`}
       onClick={onSelect}
     >
-      {showLabel ? <p>{isTop ? "Opponent Bar" : "Your Bar"}</p> : null}
+      {showLabel ? <p>{isTop ? t("game.opponentBar") : t("game.yourBar")}</p> : null}
       <StackedCheckers pieces={Array.from({ length: count }, () => color)} isTop={isTop} />
       <strong>{count}</strong>
     </button>
@@ -1613,7 +2196,7 @@ function HomePocket({ color, count, isTop, onMoveTo, isTarget }) {
         }
       }}
     >
-      <p>Bear Off</p>
+      <p>{t("game.bearOff")}</p>
       <StackedCheckers pieces={Array.from({ length: count }, () => color)} isTop={isTop} />
       <strong>{count}</strong>
     </button>

@@ -263,7 +263,7 @@ defmodule HermesTrictracWeb.GamesChannelBotTest do
     assert is_nil(host_reply.game["opening_roll"]["rolls"]["white"])
   end
 
-  test "joining with bot is exposed for trictrac combine and applies default match options" do
+  test "joining with bot for trictrac combine waits for the host marque choice and the bot agrees" do
     lobby = "combine-bot-#{System.unique_integer([:positive])}"
 
     {:ok, host_reply, _host_socket} =
@@ -278,16 +278,28 @@ defmodule HermesTrictracWeb.GamesChannelBotTest do
 
     assert host_reply.player["color"] == "white"
     assert host_reply.game["bot"]["enabled"] == true
-    assert host_reply.game["status"] == "playing"
-    assert host_reply.game["pending_match_options"] == nil
-    assert host_reply.game["match"]["options"]["aEcrirePartieLength"] == "16"
-    assert host_reply.game["match"]["options"]["margotEnabled"] == false
-    assert host_reply.game["opening_roll"]["pending"] == true
-    assert is_integer(host_reply.game["opening_roll"]["rolls"]["black"])
-    assert is_nil(host_reply.game["opening_roll"]["rolls"]["white"])
+    assert host_reply.game["status"] == "awaiting_match_options"
+    assert host_reply.game["pending_match_options"]["kind"] == "trictrac_partie_length_consent"
+    assert is_nil(host_reply.game["match"]["options"]["margotEnabled"])
+    assert is_nil(host_reply.game["opening_roll"])
+
+    assert {:ok, game} =
+             GameServer.submit_match_options(
+               lobby,
+               %{"aEcrirePartieLengthConsent" => "20"},
+               "nick",
+               "combine-bot-host"
+             )
+
+    assert game["status"] == "playing"
+    assert game["pending_match_options"] == nil
+    assert game["match"]["options"]["aEcrirePartieLength"] == "20"
+    assert game["opening_roll"]["pending"] == true
+    assert is_integer(game["opening_roll"]["rolls"]["black"])
+    assert is_nil(game["opening_roll"]["rolls"]["white"])
   end
 
-  test "aecrire bot applies default match options and takes its opening roll" do
+  test "aecrire bot mirrors the host marque choice before taking its opening roll" do
     lobby = "aecrire-bot-opening-#{System.unique_integer([:positive])}"
     GameServer.reg(lobby)
     GameServer.start(lobby, "trictrac_aecrire")
@@ -297,10 +309,22 @@ defmodule HermesTrictracWeb.GamesChannelBotTest do
                "bot" => "trictrac_zero"
              })
 
+    assert game["status"] == "awaiting_match_options"
+    assert game["pending_match_options"]["kind"] == "trictrac_partie_length_consent"
+    assert is_nil(game["match"]["options"]["margotEnabled"])
+    assert is_nil(game["opening_roll"])
+
+    assert {:ok, game} =
+             GameServer.submit_match_options(
+               lobby,
+               %{"aEcrirePartieLengthConsent" => "24"},
+               "nick",
+               "aecrire-bot-host"
+             )
+
     assert game["status"] == "playing"
     assert game["pending_match_options"] == nil
-    assert game["match"]["options"]["aEcrirePartieLength"] == "16"
-    assert game["match"]["options"]["margotEnabled"] == false
+    assert game["match"]["options"]["aEcrirePartieLength"] == "24"
     assert game["opening_roll"]["pending"] == true
     assert is_integer(game["opening_roll"]["rolls"]["black"])
     assert is_nil(game["opening_roll"]["rolls"]["white"])

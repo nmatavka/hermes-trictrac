@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 
-function ChatPanel({ messages, onSendMessage }) {
+function ChatPanel({ messages, onSendMessage, t }) {
   const [draft, setDraft] = useState("");
 
   const submit = (event) => {
@@ -18,10 +18,10 @@ function ChatPanel({ messages, onSendMessage }) {
 
   return (
     <section className="chat-panel">
-      <h2>Chat</h2>
+      <h2>{t("chat.title")}</h2>
       <div className="chat-messages">
         {messages.length === 0 ? (
-          <p className="chat-empty">No messages yet.</p>
+          <p className="chat-empty">{t("chat.empty")}</p>
         ) : (
           messages.map((message, index) => (
             <div
@@ -29,7 +29,7 @@ function ChatPanel({ messages, onSendMessage }) {
               className={`chat-message ${message.author === "me" ? "chat-me" : "chat-them"}`}
             >
               <span className="chat-message-author">
-                {message.author === "me" ? "You" : "Opponent"}
+                {message.author === "me" ? t("chat.you") : t("chat.opponent")}
               </span>
               <p>{message.data?.text ?? ""}</p>
             </div>
@@ -41,9 +41,9 @@ function ChatPanel({ messages, onSendMessage }) {
           type="text"
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
-          placeholder="Send a message"
+          placeholder={t("chat.placeholder")}
         />
-        <button type="submit">Send</button>
+        <button type="submit">{t("chat.send")}</button>
       </form>
     </section>
   );

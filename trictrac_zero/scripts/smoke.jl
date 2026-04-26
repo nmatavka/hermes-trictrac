@@ -11,6 +11,7 @@ function main(config::TricTracScriptCPU.StartupConfig)
   self_play_workers = TricTracScriptCPU.worker_override(config.self_play_workers)
   arena_workers = TricTracScriptCPU.worker_override(config.arena_workers)
   num_iters = TricTracScriptCPU.iterations_override(config.num_iters)
+  partie_length_repeats = TricTracScriptCPU.partie_length_repeats_override(config.partie_length_repeats)
   preset = config.game.value
   worker_settings = TricTracZero.resolve_worker_settings(
     smoke = true,
@@ -26,6 +27,12 @@ function main(config::TricTracScriptCPU.StartupConfig)
     isnothing(config.value_target_gain.value) ?
     TricTracZero.configured_value_target_gain() :
     config.value_target_gain.value
+  effective_partie_length_repeats = TricTracZero.resolve_partie_length_repeats(
+    preset = preset,
+    smoke = true,
+    use_gpu = config.use_gpu,
+    partie_length_repeats = partie_length_repeats
+  )
 
   TricTracScriptCPU.print_startup_summary(
     config;
@@ -34,6 +41,7 @@ function main(config::TricTracScriptCPU.StartupConfig)
     game = preset,
     move_cap = effective_move_cap,
     value_target_gain = effective_value_target_gain,
+    partie_length_repeats = effective_partie_length_repeats,
     self_play_clamped = worker_settings.self_play_clamped,
     arena_clamped = worker_settings.arena_clamped
   )
@@ -45,7 +53,8 @@ function main(config::TricTracScriptCPU.StartupConfig)
     reset_memory = config.reset_memory,
     num_iters = num_iters,
     self_play_workers = self_play_workers,
-    arena_workers = arena_workers
+    arena_workers = arena_workers,
+    partie_length_repeats = partie_length_repeats
   )
 end
 
