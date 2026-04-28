@@ -62,7 +62,7 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique do
           variant,
           beneficiary,
           event.points,
-          event.label,
+          event.rule || event.label,
           turn_number,
           event.source,
           event.metadata
@@ -93,6 +93,7 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique do
     |> put_in([:turn, :can_reprise], can_reprise)
     |> put_in([:turn, :reprise_color], reprise_color)
     |> Scoring.maybe_record_sortie_event(color, turn_number)
+    |> Map.put(:last_event_rules, Enum.map(analysis.events, &State.event_rule/1))
     |> Map.put(:last_events, Enum.map(analysis.events, &State.event_label/1))
   end
 

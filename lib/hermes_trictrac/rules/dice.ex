@@ -14,7 +14,9 @@ defmodule HermesTrictrac.Rules.Dice do
   defp impl do
     case Application.get_env(:hermes_trictrac, :dice_impl) do
       impl when is_atom(impl) and not is_nil(impl) ->
-        if Code.ensure_loaded?(impl) and function_exported?(impl, :roll, 2), do: impl, else: @default_impl
+        if Code.ensure_loaded?(impl) and function_exported?(impl, :roll, 2),
+          do: impl,
+          else: @default_impl
 
       _ ->
         @default_impl

@@ -1,6 +1,10 @@
-const NETWORK = TricTracSparseNet
+const DEFAULT_NETWORK = TricTracSparseNet
+const METAL_FALLBACK_NETWORK = TricTracMetalSparseNet
 const BENCHMARKS = Benchmark.Evaluation[]
-const SESSION_LAYOUT_VERSION = "sparse-v4-arena96x16"
+const CONV_SESSION_LAYOUT_VERSION = "sparse-v4-arena96x16"
+const METAL_DENSE_SESSION_LAYOUT_VERSION = "metal-dense-v1"
+const METAL_CONV_PROBE_RESULT = Ref{Any}(nothing)
+const DEFAULT_DEVICE = DEVICE_CPU
 const DEFAULT_TRAIN_ITERATIONS = 3
 const DEFAULT_SMOKE_ITERATIONS = 1
 const DEFAULT_PRESET = "classique"
@@ -117,14 +121,25 @@ available_presets() = [
   "toccategli-margot"
 ]
 
-gpu_available() = AlphaZero.FluxLib.CUDA.functional()
+function resolve_requested_device(;
+  device::Union{Symbol, AbstractString} = DEFAULT_DEVICE,
+  use_gpu::Union{Nothing, Bool} = nothing
+)
+  requested = normalize_device_backend(device)
+  if !isnothing(use_gpu) && requested == DEFAULT_DEVICE
+    requested = use_gpu ? DEVICE_AUTO : DEVICE_CPU
+  end
+  return requested
+end
+
+gpu_available() = resolve_device_backend(DEVICE_AUTO) != DEVICE_CPU
 
 function require_gpu_available()
   gpu_available() && return nothing
-  error("GPU training requested, but CUDA.functional() is false in this environment.")
+  error("GPU training requested, but no supported GPU backend is functional in this environment.")
 end
 
-function netparams()
+function conv_netparams()
   return TricTracSparseNetHP(
     num_filters = 32,
     num_blocks = 2,
@@ -136,30 +151,133 @@ function netparams()
   )
 end
 
-function source_session_dir_for_preset(preset::Union{String, Symbol})
-  config = preset_config(preset)
-  isnothing(config.warmstart_source) && return nothing
-  source = preset_config(config.warmstart_source)
-  return joinpath(
-    DEFAULT_SESSIONS_ROOT,
-    string(source.experiment, "-", SESSION_LAYOUT_VERSION)
+function metal_netparams()
+  return TricTracMetalSparseNetHP(
+    trunk_width = 256,
+    num_blocks = 4,
+    state_latent_dim = 128,
+    action_hidden_dim = 128,
+    value_hidden_dim = 128
   )
 end
 
-function warmstart_network(gspec::TricTracGameSpec, hyper::TricTracSparseNetHP, source_dir::String)
+network_type_for_netparams(::TricTracSparseNetHP) = TricTracSparseNet
+network_type_for_netparams(::TricTracMetalSparseNetHP) = TricTracMetalSparseNet
+
+network_family_name(::Type{<:TricTracSparseNet}) = "sparse-conv"
+network_family_name(::Type{<:TricTracMetalSparseNet}) = "metal-dense"
+network_family_name(network) = network_family_name(typeof(network))
+
+session_layout_version(::TricTracSparseNetHP) = CONV_SESSION_LAYOUT_VERSION
+session_layout_version(::TricTracMetalSparseNetHP) = METAL_DENSE_SESSION_LAYOUT_VERSION
+
+function probe_sparse_conv_on_metal()
+  cached = METAL_CONV_PROBE_RESULT[]
+  !isnothing(cached) && return cached
+
+  if !device_available(DEVICE_METAL)
+    result = (supported = false, error = "Metal.functional() is false in this environment.")
+    METAL_CONV_PROBE_RESULT[] = result
+    return result
+  end
+
+  previous_backend = active_device_backend()
+  try
+    set_runtime_device!(DEVICE_METAL)
+    for preset in ("classique", "aecrire")
+      config = preset_config(preset)
+      gspec = TricTracGameSpec(variant_id = config.variant_id, match_options = config.match_options)
+      nn = AlphaZero.Network.to_gpu(TricTracSparseNet(gspec, conv_netparams()))
+      dims = GI.state_dim(gspec)
+      X = rand(Float32, dims..., 2)
+      F = rand(Float32, NUM_ACTION_FEATURES, 5, 2)
+      M = ones(Float32, 5, 2)
+      Xnet, Fnet, Mnet = AlphaZero.Network.convert_input_tuple(nn, (X, F, M))
+      Flux.withgradient(nn -> begin
+        P, V, _ = sparse_policy_forward(nn, Xnet, Fnet, Mnet)
+        return sum(P) + sum(V)
+      end, nn)
+    end
+    result = (supported = true, error = nothing)
+    METAL_CONV_PROBE_RESULT[] = result
+    return result
+  catch err
+    result = (supported = false, error = sprint(showerror, err))
+    METAL_CONV_PROBE_RESULT[] = result
+    return result
+  finally
+    set_runtime_device!(previous_backend)
+  end
+end
+
+metal_conv_supported() = probe_sparse_conv_on_metal().supported
+
+function summarize_probe_error(detail::Union{Nothing, AbstractString}; limit::Int = 200)
+  isnothing(detail) && return nothing
+  summary = first(split(String(detail), '\n'; limit = 2))
+  return ncodeunits(summary) <= limit ? summary : string(summary[1:limit], "...")
+end
+
+function network_type_for_device(device::Union{Symbol, AbstractString} = DEFAULT_DEVICE)
+  resolved_device = resolve_device_backend(device)
+  if resolved_device == DEVICE_METAL && !metal_conv_supported()
+    return METAL_FALLBACK_NETWORK
+  end
+  return DEFAULT_NETWORK
+end
+
+function netparams(;
+  device::Union{Symbol, AbstractString} = DEFAULT_DEVICE,
+  network_type::Union{Nothing, Type} = nothing
+)
+  NetworkType = isnothing(network_type) ? network_type_for_device(device) : network_type
+  if NetworkType == TricTracSparseNet
+    return conv_netparams()
+  elseif NetworkType == TricTracMetalSparseNet
+    return metal_netparams()
+  else
+    error("Unsupported TricTrac network type $(NetworkType).")
+  end
+end
+
+function source_session_dir_for_preset(
+  preset::Union{String, Symbol};
+  device::Union{Symbol, AbstractString} = DEFAULT_DEVICE,
+  network_type::Union{Nothing, Type} = nothing
+)
+  config = preset_config(preset)
+  isnothing(config.warmstart_source) && return nothing
+  source = preset_config(config.warmstart_source)
+  hyper = netparams(device = device, network_type = network_type)
+  return joinpath(
+    DEFAULT_SESSIONS_ROOT,
+    string(source.experiment, "-", session_layout_version(hyper))
+  )
+end
+
+function warmstart_network(
+  NetworkType::Type{<:TricTracSparsePolicyNet},
+  gspec::TricTracGameSpec,
+  hyper,
+  source_dir::String
+)
   if !AlphaZero.UserInterface.valid_session_dir(source_dir)
     @warn "Warm-start source session $source_dir is not available; starting from random weights."
-    return NETWORK(gspec, hyper)
+    return NetworkType(gspec, hyper)
   end
 
   source_env = AlphaZero.UserInterface.load_env(source_dir)
+  if !(source_env.bestnn isa NetworkType)
+    @warn "Warm-start source session $source_dir uses $(network_family_name(source_env.bestnn)) weights, but this run expects $(network_family_name(NetworkType)); starting from random weights."
+    return NetworkType(gspec, hyper)
+  end
   if JSON3.write(AlphaZero.Network.hyperparams(source_env.bestnn)) != JSON3.write(hyper)
     @warn "Warm-start source session $source_dir has incompatible network hyperparameters; starting from random weights."
-    return NETWORK(gspec, hyper)
+    return NetworkType(gspec, hyper)
   end
   if GI.state_dim(source_env.gspec) != GI.state_dim(gspec)
     @warn "Warm-start source session $source_dir has incompatible input dimensions; starting from random weights."
-    return NETWORK(gspec, hyper)
+    return NetworkType(gspec, hyper)
   end
 
   network = AlphaZero.Network.copy(source_env.bestnn, on_gpu = false, test_mode = false)
@@ -168,14 +286,15 @@ function warmstart_network(gspec::TricTracGameSpec, hyper::TricTracSparseNetHP, 
 end
 
 function network_factory(;
-  source_dir::Union{Nothing, String} = nothing
+  source_dir::Union{Nothing, String} = nothing,
+  network_type::Type{<:TricTracSparsePolicyNet} = DEFAULT_NETWORK
 )
   if isnothing(source_dir)
-    return NETWORK
+    return network_type
   end
 
-  return function(gspec::TricTracGameSpec, hyper::TricTracSparseNetHP)
-    return warmstart_network(gspec, hyper, source_dir)
+  return function(gspec::TricTracGameSpec, hyper)
+    return warmstart_network(network_type, gspec, hyper, source_dir)
   end
 end
 
@@ -195,6 +314,8 @@ function default_worker_counts(; smoke::Bool)
     )
   end
 end
+
+gpu_batching_backend(backend::Symbol) = backend == DEVICE_CUDA
 
 function resolve_worker_settings(;
   smoke::Bool,
@@ -288,12 +409,15 @@ end
 function build_params(;
   smoke::Bool,
   preset::Union{String, Symbol} = DEFAULT_PRESET,
+  device::Union{Symbol, AbstractString} = DEFAULT_DEVICE,
   use_gpu::Bool = false,
   num_iters::Union{Nothing, Int} = nothing,
   self_play_workers::Union{Nothing, Int} = nothing,
   arena_workers::Union{Nothing, Int} = nothing,
   partie_length_repeats::Union{Nothing, Int} = nothing
 )
+  requested_device = resolve_requested_device(device = device, use_gpu = use_gpu)
+  resolved_device = resolve_device_backend(requested_device)
   worker_settings = resolve_worker_settings(
     smoke = smoke,
     self_play_workers = self_play_workers,
@@ -301,7 +425,9 @@ function build_params(;
   )
   warn_on_clamped_workers(worker_settings)
 
+  use_gpu = is_gpu_backend(resolved_device)
   cpu_mode = !use_gpu
+  batched_gpu_mode = gpu_batching_backend(resolved_device)
   self_play_games = resolve_self_play_game_count(
     preset = preset,
     smoke = smoke,
@@ -349,7 +475,7 @@ function build_params(;
         num_workers = resolved_self_play_workers,
         batch_size = 1,
         use_gpu = use_gpu,
-        fill_batches = use_gpu,
+        fill_batches = batched_gpu_mode,
         reset_every = 1,
         flip_probability = 0.0,
         alternate_colors = false
@@ -357,9 +483,9 @@ function build_params(;
       SimParams(
         num_games = self_play_games,
         num_workers = resolved_self_play_workers,
-        batch_size = cpu_mode ? 1 : 4,
+        batch_size = batched_gpu_mode ? 4 : 1,
         use_gpu = use_gpu,
-        fill_batches = use_gpu,
+        fill_batches = batched_gpu_mode,
         reset_every = 1,
         flip_probability = 0.0,
         alternate_colors = false
@@ -374,7 +500,7 @@ function build_params(;
         num_workers = resolved_arena_workers,
         batch_size = 1,
         use_gpu = use_gpu,
-        fill_batches = use_gpu,
+        fill_batches = batched_gpu_mode,
         reset_every = 1,
         flip_probability = 0.0,
         alternate_colors = true
@@ -476,6 +602,7 @@ end
 function default_experiment(;
   repo_root::String = REPO_ROOT,
   preset::Union{String, Symbol} = DEFAULT_PRESET,
+  device::Union{Symbol, AbstractString} = DEFAULT_DEVICE,
   use_gpu::Bool = false,
   num_iters::Union{Nothing, Int} = nothing,
   self_play_workers::Union{Nothing, Int} = nothing,
@@ -483,6 +610,9 @@ function default_experiment(;
   partie_length_repeats::Union{Nothing, Int} = nothing
 )
   config = preset_config(preset)
+  resolved_device = resolve_device_backend(resolve_requested_device(device = device, use_gpu = use_gpu))
+  NetworkType = network_type_for_device(resolved_device)
+  hyper = netparams(device = resolved_device, network_type = NetworkType)
   gspec = game_spec_for_preset(repo_root = repo_root, preset = preset)
   return Experiment(
     config.experiment,
@@ -490,14 +620,22 @@ function default_experiment(;
     build_params(
       smoke = false,
       preset = preset,
+      device = device,
       use_gpu = use_gpu,
       num_iters = num_iters,
       self_play_workers = self_play_workers,
       arena_workers = arena_workers,
       partie_length_repeats = partie_length_repeats
     ),
-    network_factory(source_dir = source_session_dir_for_preset(config.key)),
-    netparams(),
+    network_factory(
+      source_dir = source_session_dir_for_preset(
+        config.key;
+        device = resolved_device,
+        network_type = NetworkType
+      ),
+      network_type = NetworkType
+    ),
+    hyper,
     BENCHMARKS
   )
 end
@@ -505,6 +643,7 @@ end
 function smoke_experiment(;
   repo_root::String = REPO_ROOT,
   preset::Union{String, Symbol} = DEFAULT_PRESET,
+  device::Union{Symbol, AbstractString} = DEFAULT_DEVICE,
   use_gpu::Bool = false,
   num_iters::Union{Nothing, Int} = nothing,
   self_play_workers::Union{Nothing, Int} = nothing,
@@ -512,6 +651,9 @@ function smoke_experiment(;
   partie_length_repeats::Union{Nothing, Int} = nothing
 )
   config = preset_config(preset)
+  resolved_device = resolve_device_backend(resolve_requested_device(device = device, use_gpu = use_gpu))
+  NetworkType = network_type_for_device(resolved_device)
+  hyper = netparams(device = resolved_device, network_type = NetworkType)
   gspec = game_spec_for_preset(repo_root = repo_root, preset = preset)
   return Experiment(
     string(config.experiment, "-smoke"),
@@ -519,14 +661,22 @@ function smoke_experiment(;
     build_params(
       smoke = true,
       preset = preset,
+      device = device,
       use_gpu = use_gpu,
       num_iters = num_iters,
       self_play_workers = self_play_workers,
       arena_workers = arena_workers,
       partie_length_repeats = partie_length_repeats
     ),
-    network_factory(source_dir = source_session_dir_for_preset(config.key)),
-    netparams(),
+    network_factory(
+      source_dir = source_session_dir_for_preset(
+        config.key;
+        device = resolved_device,
+        network_type = NetworkType
+      ),
+      network_type = NetworkType
+    ),
+    hyper,
     BENCHMARKS
   )
 end
@@ -543,10 +693,48 @@ function game_spec_for_preset(;
   )
 end
 
-session_dir_name(exp::Experiment) = string(exp.name, "-", SESSION_LAYOUT_VERSION)
+session_dir_name(exp::Experiment) = string(exp.name, "-", session_layout_version(exp.netparams))
 
 function default_session_dir(exp::Experiment)
   return joinpath(DEFAULT_SESSIONS_ROOT, session_dir_name(exp))
+end
+
+function expected_network_type(exp::Experiment)
+  return network_type_for_netparams(exp.netparams)
+end
+
+function load_session_best_network(dir::String)
+  path = joinpath(dir, AlphaZero.UserInterface.BESTNN_FILE)
+  isfile(path) || return nothing
+  return Serialization.deserialize(path)
+end
+
+function ensure_session_network_compatible!(
+  dir::String,
+  exp::Experiment;
+  requested_device::Symbol,
+  resolved_device::Symbol
+)
+  AlphaZero.UserInterface.valid_session_dir(dir) || return nothing
+  bestnn = load_session_best_network(dir)
+  isnothing(bestnn) && return nothing
+
+  expected_type = expected_network_type(exp)
+  actual_type = typeof(bestnn)
+  actual_type == expected_type && return nothing
+
+  requested_text =
+    requested_device == DEVICE_AUTO ?
+      "Automatic device selection resolved to $(resolved_device)." :
+      "Device $(requested_device) was requested explicitly."
+  guidance =
+    requested_device == DEVICE_AUTO ?
+      "Resume with --device=cpu to keep using the existing session, or start a fresh Metal session directory." :
+      "Use a fresh session directory for $(network_family_name(expected_type)) weights, or resume this session with a compatible device."
+  error(
+    "Session $dir stores $(network_family_name(actual_type)) weights, but this run expects " *
+    "$(network_family_name(expected_type)) weights. $requested_text $guidance"
+  )
 end
 
 function empty_replay_buffer()
@@ -561,6 +749,7 @@ function reset_session_memory!(dir::String)
 end
 
 function register_experiments!(;
+  device::Union{Symbol, AbstractString} = DEFAULT_DEVICE,
   use_gpu::Bool = false,
   num_iters::Union{Nothing, Int} = nothing,
   self_play_workers::Union{Nothing, Int} = nothing,
@@ -576,6 +765,7 @@ function register_experiments!(;
     AlphaZero.Examples.experiments[config.experiment] =
       default_experiment(
         preset = config.key,
+        device = device,
         use_gpu = use_gpu,
         num_iters = num_iters,
         self_play_workers = self_play_workers,
@@ -585,6 +775,7 @@ function register_experiments!(;
     AlphaZero.Examples.experiments[string(config.experiment, "-smoke")] =
       smoke_experiment(
         preset = config.key,
+        device = device,
         use_gpu = use_gpu,
         num_iters = num_iters,
         self_play_workers = self_play_workers,
@@ -600,6 +791,7 @@ function run_train(;
   preset::Union{String, Symbol} = DEFAULT_PRESET,
   dir::Union{Nothing, String} = nothing,
   test_game::Bool = false,
+  device::Union{Symbol, AbstractString} = DEFAULT_DEVICE,
   use_gpu::Bool = false,
   reset_memory::Bool = false,
   num_iters::Union{Nothing, Int} = nothing,
@@ -607,7 +799,17 @@ function run_train(;
   arena_workers::Union{Nothing, Int} = nothing,
   partie_length_repeats::Union{Nothing, Int} = nothing
 )
-  use_gpu && require_gpu_available()
+  requested_device = resolve_requested_device(device = device, use_gpu = use_gpu)
+  requested_device == DEVICE_CUDA && require_device_available(DEVICE_CUDA)
+  requested_device == DEVICE_METAL && require_device_available(DEVICE_METAL)
+  resolved_device = set_runtime_device!(requested_device)
+  if resolved_device == DEVICE_METAL
+    probe = probe_sparse_conv_on_metal()
+    if !probe.supported
+      @info "Metal convolution probe failed on this machine; using the dense Metal sparse-policy network." detail = summarize_probe_error(probe.error)
+    end
+  end
+  use_gpu = is_gpu_backend(resolved_device)
   if !partie_length_mix_enabled(preset) && !isnothing(partie_length_repeats)
     @warn "Partie-length repeats were requested for preset $(normalize_preset_name(preset)), but only trictrac_aecrire and trictrac_combine use marque-length self-play mixing."
   end
@@ -615,6 +817,7 @@ function run_train(;
     profile == "smoke" ?
       smoke_experiment(
         preset = preset,
+        device = resolved_device,
         use_gpu = use_gpu,
         num_iters = num_iters,
         self_play_workers = self_play_workers,
@@ -623,13 +826,15 @@ function run_train(;
       ) :
       default_experiment(
         preset = preset,
+        device = resolved_device,
         use_gpu = use_gpu,
         num_iters = num_iters,
         self_play_workers = self_play_workers,
         arena_workers = arena_workers,
         partie_length_repeats = partie_length_repeats
-      )
+  )
   register_experiments!(
+    device = resolved_device,
     use_gpu = use_gpu,
     num_iters = num_iters,
     self_play_workers = self_play_workers,
@@ -637,6 +842,12 @@ function run_train(;
     partie_length_repeats = partie_length_repeats
   )
   session_dir = isnothing(dir) ? default_session_dir(experiment) : dir
+  ensure_session_network_compatible!(
+    session_dir,
+    experiment;
+    requested_device = requested_device,
+    resolved_device = resolved_device
+  )
   if reset_memory
     if reset_session_memory!(session_dir)
       @info "Reset replay buffer in $session_dir before training."
@@ -656,6 +867,7 @@ end
 function run_smoke(;
   dir::Union{Nothing, String} = nothing,
   preset::Union{String, Symbol} = DEFAULT_PRESET,
+  device::Union{Symbol, AbstractString} = DEFAULT_DEVICE,
   use_gpu::Bool = false,
   reset_memory::Bool = false,
   num_iters::Union{Nothing, Int} = nothing,
@@ -668,6 +880,7 @@ function run_smoke(;
       default_session_dir(
         smoke_experiment(
           preset = preset,
+          device = device,
           use_gpu = use_gpu,
           num_iters = num_iters,
           self_play_workers = self_play_workers,
@@ -681,6 +894,7 @@ function run_smoke(;
     preset = preset,
     dir = session_dir,
     test_game = true,
+    device = device,
     use_gpu = use_gpu,
     reset_memory = reset_memory,
     num_iters = num_iters,
@@ -692,10 +906,28 @@ end
 
 function run_explore(;
   dir::Union{Nothing, String} = nothing,
-  preset::Union{String, Symbol} = DEFAULT_PRESET
+  preset::Union{String, Symbol} = DEFAULT_PRESET,
+  device::Union{Symbol, AbstractString} = DEFAULT_DEVICE,
+  use_gpu::Union{Nothing, Bool} = nothing
 )
-  experiment = default_experiment(preset = preset)
-  register_experiments!()
+  requested_device = resolve_requested_device(device = device, use_gpu = use_gpu)
+  requested_device == DEVICE_CUDA && require_device_available(DEVICE_CUDA)
+  requested_device == DEVICE_METAL && require_device_available(DEVICE_METAL)
+  resolved_device = set_runtime_device!(requested_device)
+  if resolved_device == DEVICE_METAL
+    probe = probe_sparse_conv_on_metal()
+    if !probe.supported
+      @info "Metal convolution probe failed on this machine; using the dense Metal sparse-policy network." detail = summarize_probe_error(probe.error)
+    end
+  end
+  experiment = default_experiment(preset = preset, device = resolved_device)
+  register_experiments!(device = resolved_device)
   session_dir = isnothing(dir) ? default_session_dir(experiment) : dir
+  ensure_session_network_compatible!(
+    session_dir,
+    experiment;
+    requested_device = requested_device,
+    resolved_device = resolved_device
+  )
   return AlphaZero.Scripts.explore(experiment; dir = session_dir)
 end

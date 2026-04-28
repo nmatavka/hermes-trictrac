@@ -7,7 +7,7 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Scoring do
         variant,
         color,
         points,
-        label,
+        rule_or_label,
         turn_number,
         source \\ nil,
         metadata \\ %{}
@@ -41,16 +41,10 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Scoring do
       |> maybe_apply_etendard(variant)
 
     event =
-      %ScoreEvent{
-        label: label,
-        piece_type: Atom.to_string(color),
-        beneficiary: Atom.to_string(color),
-        points: points,
-        trous_delta: trous_gain,
-        turn_number: turn_number,
-        source: source || source_from_label(label),
-        metadata: metadata
-      }
+      color
+      |> event(rule_or_label, points, metadata, source)
+      |> Map.put(:trous_delta, trous_gain)
+      |> Map.put(:turn_number, turn_number)
 
     trictrac
     |> Map.put(:score, score_list)
@@ -58,12 +52,18 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Scoring do
     |> update_in([:score_history], &((&1 || []) ++ [event]))
   end
 
-  def event(color, label, points, metadata \\ %{}, source_override \\ nil) do
+  def event(color, rule_or_label, points, metadata \\ %{}, source_override \\ nil) do
+    rule = Constants.score_rule(rule_or_label)
+    label = Constants.score_label(rule_or_label)
+    source = source_override || Constants.score_source(rule || rule_or_label)
+
     %ScoreEvent{
+      rule: rule,
       label: label,
+      piece_type: Atom.to_string(color),
       beneficiary: Atom.to_string(color),
       points: points,
-      source: source_override || source_from_label(label),
+      source: source,
       metadata: metadata
     }
   end
@@ -73,7 +73,7 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Scoring do
       sortie_points =
         trictrac
         |> get_in([:turn, :events])
-        |> Enum.find(&(State.event_label(&1) == "sortie"))
+        |> Enum.find(&(State.event_rule(&1) == :sortie))
         |> Map.get(:points)
 
       put_in(trictrac, [:sortie, :last_event], %{
@@ -86,12 +86,9 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Scoring do
     end
   end
 
-  def label_for_points(label), do: label
+  def label_for_points(rule_or_label), do: Constants.score_label(rule_or_label)
 
-  def source_from_label(label) do
-    Constants.score_sources()
-    |> Map.get(label)
-  end
+  def source_from_label(rule_or_label), do: Constants.score_source(rule_or_label)
 
   defp maybe_apply_etendard(score_list, variant) do
     if VariantRules.apply_etendard?(variant), do: apply_etendard(score_list), else: score_list

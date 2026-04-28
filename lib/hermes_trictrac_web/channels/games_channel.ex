@@ -55,7 +55,7 @@ defmodule HermesTrictracWeb.GamesChannel do
     case g do
       {:ok, game} ->
         set_game_and_notify(socket, game)
-        {:noreply, socket}
+        {:reply, {:ok, %{}}, socket}
 
       {:error, msg} ->
         {:reply, {:error, error_payload(msg)}, socket}
@@ -73,7 +73,7 @@ defmodule HermesTrictracWeb.GamesChannel do
          ) do
       {:ok, game} ->
         set_game_and_notify(socket, game)
-        {:noreply, socket}
+        {:reply, {:ok, %{}}, socket}
 
       {:error, msg} ->
         {:reply, {:error, error_payload(msg)}, socket}
@@ -88,7 +88,7 @@ defmodule HermesTrictracWeb.GamesChannel do
          ) do
       {:ok, game} ->
         set_game_and_notify(socket, game)
-        {:noreply, socket}
+        {:reply, {:ok, %{}}, socket}
 
       {:error, msg} ->
         {:reply, {:error, error_payload(msg)}, socket}
@@ -103,7 +103,7 @@ defmodule HermesTrictracWeb.GamesChannel do
          ) do
       {:ok, game} ->
         set_game_and_notify(socket, game)
-        {:noreply, socket}
+        {:reply, {:ok, %{}}, socket}
 
       {:error, msg} ->
         {:reply, {:error, error_payload(msg)}, socket}
@@ -117,7 +117,7 @@ defmodule HermesTrictracWeb.GamesChannel do
     case g do
       {:ok, game} ->
         set_game_and_notify(socket, game)
-        {:noreply, socket}
+        {:reply, {:ok, %{}}, socket}
 
       {:error, msg} ->
         {:reply, {:error, error_payload(msg)}, socket}
@@ -142,7 +142,7 @@ defmodule HermesTrictracWeb.GamesChannel do
     case g do
       {:ok, game} ->
         set_game_and_notify(socket, game)
-        {:noreply, socket}
+        {:reply, {:ok, %{}}, socket}
 
       {:error, msg} ->
         {:reply, {:error, error_payload(msg)}, socket}
@@ -158,7 +158,7 @@ defmodule HermesTrictracWeb.GamesChannel do
     case HermesTrictrac.GameServer.undo(socket.assigns[:name], user, socket.assigns[:client_id]) do
       {:ok, game} ->
         set_game_and_notify(socket, game)
-        {:noreply, socket}
+        {:reply, {:ok, %{}}, socket}
 
       {:error, msg} ->
         {:reply, {:error, error_payload(msg)}, socket}
@@ -175,7 +175,7 @@ defmodule HermesTrictracWeb.GamesChannel do
          ) do
       {:ok, game} ->
         set_game_and_notify(socket, game)
-        {:noreply, socket}
+        {:reply, {:ok, %{}}, socket}
 
       {:error, msg} ->
         {:reply, {:error, error_payload(msg)}, socket}
@@ -193,7 +193,7 @@ defmodule HermesTrictracWeb.GamesChannel do
          ) do
       {:ok, game} ->
         set_game_and_notify(socket, game)
-        {:noreply, socket}
+        {:reply, {:ok, %{}}, socket}
 
       {:error, msg} ->
         {:reply, {:error, error_payload(msg)}, socket}
@@ -211,7 +211,7 @@ defmodule HermesTrictracWeb.GamesChannel do
          ) do
       {:ok, game} ->
         set_game_and_notify(socket, game)
-        {:noreply, socket}
+        {:reply, {:ok, %{}}, socket}
 
       {:error, msg} ->
         {:reply, {:error, error_payload(msg)}, socket}

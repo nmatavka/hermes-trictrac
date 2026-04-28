@@ -14,6 +14,7 @@ const ENV_MOVE_CAP = "TRICTRAC_ZERO_TEMP_MAX_GAME_LENGTH"
 const ENV_VALUE_TARGET_GAIN = "TRICTRAC_ZERO_VALUE_TARGET_GAIN"
 const ENV_PARTIE_LENGTH_REPEATS = "TRICTRAC_ZERO_PARTIE_LENGTH_REPEATS"
 const ENV_GAME = "TRICTRAC_ZERO_GAME"
+const VALID_DEVICE_BACKENDS = (:cpu, :cuda, :metal, :auto)
 const VALID_GAMES = (
   "classique",
   "classique-margot",
@@ -35,7 +36,7 @@ end
 Base.@kwdef struct StartupConfig
   command::Symbol
   positional::Vector{String}
-  use_gpu::Bool
+  device::Setting{Symbol}
   reset_memory::Bool
   show_help::Bool
   cpu_policy::Setting{Symbol}
@@ -96,6 +97,13 @@ function parse_game(raw::AbstractString, source_name::AbstractString)
   throw(ArgumentError("Invalid value for $source_name: $(repr(raw)). Expected one of: $choices."))
 end
 
+function parse_device(raw::AbstractString, source_name::AbstractString)
+  device = normalize_symbol(raw)
+  device in VALID_DEVICE_BACKENDS && return device
+  choices = join(String.(VALID_DEVICE_BACKENDS), ", ")
+  throw(ArgumentError("Invalid value for $source_name: $(repr(raw)). Expected one of: $choices."))
+end
+
 function resolve_setting(cli_value, env::AbstractDict, env_name::String, default_value, parser::Function)
   if !isnothing(cli_value)
     return Setting(cli_value, :cli)
@@ -127,6 +135,9 @@ function validate_positional_args(command::Symbol, positional::Vector{String})
   elseif command == :smoke
     length(positional) <= 1 && return nothing
     throw(ArgumentError("smoke accepts at most 1 positional argument: [dir]."))
+  elseif command == :explore
+    length(positional) <= 1 && return nothing
+    throw(ArgumentError("explore accepts at most 1 positional argument: [dir]."))
   else
     throw(ArgumentError("Unknown command kind: $command"))
   end
@@ -134,7 +145,7 @@ end
 
 function parse_startup(command::Symbol, args::Vector{String}; env::AbstractDict = ENV)
   positional = String[]
-  use_gpu = false
+  cli_device = nothing
   reset_memory = false
   show_help = false
   cli_policy = nothing
@@ -151,11 +162,14 @@ function parse_startup(command::Symbol, args::Vector{String}; env::AbstractDict 
   while index <= length(args)
     arg = args[index]
     if arg == "--gpu"
-      use_gpu = true
+      cli_device = AUTO
     elseif arg == "--reset-memory"
       reset_memory = true
     elseif arg == "--help"
       show_help = true
+    elseif startswith(arg, "--device")
+      value, index = take_flag_value(args, index, "--device")
+      cli_device = parse_device(value, "--device")
     elseif startswith(arg, "--cpu-policy")
       value, index = take_flag_value(args, index, "--cpu-policy")
       cli_policy = parse_policy(value, "--cpu-policy")
@@ -199,7 +213,7 @@ function parse_startup(command::Symbol, args::Vector{String}; env::AbstractDict 
   return StartupConfig(
     command = command,
     positional = positional,
-    use_gpu = use_gpu,
+    device = isnothing(cli_device) ? Setting(:cpu, :default) : Setting(cli_device, :cli),
     reset_memory = reset_memory,
     show_help = show_help,
     cpu_policy = resolve_setting(cli_policy, env, ENV_CPU_POLICY, DEFAULT_CPU_POLICY, parse_policy),
@@ -303,10 +317,12 @@ worker_override(setting::Setting) = setting.value === AUTO ? nothing : setting.v
 iterations_override(setting::Setting) = isnothing(setting.value) ? nothing : setting.value
 move_cap_override(setting::Setting) = isnothing(setting.value) ? nothing : setting.value
 partie_length_repeats_override(setting::Setting) = setting.value === AUTO ? nothing : setting.value
+device_override(setting::Setting{Symbol}) = setting.value
 
 function positional_usage(command::Symbol)
   command == :train && return "[profile] [dir]"
   command == :smoke && return "[dir]"
+  command == :explore && return "[dir]"
   return ""
 end
 
@@ -318,8 +334,10 @@ Usage:
   julia --project $relpath [options] $pos
 
 Options:
+  --device <cpu|cuda|metal|auto>
+      Select the execution backend. Default: cpu.
   --gpu
-      Request GPU training.
+      Compatibility alias for --device=auto.
   --reset-memory
       Reset only the replay buffer before resuming an existing session.
   --cpu-policy <headroom|max|conservative|off>
@@ -370,7 +388,7 @@ function prepare_startup(
   config = StartupConfig(
     command = parsed.command,
     positional = parsed.positional,
-    use_gpu = parsed.use_gpu,
+    device = parsed.device,
     reset_memory = parsed.reset_memory,
     show_help = parsed.show_help,
     cpu_policy = parsed.cpu_policy,
@@ -421,6 +439,7 @@ function print_startup_summary(
   println(io, "CPU configuration")
   println(io, "  Visible CPUs: ", Sys.CPU_THREADS)
   println(io, "  Julia threads: ", Threads.nthreads())
+  println(io, "  Device: ", config.device.value)
   if config.cpu_policy.value == :off
     println(io, "  CPU policy: off (honoring existing Julia launch)")
   else

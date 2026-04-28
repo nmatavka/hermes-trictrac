@@ -390,6 +390,54 @@ function colorSubjectLabel(color) {
   return tx(`colorSubject.${color || "unknown"}`, colorLabel(color));
 }
 
+function boardSpaceLabel(space) {
+  if (space === "bar") {
+    return t("game.bar");
+  }
+
+  if (space === "home") {
+    return t("game.bearOff");
+  }
+
+  return typeof space === "number" ? String(space + 1) : String(space ?? "");
+}
+
+function lastMoveText(game) {
+  const moves = Array.isArray(game?.last_moves) && game.last_moves.length > 0
+    ? game.last_moves
+    : game?.last_move
+      ? [game.last_move]
+      : [];
+
+  if (moves.length === 0) {
+    return null;
+  }
+
+  const segments = moves.map((move) =>
+    t("game.moveSegment", {
+      from: boardSpaceLabel(move.from),
+      to: boardSpaceLabel(move.to)
+    })
+  );
+  const movesText = formatLocalizedList(segments);
+  const player = playerNameForColor(game, moves[moves.length - 1]?.color);
+
+  return t("game.lastMoves", {
+    player,
+    moves: movesText
+  });
+}
+
+function formatLocalizedList(items) {
+  if (items.length <= 1) {
+    return items[0] || "";
+  }
+
+  const last = items[items.length - 1];
+  const leading = items.slice(0, -1).join(", ");
+  return t("game.listJoin", { items: leading, last });
+}
+
 function trictracBotDisplayName(game) {
   return game?.bot?.enabled && game?.bot?.kind === TRICTRAC_BOT_KIND
     ? TRICTRAC_BOT_DISPLAY_NAME
@@ -1616,6 +1664,7 @@ function LanguageSelect({ language, onChange }) {
 function StatusCard({ game, playerColor, playerName }) {
   const summaryItems = trictracStatusLineItems(game);
   const winnerLabel = colorSubjectLabel(game.match?.winner);
+  const lastMove = lastMoveText(game);
   const activeLegTitle = game?.variant?.id === "tavli" ? effectiveVariantTitle(game) : null;
   const pendingDecisionActorColor = game.pending_turn_decision?.actorColor || game.turn?.color;
   const pendingDecisionActorName = playerNameForColor(game, pendingDecisionActorColor);
@@ -1648,6 +1697,7 @@ function StatusCard({ game, playerColor, playerName }) {
       <h2>{playerName}</h2>
       <p className="seat-tag">{t("game.youAre", { color: colorLabel(playerColor) })}</p>
       <p className="status-line">{whoseTurn}</p>
+      {lastMove ? <p className="muted-copy">{lastMove}</p> : null}
       {activeLegTitle ? <p className="muted-copy">{t("game.currentLeg", { leg: activeLegTitle })}</p> : null}
       <div className="score-row">
         {summaryItems.map((item) => (

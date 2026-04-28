@@ -30,7 +30,7 @@ function main(config::TricTracScriptCPU.StartupConfig)
   effective_partie_length_repeats = TricTracZero.resolve_partie_length_repeats(
     preset = preset,
     smoke = true,
-    use_gpu = config.use_gpu,
+    use_gpu = TricTracZero.is_gpu_backend(TricTracZero.resolve_device_backend(config.device.value)),
     partie_length_repeats = partie_length_repeats
   )
 
@@ -49,7 +49,7 @@ function main(config::TricTracScriptCPU.StartupConfig)
   return TricTracZero.run_smoke(
     dir = dir,
     preset = preset,
-    use_gpu = config.use_gpu,
+    device = config.device.value,
     reset_memory = config.reset_memory,
     num_iters = num_iters,
     self_play_workers = self_play_workers,

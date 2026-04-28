@@ -535,6 +535,7 @@ function Handlers.self_play_started(session::Session)
   ngames = session.env.params.self_play.sim.num_games
   Log.section(session.logger, 2, "Starting self-play")
   session.progress = Log.Progress(session.logger, ngames)
+  Log.render(session.progress)
 end
 
 function Handlers.game_played(session::Session)
@@ -571,6 +572,7 @@ function Handlers.checkpoint_started(session::Session)
   # In single player games, each game has to be played twice (with both networks)
   n = GI.two_players(session.env.gspec) ? num_games : 2 * num_games
   session.progress = Log.Progress(session.logger, n)
+  Log.render(session.progress)
 end
 
 function Handlers.checkpoint_game_played(session::Session)

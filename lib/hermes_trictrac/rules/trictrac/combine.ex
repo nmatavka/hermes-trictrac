@@ -68,9 +68,13 @@ defmodule HermesTrictrac.Rules.Trictrac.Combine do
         Enum.reduce([:white, :black], trictrac, fn piece_type, acc ->
           delta = Map.get(deltas, piece_type, 0)
 
-          update_in(acc, [:track_classique_honneurs, :current_partie, :trous, piece_type], fn trous ->
-            max(0, (trous || 0) + delta)
-          end)
+          update_in(
+            acc,
+            [:track_classique_honneurs, :current_partie, :trous, piece_type],
+            fn trous ->
+              max(0, (trous || 0) + delta)
+            end
+          )
         end)
       else
         trictrac
@@ -150,9 +154,14 @@ defmodule HermesTrictrac.Rules.Trictrac.Combine do
 
     suspension =
       case decision do
-        "suspend_classique" -> %SuspensionState{suspended_track: "classique", frozen_by: color, resume_pending: true}
-        "suspend_a_ecrire" -> %SuspensionState{suspended_track: "a_ecrire", frozen_by: color, resume_pending: true}
-        _ -> %SuspensionState{}
+        "suspend_classique" ->
+          %SuspensionState{suspended_track: "classique", frozen_by: color, resume_pending: true}
+
+        "suspend_a_ecrire" ->
+          %SuspensionState{suspended_track: "a_ecrire", frozen_by: color, resume_pending: true}
+
+        _ ->
+          %SuspensionState{}
       end
 
     %{trictrac | suspension_state: suspension}
@@ -298,7 +307,8 @@ defmodule HermesTrictrac.Rules.Trictrac.Combine do
     own_trous = get_in(current_partie, [:trous, color]) || 0
     opp_trous = get_in(current_partie, [:trous, opp]) || 0
 
-    (own_trous == 0 and opp_trous > 0) or get_in(current_partie, [:uninterrupted_by, color]) || false
+    ((own_trous == 0 and opp_trous > 0) or get_in(current_partie, [:uninterrupted_by, color])) ||
+      false
   end
 
   defp clear_suspension(trictrac) do
@@ -322,10 +332,18 @@ defmodule HermesTrictrac.Rules.Trictrac.Combine do
       honneurs: normalize_color_map(Map.get(track || %{}, :honneurs), 0),
       classes: normalize_classes(Map.get(track || %{}, :classes)),
       last_partie_result:
-        Map.get(track || %{}, :last_partie_result, Map.get(track || %{}, "last_partie_result", nil)),
+        Map.get(
+          track || %{},
+          :last_partie_result,
+          Map.get(track || %{}, "last_partie_result", nil)
+        ),
       current_partie:
         normalize_current_partie(
-          Map.get(track || %{}, :current_partie, Map.get(track || %{}, "current_partie", current_partie))
+          Map.get(
+            track || %{},
+            :current_partie,
+            Map.get(track || %{}, "current_partie", current_partie)
+          )
         )
     }
   end
@@ -334,9 +352,11 @@ defmodule HermesTrictrac.Rules.Trictrac.Combine do
 
   defp normalize_suspension_state(state, _default_state) do
     %SuspensionState{
-      suspended_track: Map.get(state || %{}, :suspended_track, Map.get(state || %{}, "suspended_track")),
+      suspended_track:
+        Map.get(state || %{}, :suspended_track, Map.get(state || %{}, "suspended_track")),
       frozen_by: Map.get(state || %{}, :frozen_by, Map.get(state || %{}, "frozen_by")),
-      resume_pending: Map.get(state || %{}, :resume_pending, Map.get(state || %{}, "resume_pending", false))
+      resume_pending:
+        Map.get(state || %{}, :resume_pending, Map.get(state || %{}, "resume_pending", false))
     }
   end
 
@@ -349,8 +369,10 @@ defmodule HermesTrictrac.Rules.Trictrac.Combine do
 
   defp normalize_classes(classes) do
     %{
-      white: normalize_class_counts(Map.get(classes || %{}, :white, Map.get(classes || %{}, "white"))),
-      black: normalize_class_counts(Map.get(classes || %{}, :black, Map.get(classes || %{}, "black")))
+      white:
+        normalize_class_counts(Map.get(classes || %{}, :white, Map.get(classes || %{}, "white"))),
+      black:
+        normalize_class_counts(Map.get(classes || %{}, :black, Map.get(classes || %{}, "black")))
     }
   end
 

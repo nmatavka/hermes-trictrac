@@ -1553,6 +1553,34 @@ defmodule HermesTrictrac.EngineTest do
     assert Enum.at(snapshot["board"]["points"], 17)["pieces"] == ["white", "white"]
   end
 
+  test "classique does not ask the same player for reprise twice in one turn" do
+    engine = prepare_classique_reprise_engine("tt-classique-single-reprise")
+
+    assert {:ok, engine} = Engine.confirm(engine, "nick", "tab-a")
+    pending = Engine.snapshot(engine)["pending_turn_decision"]
+
+    assert {:ok, engine} = Engine.submit_turn_decision(engine, "tenir", "nick", "tab-a")
+
+    # Simulate a stale queue rebuild from later scoring/state refresh in the same turn.
+    stale_trictrac =
+      HermesTrictrac.Rules.Trictrac.Classique.set_turn_event_queue(engine.trictrac, [
+        pending
+      ])
+
+    stale_engine = %{
+      engine
+      | trictrac: stale_trictrac,
+        runtime:
+          engine.runtime
+          |> Map.put(:trictrac, stale_trictrac)
+          |> Map.put(:turn_number, 1),
+        turn_number: 1
+    }
+
+    assert {:error, "Turn decision already resolved."} =
+             Engine.submit_turn_decision(stale_engine, "tenir", "nick", "tab-a")
+  end
+
   test "classique s'en aller resets the board and keeps the same player on reprise" do
     engine = prepare_classique_reprise_engine("tt-classique-reprise")
 
@@ -1817,6 +1845,192 @@ defmodule HermesTrictrac.EngineTest do
              event["label"] == "remplissage grand jan" and
                event["metadata"]["ways"] == 3 and
                event["metadata"]["resolution"] == "earned_now"
+           end)
+  end
+
+  test "trictrac caps doublet remplissage at two ways" do
+    engine = Engine.new("tt-remplissage-doublet-cap", "trictrac_classique")
+    assert {:ok, engine, _} = Engine.join(engine, "nick", "tab-a")
+    assert {:ok, engine, _} = Engine.join(engine, "jane", "tab-b")
+
+    start_points =
+      Enum.map(0..23, fn index ->
+        cond do
+          index in 12..16 -> %{white: 2, black: 0}
+          index == 17 -> %{white: 1, black: 0}
+          index in 18..20 -> %{white: 1, black: 0}
+          true -> %{white: 0, black: 0}
+        end
+      end)
+
+    end_points =
+      Enum.map(0..23, fn index ->
+        cond do
+          index in 12..17 -> %{white: 2, black: 0}
+          index in 19..20 -> %{white: 1, black: 0}
+          true -> %{white: 0, black: 0}
+        end
+      end)
+
+    start_board = %{engine.board | points: start_points}
+    end_board = %{engine.board | points: end_points}
+    dice = %{values: [1, 1, 1, 1], moves: [1, 1, 1, 1], moves_left: [], moves_played: [1]}
+
+    trictrac =
+      HermesTrictrac.Rules.Trictrac.Classique.begin_turn(
+        engine.trictrac,
+        start_board,
+        engine.variant,
+        :white,
+        dice
+      )
+
+    runtime =
+      engine.runtime
+      |> Map.put(:trictrac, trictrac)
+      |> Map.put(:board, end_board)
+      |> Map.put(:dice, dice)
+
+    engine = %{
+      engine
+      | runtime: runtime,
+        trictrac: trictrac,
+        board: end_board,
+        turn_color: :white,
+        dice: dice
+    }
+
+    assert {:ok, engine} = Engine.confirm(engine, "nick", "tab-a")
+    snapshot = Engine.snapshot(engine)
+
+    assert Enum.any?(get_in(snapshot, ["trictrac", "score_history"]), fn event ->
+             event["label"] == "remplissage grand jan" and
+               event["metadata"]["ways"] == 2 and
+               event["points"] == 12
+           end)
+  end
+
+  test "trictrac counts numeric remplissage ways rather than duplicate checker branches" do
+    engine = Engine.new("tt-remplissage-no-branch-inflation", "trictrac_classique")
+    assert {:ok, engine, _} = Engine.join(engine, "nick", "tab-a")
+    assert {:ok, engine, _} = Engine.join(engine, "jane", "tab-b")
+
+    start_points =
+      Enum.map(0..23, fn index ->
+        cond do
+          index in 12..16 -> %{white: 2, black: 0}
+          index == 17 -> %{white: 1, black: 0}
+          index == 18 -> %{white: 2, black: 0}
+          true -> %{white: 0, black: 0}
+        end
+      end)
+
+    end_points =
+      Enum.map(0..23, fn index ->
+        cond do
+          index in 12..18 -> %{white: 2, black: 0}
+          true -> %{white: 0, black: 0}
+        end
+      end)
+
+    start_board = %{engine.board | points: start_points}
+    end_board = %{engine.board | points: end_points}
+    dice = %{values: [1, 2], moves: [1, 2], moves_left: [], moves_played: [1]}
+
+    trictrac =
+      HermesTrictrac.Rules.Trictrac.Classique.begin_turn(
+        engine.trictrac,
+        start_board,
+        engine.variant,
+        :white,
+        dice
+      )
+
+    runtime =
+      engine.runtime
+      |> Map.put(:trictrac, trictrac)
+      |> Map.put(:board, end_board)
+      |> Map.put(:dice, dice)
+
+    engine = %{
+      engine
+      | runtime: runtime,
+        trictrac: trictrac,
+        board: end_board,
+        turn_color: :white,
+        dice: dice
+    }
+
+    assert {:ok, engine} = Engine.confirm(engine, "nick", "tab-a")
+    snapshot = Engine.snapshot(engine)
+
+    assert Enum.any?(get_in(snapshot, ["trictrac", "score_history"]), fn event ->
+             event["label"] == "remplissage grand jan" and
+               event["metadata"]["ways"] == 1 and
+               event["points"] == 4
+           end)
+  end
+
+  test "trictrac counts remplissage ways from every available checker" do
+    engine = Engine.new("tt-remplissage-all-checkers", "trictrac_classique")
+    assert {:ok, engine, _} = Engine.join(engine, "nick", "tab-a")
+    assert {:ok, engine, _} = Engine.join(engine, "jane", "tab-b")
+
+    start_points =
+      Enum.map(0..23, fn index ->
+        cond do
+          index in 12..16 -> %{white: 2, black: 0}
+          index == 17 -> %{white: 1, black: 0}
+          index == 21 -> %{white: 1, black: 0}
+          index == 23 -> %{white: 1, black: 0}
+          true -> %{white: 0, black: 0}
+        end
+      end)
+
+    end_points =
+      Enum.map(0..23, fn index ->
+        cond do
+          index in 12..17 -> %{white: 2, black: 0}
+          index == 23 -> %{white: 1, black: 0}
+          true -> %{white: 0, black: 0}
+        end
+      end)
+
+    start_board = %{engine.board | points: start_points}
+    end_board = %{engine.board | points: end_points}
+    dice = %{values: [6, 4], moves: [6, 4], moves_left: [], moves_played: [4]}
+
+    trictrac =
+      HermesTrictrac.Rules.Trictrac.Classique.begin_turn(
+        engine.trictrac,
+        start_board,
+        engine.variant,
+        :white,
+        dice
+      )
+
+    runtime =
+      engine.runtime
+      |> Map.put(:trictrac, trictrac)
+      |> Map.put(:board, end_board)
+      |> Map.put(:dice, dice)
+
+    engine = %{
+      engine
+      | runtime: runtime,
+        trictrac: trictrac,
+        board: end_board,
+        turn_color: :white,
+        dice: dice
+    }
+
+    assert {:ok, engine} = Engine.confirm(engine, "nick", "tab-a")
+    snapshot = Engine.snapshot(engine)
+
+    assert Enum.any?(get_in(snapshot, ["trictrac", "score_history"]), fn event ->
+             event["label"] == "remplissage grand jan" and
+               event["metadata"]["ways"] == 2 and
+               event["points"] == 8
            end)
   end
 
@@ -2820,6 +3034,36 @@ defmodule HermesTrictrac.EngineTest do
     board = %{engine.board | points: points}
     runtime = %{engine.runtime | board: board}
     dice = %{values: [7, 6], moves: [7, 6], moves_left: [6], moves_played: [7]}
+
+    legal =
+      HermesTrictrac.Rules.RaceCore.legal_moves(
+        Map.put(runtime, :dice, dice),
+        engine.variant,
+        :white
+      )
+
+    assert Enum.any?(legal, &(&1.from == 18 and &1.to == 12 and &1.die == 6))
+    refute Enum.any?(legal, &(&1.from == 16 and &1.to == 10 and &1.die == 6))
+  end
+
+  test "trictrac coin rest follow-up honors moves_played when moves is absent" do
+    engine = Engine.new("tt-coin-follow-moves-played", "trictrac_classique")
+    assert {:ok, engine, _} = Engine.join(engine, "nick", "tab-a")
+    assert {:ok, engine, _} = Engine.join(engine, "jane", "tab-b")
+
+    points =
+      Enum.map(0..23, fn index ->
+        cond do
+          index == 12 -> %{white: 1, black: 0}
+          index == 18 -> %{white: 1, black: 0}
+          index == 16 -> %{white: 1, black: 0}
+          true -> %{white: 0, black: 0}
+        end
+      end)
+
+    board = %{engine.board | points: points}
+    runtime = %{engine.runtime | board: board}
+    dice = %{values: [7, 6], moves_left: [6], moves_played: [7]}
 
     legal =
       HermesTrictrac.Rules.RaceCore.legal_moves(
@@ -4460,8 +4704,55 @@ defmodule HermesTrictrac.EngineTest do
 
     assert length(moved.dice.moves_played) == 1
 
+    assert Engine.snapshot(moved)["last_move"] == %{
+             "color" => "white",
+             "dice_used" => Map.get(move, :dice_used),
+             "die" => move.die,
+             "from" => move.from,
+             "sequence" => Map.get(move, :sequence),
+             "to" => move.to,
+             "via" => Map.get(move, :via)
+           }
+
+    assert Engine.snapshot(moved)["last_moves"] == [Engine.snapshot(moved)["last_move"]]
+
     assert {:ok, undone} = Engine.undo(moved, "nick", "tab-a")
     assert undone.dice.moves_played == []
+  end
+
+  test "snapshot keeps a full turn move summary after multiple moves" do
+    Application.put_env(:hermes_trictrac, :dice_impl, SequenceDice)
+    Process.put({SequenceDice, :values}, [6, 1, 4, 2])
+
+    engine = Engine.new("move-summary", "backgammon")
+    assert {:ok, engine, _} = Engine.join(engine, "nick", "tab-a")
+    assert {:ok, engine, _} = Engine.join(engine, "jane", "tab-b")
+    assert {:ok, engine} = Engine.roll(engine, "nick", "tab-a")
+    assert {:ok, engine} = Engine.roll(engine, "jane", "tab-b")
+    assert {:ok, engine} = Engine.roll(engine, "nick", "tab-a")
+
+    first = hd(engine.legal_moves)
+
+    assert {:ok, engine} =
+             Engine.move(engine, %{"from" => first.from, "to" => first.to}, "nick", "tab-a")
+
+    second = hd(engine.legal_moves)
+
+    assert {:ok, engine} =
+             Engine.move(engine, %{"from" => second.from, "to" => second.to}, "nick", "tab-a")
+
+    snapshot = Engine.snapshot(engine)
+
+    assert [
+             %{"from" => first_from, "to" => first_to},
+             %{"from" => second_from, "to" => second_to}
+           ] = snapshot["last_moves"]
+
+    assert {first_from, first_to} == {first.from, first.to}
+    assert {second_from, second_to} == {second.from, second.to}
+
+    assert {:ok, engine} = Engine.confirm(engine, "nick", "tab-a")
+    assert length(Engine.snapshot(engine)["last_moves"]) == 2
   end
 
   test "tourne case requires options before play" do

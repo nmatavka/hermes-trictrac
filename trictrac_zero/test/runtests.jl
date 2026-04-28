@@ -366,6 +366,8 @@ end
   parsed = TricTracScriptCPU.parse_startup(
     :train,
     [
+      "--device",
+      "metal",
       "--cpu-threads=auto",
       "--self-play-workers",
       "auto",
@@ -386,7 +388,8 @@ end
     ];
     env
   )
-  @test parsed.use_gpu
+  @test parsed.device.value == :auto
+  @test parsed.device.source == :cli
   @test parsed.reset_memory
   @test parsed.positional == ["default", "/tmp/session"]
   @test parsed.cpu_policy.value == :max
@@ -423,6 +426,7 @@ end
   @test TricTracScriptCPU.relaunch_status(off_cfg; visible_cpu_threads = 8, current_threads = 1, env = Dict{String, String}()) == :none
 
   help_text = TricTracScriptCPU.usage_text(:train, "/Users/nick/hermes_trictrac/trictrac_zero/scripts/train.jl")
+  @test occursin("--device", help_text)
   @test occursin("--cpu-policy", help_text)
   @test occursin("--cpu-threads", help_text)
   @test occursin("--self-play-workers", help_text)
@@ -440,7 +444,24 @@ end
   @test_throws ArgumentError TricTracScriptCPU.parse_startup(:train, ["--move-cap=-1"]; env = Dict{String, String}())
   @test_throws ArgumentError TricTracScriptCPU.parse_startup(:train, ["--target-gain=-1"]; env = Dict{String, String}())
   @test_throws ArgumentError TricTracScriptCPU.parse_startup(:train, ["--partie-length-repeats=0"]; env = Dict{String, String}())
+  @test_throws ArgumentError TricTracScriptCPU.parse_startup(:train, ["--device=bogus"]; env = Dict{String, String}())
   @test_throws ArgumentError TricTracScriptCPU.parse_startup(:train, ["--game=bogus"]; env = Dict{String, String}())
+end
+
+@testset "Device Resolution" begin
+  @test TricTracZero.resolve_device_backend(:cpu) == :cpu
+  @test TricTracZero.resolve_device_backend("cuda") == :cuda
+  @test TricTracZero.device_available(:cpu)
+  @test TricTracZero.network_type_for_device(:cpu) == TricTracSparseNet
+  @test_throws ErrorException TricTracZero.resolve_device_backend("bogus")
+
+  if TricTracZero.device_available(:metal)
+    probe = TricTracZero.probe_sparse_conv_on_metal()
+    expected = probe.supported ? TricTracSparseNet : TricTracMetalSparseNet
+    @test TricTracZero.network_type_for_device(:metal) == expected
+    expected_hyper = probe.supported ? TricTracSparseNetHP : TricTracMetalSparseNetHP
+    @test TricTracZero.default_experiment(device = :metal).netparams isa expected_hyper
+  end
 end
 
 @testset "AEcrire Partie-Length Scheduling" begin
@@ -562,6 +583,37 @@ end
   end
 
   @test !TricTracZero.reset_session_memory!("/tmp/definitely-not-a-valid-trictrac-session")
+end
+
+@testset "Metal Sparse Net Evaluation" begin
+  spec = TricTracGameSpec()
+  game = GI.init(spec)
+  state = GI.current_state(game)
+  nn = TricTracMetalSparseNet(spec, TricTracZero.metal_netparams())
+
+  policy, value = AlphaZero.Network.evaluate(nn, state)
+  @test length(policy) == length(GI.available_actions(game))
+  @test value isa Float64
+
+  batch = AlphaZero.Network.evaluate_batch(nn, [state, state])
+  @test length(batch) == 2
+  @test all(length(entry[1]) == length(GI.available_actions(game)) for entry in batch)
+
+  if TricTracZero.device_available(:metal)
+    previous_backend = TricTracZero.active_device_backend()
+    try
+      TricTracZero.set_runtime_device!(:metal)
+      nn_metal = AlphaZero.Network.to_gpu(TricTracMetalSparseNet(spec, TricTracZero.metal_netparams()))
+      sparse = TricTracZero.sparse_policy_batch(spec, [state, state])
+      Xnet, Fnet, Mnet = AlphaZero.Network.convert_input_tuple(nn_metal, (sparse.X, sparse.F, sparse.M))
+      P, V, _ = TricTracZero.sparse_policy_forward(nn_metal, Xnet, Fnet, Mnet)
+      Pcpu, Vcpu = AlphaZero.Network.convert_output_tuple(nn_metal, (P, V))
+      @test size(Pcpu, 2) == 2
+      @test size(Vcpu) == (1, 2)
+    finally
+      TricTracZero.set_runtime_device!(previous_backend)
+    end
+  end
 end
 
 @testset "AEcrire And Combine Rewards" begin
@@ -765,11 +817,11 @@ end
   @test TricTracZero.source_session_dir_for_preset("classique") === nothing
   @test TricTracZero.source_session_dir_for_preset("aecrire") === nothing
   @test occursin(
-    "trictrac-aecrire-$(TricTracZero.SESSION_LAYOUT_VERSION)",
+    "trictrac-aecrire-$(TricTracZero.session_layout_version(TricTracZero.conv_netparams()))",
     TricTracZero.source_session_dir_for_preset("combine")
   )
   @test occursin(
-    "trictrac-classique-$(TricTracZero.SESSION_LAYOUT_VERSION)",
+    "trictrac-classique-$(TricTracZero.session_layout_version(TricTracZero.conv_netparams()))",
     TricTracZero.source_session_dir_for_preset("toc")
   )
 end
@@ -814,7 +866,7 @@ end
       variant_id = "toc",
       match_options = Dict("holeTarget" => "7", "doublesMode" => "off", "margotEnabled" => true)
     )
-    warmed = TricTracZero.warmstart_network(target_spec, hyper, dir)
+    warmed = TricTracZero.warmstart_network(TricTracSparseNet, target_spec, hyper, dir)
     @test warmed.gspec.variant_id == "toc"
     @test warmed.gspec.match_options["margotEnabled"] == true
     @test AlphaZero.Network.hyperparams(warmed) == hyper
@@ -837,7 +889,7 @@ end
       "trictrac-classique",
       spec,
       updated_params,
-      TricTracZero.NETWORK,
+      TricTracSparseNet,
       TricTracZero.netparams(),
       TricTracZero.BENCHMARKS
     )

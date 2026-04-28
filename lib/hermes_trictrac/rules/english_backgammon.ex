@@ -29,7 +29,15 @@ defmodule HermesTrictrac.Rules.EnglishBackgammon do
     end
   end
 
-  def landing_allowed(_board, color, source, source_count, destination, pieces_at_fun, move_count_fun) do
+  def landing_allowed(
+        _board,
+        color,
+        source,
+        source_count,
+        destination,
+        pieces_at_fun,
+        move_count_fun
+      ) do
     opp_count = pieces_at_fun.(destination, opposite(color))
 
     cond do
@@ -48,7 +56,8 @@ defmodule HermesTrictrac.Rules.EnglishBackgammon do
     end
   end
 
-  defp filter_forced_usage(moves, _board, _variant, _color, _moves_left, _apply_fun) when moves == [], do: []
+  defp filter_forced_usage(moves, _board, _variant, _color, _moves_left, _apply_fun)
+       when moves == [], do: []
 
   defp filter_forced_usage(moves, board, variant, color, moves_left, apply_fun) do
     branches = enumerate_branches(board, variant, color, moves_left, apply_fun)
@@ -77,7 +86,8 @@ defmodule HermesTrictrac.Rules.EnglishBackgammon do
   end
 
   defp enumerate_branches(board, variant, color, moves_left, apply_fun, played \\ 0) do
-    moves = HermesTrictrac.Rules.RaceCore.raw_generic_legal_moves(board, variant, color, moves_left)
+    moves =
+      HermesTrictrac.Rules.RaceCore.raw_generic_legal_moves(board, variant, color, moves_left)
 
     cond do
       moves_left == [] ->

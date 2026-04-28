@@ -23,7 +23,10 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Validation do
       |> Enum.filter(fn table ->
         !Moves.all_paired?(start_board, color, table.from, table.to) and
           Moves.all_paired?(end_board, color, table.from, table.to) and
-          Enum.any?(branches_info.branches, &Moves.all_paired?(&1, color, table.from, table.to))
+          Enum.any?(
+            branches(branches_info),
+            &Moves.all_paired?(&1, color, table.from, table.to)
+          )
       end)
       |> Enum.map(& &1.key)
 
@@ -46,7 +49,7 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Validation do
 
     must_fill_ok? =
       Enum.all?(obligations.must_fill || [], fn key ->
-        case Enum.find(Constants.jan_tables(), &(&1.key == key)) do
+        case Constants.jan_table(key) do
           nil -> true
           table -> Moves.all_paired?(board, color, table.from, table.to)
         end
@@ -54,14 +57,14 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Validation do
 
     must_conserve_ok? =
       Enum.all?(obligations.must_conserve || [], fn requirement ->
-        case Enum.find(Constants.jan_tables(), &(&1.key == requirement.key)) do
+        case Constants.jan_table(requirement.key) do
           nil ->
             true
 
           table ->
             Moves.all_paired?(board, color, table.from, table.to) or
               (requirement.allow_sortie and
-                 (board.outside[color] || 0) > (requirement.outside_before || 0))
+                 State.outside_count(board, color) > (requirement.outside_before || 0))
         end
       end)
 
@@ -96,15 +99,16 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Validation do
   end
 
   def can_remain_plein_after_turn(board, color, table, branches_info) do
-    outside_before = board.outside[color] || 0
+    outside_before = State.outside_count(board, color)
+    branches = branches(branches_info)
 
     can_conserve =
-      Enum.any?(branches_info.branches, &Moves.all_paired?(&1, color, table.from, table.to))
+      Enum.any?(branches, &Moves.all_paired?(&1, color, table.from, table.to))
 
     can_privilege_conserve =
       table.key == :retour and
-        Enum.any?(branches_info.branches, fn branch ->
-          (branch.outside[color] || 0) > outside_before
+        Enum.any?(branches, fn branch ->
+          State.outside_count(branch, color) > outside_before
         end)
 
     %{
@@ -118,4 +122,7 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Validation do
     do: Enum.filter(Constants.jan_tables(), &(&1.key == :grand))
 
   defp scoring_tables_for_variant(_variant), do: Constants.jan_tables()
+
+  defp branches(%{branches: branches}) when is_list(branches), do: branches
+  defp branches(_branches_info), do: []
 end

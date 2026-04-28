@@ -73,7 +73,7 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Moves do
   end
 
   def table_full?(board, color, key) do
-    case Enum.find(Constants.jan_tables(), &(&1.key == State.normalize_table_key(key))) do
+    case Constants.jan_table(State.normalize_table_key(key)) do
       nil -> false
       table -> all_paired?(board, color, table.from, table.to)
     end
@@ -262,7 +262,6 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Moves do
 
   defp maybe_sortie_moves(board, _variant, color, point, die, dice_used) do
     source_norm = State.norm_pos(point, color)
-    source_count = pieces_at(board, point, color)
 
     cond do
       not can_sortie?(board, color) ->
@@ -275,7 +274,7 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Moves do
             to: "home",
             die: Enum.sum(dice_used),
             dice_used: dice_used,
-            count: sortie_count(point, color, source_count),
+            count: 1,
             coin_mode: :sortie_exact
           }
         ]
@@ -287,7 +286,7 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Moves do
             to: "home",
             die: Enum.sum(dice_used),
             dice_used: dice_used,
-            count: sortie_count(point, color, source_count),
+            count: 1,
             coin_mode: :sortie_excedant
           }
         ]
@@ -302,7 +301,6 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Moves do
   defp maybe_sortie_sum_move(board, _variant, color, point, first, second) do
     source_norm = State.norm_pos(point, color)
     sum = first + second
-    source_count = pieces_at(board, point, color)
 
     cond do
       can_sortie?(board, color) and source_norm + 1 == sum and first < source_norm + 1 and
@@ -314,7 +312,7 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Moves do
             die: sum,
             dice_used: [first, second],
             sequence: [first, second],
-            count: sortie_count(point, color, source_count),
+            count: 1,
             coin_mode: :point_sortant,
             via: "edge"
           }
@@ -355,9 +353,6 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Moves do
     5..0//-1
     |> Enum.find(fn norm -> pieces_at(board, State.denorm_pos(norm, color), color) > 0 end)
   end
-
-  defp sortie_count(_point, _color, source_count) when source_count <= 1, do: 1
-  defp sortie_count(_point, _color, _source_count), do: 1
 
   defp resolve_coin_destination(board, %{id: "plein"}, color, destination) do
     if destination == State.own_coin(color) do
@@ -433,9 +428,10 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Moves do
   defp filter_coin_rest_immediate_follow(moves, _runtime, %{id: "plein"}, _color), do: moves
 
   defp filter_coin_rest_immediate_follow(moves, runtime, variant, color) do
-    dice = runtime.dice || %{moves: [], moves_left: []}
-    moves_played = dice.moves || []
-    moves_left = dice.moves_left || []
+    dice = runtime.dice || %{}
+    moves_played = Map.get(dice, :moves_played, Map.get(dice, :moves, []))
+    moves_left = Map.get(dice, :moves_left, [])
+    total_moves = Map.get(dice, :moves, moves_played ++ moves_left)
     restricted_points = restricted_rest_points(runtime.board, variant, color)
     current_singles = restricted_rest_singles(runtime.board, variant, color)
 
@@ -446,7 +442,7 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Moves do
       moves_left == [] ->
         moves
 
-      length(moves_left) >= length(moves_played) ->
+      moves_played == [] and length(moves_left) >= length(total_moves) ->
         moves
 
       current_singles == [] ->
@@ -463,7 +459,7 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Moves do
   defp filter_coin_rest_setup_follow(moves, _runtime, %{id: "plein"}, _color), do: moves
 
   defp filter_coin_rest_setup_follow(moves, runtime, variant, color) do
-    dice = runtime.dice || %{moves_left: [], moves_played: []}
+    dice = runtime.dice || %{}
     current_singles = restricted_rest_singles(runtime.board, variant, color)
 
     cond do
@@ -483,7 +479,7 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Moves do
           else
             remaining =
               State.remove_all_used(
-                dice.moves_left || [],
+                Map.get(dice, :moves_left, []),
                 Map.get(move, :dice_used, [move.die])
               )
 
@@ -493,13 +489,14 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Moves do
               next_runtime = %{
                 runtime
                 | board: next_board,
-                  dice: %{
+                  dice:
                     dice
-                    | moves_left: remaining,
-                      moves_played:
-                        (dice.moves_played || []) ++
-                          Map.get(move, :dice_used, [move.die])
-                  }
+                    |> Map.put(:moves_left, remaining)
+                    |> Map.put(
+                      :moves_played,
+                      Map.get(dice, :moves_played, Map.get(dice, :moves, [])) ++
+                        Map.get(move, :dice_used, [move.die])
+                    )
               }
 
               next_board

@@ -43,6 +43,8 @@ defmodule HermesTrictrac.Rules.Snapshot do
         end,
       "dice" => serialize_dice(engine.dice),
       "legal_moves" => Enum.map(engine.legal_moves, &serialize_move/1),
+      "last_move" => serialize_last_move(Map.get(engine.runtime, :last_move)),
+      "last_moves" => serialize_last_moves(engine.runtime),
       "pending_match_options" => engine.pending_match_options,
       "pending_turn_decision" => pending_turn_decision,
       "opening_roll" => serialize_opening_roll(engine),
@@ -172,6 +174,33 @@ defmodule HermesTrictrac.Rules.Snapshot do
       "via" => Map.get(move, :via),
       "sequence" => Map.get(move, :sequence)
     }
+  end
+
+  defp serialize_last_move(nil), do: nil
+
+  defp serialize_last_move(move) when is_map(move) do
+    %{
+      "color" => Map.get(move, :color) || Map.get(move, "color"),
+      "from" => Map.get(move, :from) || Map.get(move, "from"),
+      "to" => Map.get(move, :to) || Map.get(move, "to"),
+      "die" => Map.get(move, :die) || Map.get(move, "die"),
+      "dice_used" => Map.get(move, :dice_used) || Map.get(move, "dice_used"),
+      "sequence" => Map.get(move, :sequence) || Map.get(move, "sequence"),
+      "via" => Map.get(move, :via) || Map.get(move, "via")
+    }
+  end
+
+  defp serialize_last_moves(runtime) do
+    moves =
+      case Map.get(runtime, :turn_moves) do
+        moves when is_list(moves) and moves != [] -> moves
+        _ -> Map.get(runtime, :last_turn_moves)
+      end
+
+    case moves do
+      moves when is_list(moves) and moves != [] -> Enum.map(moves, &serialize_last_move/1)
+      _ -> []
+    end
   end
 
   defp stringify_keys(map) do

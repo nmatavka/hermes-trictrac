@@ -3,6 +3,7 @@ module TricTracZero
 using AlphaZero
 import AlphaZero.GI
 using JSON3
+using Serialization
 
 const PACKAGE_ROOT = normpath(joinpath(@__DIR__, ".."))
 const REPO_ROOT = normpath(joinpath(PACKAGE_ROOT, ".."))
@@ -13,6 +14,7 @@ include("actions.jl")
 include("state.jl")
 include("bridge.jl")
 include("env.jl")
+include("device.jl")
 include("network.jl")
 include("experiment.jl")
 
@@ -22,15 +24,20 @@ export TricTracGameSpec
 export TricTracGameEnv
 export TricTracSparseNet
 export TricTracSparseNetHP
+export TricTracMetalSparseNet
+export TricTracMetalSparseNetHP
 export action_catalog
 export available_presets
+export device_available
 export default_experiment
 export smoke_experiment
 export gpu_available
 export register_experiments!
+export resolve_device_backend
 export run_train
 export run_smoke
 export run_explore
+export set_runtime_device!
 
 register_experiments!()
 

@@ -95,33 +95,29 @@ defmodule HermesTrictrac.GameServer do
   def handle_call({:join, user, client_id, requested_variant, opts}, _from, state) do
     with :ok <- ensure_variant_match(state.engine, requested_variant, state.name),
          {:ok, requested_bot} <- normalize_requested_bot(opts, state.engine.variant.id) do
-      case normalize_engine_join(Engine.join(state.engine, user, client_id)) do
-        {:ok, engine, player} ->
-          with {:ok, cleared} <- maybe_clear_seat_reclaim(state, player),
-               {:ok, updated} <-
-                 maybe_configure_bot(%{cleared | engine: engine}, player, requested_bot),
-               {:ok, updated} <-
-                 maybe_prepare_bot_game(updated, user, client_id, requested_bot) do
-            persist(updated)
-            {:reply, {:ok, %{game: snapshot(updated), player: player}}, updated}
-          else
-            {:error, msg} ->
-              {:reply, {:error, error_payload(msg)}, state}
-          end
-
-        {:error, "Lobby is full."} ->
-          case maybe_start_seat_reclaim(state, user, client_id) do
-            {:ok, updated, error} ->
+      if reclaimable_seat(state.engine, user, client_id, state.bot) do
+        reply_with_seat_reclaim(state, user, client_id)
+      else
+        case normalize_engine_join(Engine.join(state.engine, user, client_id)) do
+          {:ok, engine, player} ->
+            with {:ok, cleared} <- maybe_clear_seat_reclaim(state, player),
+                 {:ok, updated} <-
+                   maybe_configure_bot(%{cleared | engine: engine}, player, requested_bot),
+                 {:ok, updated} <-
+                   maybe_prepare_bot_game(updated, user, client_id, requested_bot) do
               persist(updated)
-              broadcast_snapshot(updated)
-              {:reply, {:error, error}, updated}
+              {:reply, {:ok, %{game: snapshot(updated), player: player}}, updated}
+            else
+              {:error, msg} ->
+                {:reply, {:error, error_payload(msg)}, state}
+            end
 
-            {:error, error, updated} ->
-              {:reply, {:error, error}, updated}
-          end
+          {:error, "Lobby is full."} ->
+            reply_with_seat_reclaim(state, user, client_id)
 
-        {:error, msg} ->
-          {:reply, {:error, error_payload(msg)}, state}
+          {:error, msg} ->
+            {:reply, {:error, error_payload(msg)}, state}
+        end
       end
     else
       {:error, msg} ->
@@ -246,6 +242,18 @@ defmodule HermesTrictrac.GameServer do
 
   defp error_payload(msg) when is_binary(msg), do: %{msg: msg}
   defp error_payload(payload) when is_map(payload), do: payload
+
+  defp reply_with_seat_reclaim(state, user, client_id) do
+    case maybe_start_seat_reclaim(state, user, client_id) do
+      {:ok, updated, error} ->
+        persist(updated)
+        broadcast_snapshot(updated)
+        {:reply, {:error, error}, updated}
+
+      {:error, error, updated} ->
+        {:reply, {:error, error}, updated}
+    end
+  end
 
   defp normalize_requested_bot(opts, variant_id) when is_map(opts) do
     case Map.get(opts, "bot", Map.get(opts, :bot)) do
@@ -513,7 +521,7 @@ defmodule HermesTrictrac.GameServer do
         {:ok, updated}
 
       {:error, msg, updated} ->
-        Logger.error("Frontend bot stalled: #{msg}")
+        Logger.warning("Bot follow-up failed in lobby #{inspect(state.name)}: #{inspect(msg)}")
 
         if strict do
           {:error, msg}

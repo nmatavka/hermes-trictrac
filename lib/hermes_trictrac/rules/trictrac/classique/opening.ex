@@ -5,7 +5,7 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Opening do
   def remember_first_throw(opening, color, dice) do
     cond do
       opening.first_type == nil ->
-        %{opening | first_type: color, first_values: dice.values || []}
+        %{opening | first_type: color, first_values: State.normalized_throw(dice)}
 
       true ->
         opening
@@ -24,8 +24,8 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Opening do
       else
         jan_points = VariantRules.jan_rencontre_points(variant, State.double?(dice))
 
-        if opening.first_values == (dice.values || []) and jan_points > 0 do
-          events ++ [Scoring.event(color, "jan de rencontre", jan_points)]
+        if opening.first_values == State.normalized_throw(dice) and jan_points > 0 do
+          events ++ [Scoring.event(color, :jan_rencontre, jan_points)]
         else
           events
         end
@@ -36,7 +36,7 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Opening do
 
   def detect_coin_jans(
         events,
-        start_board,
+        _start_board,
         end_board,
         color,
         dice,
@@ -44,20 +44,19 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Opening do
         depart_done,
         variant \\ %{id: "trictrac_classique"}
       ) do
-    _start_board = start_board
     talon = if(color == :white, do: 23, else: 0)
     abattues = count_abattues(end_board, color, talon)
     own_coin_cnt = pieces_at(end_board, State.own_coin(color), color)
     opp_coin_cnt = pieces_at(end_board, State.opp_coin(color), State.opposite(color))
     jan_points = VariantRules.coin_jan_points(variant, State.double?(dice))
-    low_die = dice.values |> List.last()
+    low_die = State.dice_values(dice) |> Enum.min(fn -> nil end)
 
     {events, depart_done} =
       if !depart_done.meseas and abattues == 2 and own_coin_cnt >= 2 and low_die == 1 and
            jan_points > 0 do
-        label = if opp_coin_cnt <= 0, do: "jan de meseas", else: "contre-jan de meseas"
+        rule = if opp_coin_cnt <= 0, do: :jan_de_meseas, else: :contre_jan_de_meseas
         beneficiary = if opp_coin_cnt <= 0, do: color, else: State.opposite(color)
-        {events ++ [Scoring.event(beneficiary, label, jan_points)], %{depart_done | meseas: true}}
+        {events ++ [Scoring.event(beneficiary, rule, jan_points)], %{depart_done | meseas: true}}
       else
         {events, depart_done}
       end
@@ -67,10 +66,12 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Opening do
     {events, depart_done} =
       if !depart_done.two_tables and abattues == 2 and length(off_points) == 2 and
            can_two_tables?(off_points, color, dice) and jan_points > 0 do
-        label = if opp_coin_cnt <= 0, do: "jan de deux tables", else: "contre-jan de deux tables"
+        rule =
+          if opp_coin_cnt <= 0, do: :jan_de_deux_tables, else: :contre_jan_de_deux_tables
+
         beneficiary = if opp_coin_cnt <= 0, do: color, else: State.opposite(color)
 
-        {events ++ [Scoring.event(beneficiary, label, jan_points)],
+        {events ++ [Scoring.event(beneficiary, rule, jan_points)],
          %{depart_done | two_tables: true}}
       else
         {events, depart_done}
@@ -81,7 +82,7 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Opening do
     {events, depart_done} =
       if !depart_done.six_tables and !State.double?(dice) and coup_index == 3 and
            all_occupied?(end_board, color, 18, 23) and six_tables_points > 0 do
-        {events ++ [Scoring.event(color, "jan de six tables", six_tables_points)],
+        {events ++ [Scoring.event(color, :jan_de_six_tables, six_tables_points)],
          %{depart_done | six_tables: true}}
       else
         {events, depart_done}
@@ -98,12 +99,15 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Opening do
   end
 
   defp can_two_tables?(off_points, color, dice) do
-    [a, b] = dice.values
-
-    (State.norm_pos(Enum.at(off_points, 0), color) - a == Constants.coin_norm_pos() and
-       State.norm_pos(Enum.at(off_points, 1), color) - b == 11) or
-      (State.norm_pos(Enum.at(off_points, 0), color) - b == Constants.coin_norm_pos() and
-         State.norm_pos(Enum.at(off_points, 1), color) - a == 11)
+    with {:ok, {a, b}} <- State.dice_pair(dice),
+         [p1, p2] <- off_points do
+      (State.norm_pos(p1, color) - a == Constants.coin_norm_pos() and
+         State.norm_pos(p2, color) - b == 11) or
+        (State.norm_pos(p1, color) - b == Constants.coin_norm_pos() and
+           State.norm_pos(p2, color) - a == 11)
+    else
+      _ -> false
+    end
   end
 
   defp off_talon_points(board, color, talon) do

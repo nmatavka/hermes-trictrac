@@ -100,7 +100,7 @@ function renderJoinStatus(root, message, detail = "") {
   root.replaceChildren(card);
 }
 
-function renderJoinError(root, { title, detail, hint }) {
+function renderJoinError(root, { title, detail, hint, retryable = true }) {
   const shell = document.createElement("div");
   shell.className = "join-error-shell";
 
@@ -142,17 +142,20 @@ function renderJoinError(root, { title, detail, hint }) {
   const actions = document.createElement("div");
   actions.className = "join-error-actions";
 
-  const retry = document.createElement("button");
-  retry.type = "button";
-  retry.textContent = t("join.tryAgain");
-  retry.addEventListener("click", () => window.location.reload());
-
   const lobbyLink = document.createElement("a");
   lobbyLink.className = "button-link";
   lobbyLink.href = "/";
   lobbyLink.textContent = t("join.backToLobby");
 
-  actions.replaceChildren(retry, lobbyLink);
+  if (retryable) {
+    const retry = document.createElement("button");
+    retry.type = "button";
+    retry.textContent = t("join.tryAgain");
+    retry.addEventListener("click", () => window.location.reload());
+    actions.appendChild(retry);
+  }
+
+  actions.appendChild(lobbyLink);
   card.replaceChildren(label, heading, detailCopy, hintCopy, actions);
   shell.replaceChildren(toastStack, card);
   root.replaceChildren(shell);
@@ -242,7 +245,8 @@ document.addEventListener("DOMContentLoaded", () => {
         renderJoinError(root, {
           title: t("join.unable"),
           detail: localizeError(resp, "errors.unknown") || t("join.rejected"),
-          hint: t("join.hint")
+          hint: t("join.hint"),
+          retryable: resp?.code !== "variant_mismatch"
         });
       },
       onJoinTimeout: () => {

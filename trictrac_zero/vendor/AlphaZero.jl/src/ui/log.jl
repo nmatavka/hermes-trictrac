@@ -100,6 +100,8 @@ function Progress(logger::Logger, nsteps)
   return ProgressMeter.Progress(nsteps, desc=desc, output=logger.console)
 end
 
+render(progress) = ProgressMeter.update!(progress, 0; force=true)
+
 #####
 ##### Tables
 #####

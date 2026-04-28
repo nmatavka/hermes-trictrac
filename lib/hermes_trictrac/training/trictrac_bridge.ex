@@ -174,12 +174,18 @@ defmodule HermesTrictrac.Training.TrictracBridge do
     TrictracCore.submit_turn_decision(runtime, variant, color, "s'en aller")
   end
 
-  defp apply_action(runtime, variant, color, %{"type" => "special", "id" => "DECISION_SUSPEND_CLASSIQUE"}) do
+  defp apply_action(runtime, variant, color, %{
+         "type" => "special",
+         "id" => "DECISION_SUSPEND_CLASSIQUE"
+       }) do
     ensure_phase(runtime, "decision")
     TrictracCore.submit_turn_decision(runtime, variant, color, "suspend_classique")
   end
 
-  defp apply_action(runtime, variant, color, %{"type" => "special", "id" => "DECISION_SUSPEND_A_ECRIRE"}) do
+  defp apply_action(runtime, variant, color, %{
+         "type" => "special",
+         "id" => "DECISION_SUSPEND_A_ECRIRE"
+       }) do
     ensure_phase(runtime, "decision")
     TrictracCore.submit_turn_decision(runtime, variant, color, "suspend_a_ecrire")
   end

@@ -86,6 +86,7 @@ defmodule HermesTrictrac.Rules.TrictracCore do
             |> after_confirm(previous, variant, color)
             |> maybe_settle_variant(previous, variant, color)
             |> maybe_apply_sortie_releve(variant, color)
+            |> remember_completed_turn_moves()
             |> maybe_advance_turn_after_queue(variant)
 
           {:ok, runtime}
@@ -137,7 +138,7 @@ defmodule HermesTrictrac.Rules.TrictracCore do
           |> put_in([:match, :winner_kind], if(over?, do: "toc_holes", else: nil))
           |> put_in([:match, :is_over], over?)
 
-        if own_die? and not over? do
+        if own_die? and not over? and not turn_decision_answered?(runtime, beneficiary, "reprise") do
           pending = %{
             "key" => "reprise",
             "prompt" => Toc.reprise_prompt(),
@@ -275,7 +276,13 @@ defmodule HermesTrictrac.Rules.TrictracCore do
       decision not in (pending["choices"] || []) ->
         {:error, "Invalid turn decision."}
 
+      turn_decision_answered?(runtime, color, pending["key"]) ->
+        {:error, "Turn decision already resolved."}
+
       true ->
+        runtime =
+          mark_turn_decision_answered(runtime, color, pending["key"])
+
         {:ok, apply_turn_decision(runtime, variant, color, pending["key"], decision)}
     end
   end
@@ -393,7 +400,8 @@ defmodule HermesTrictrac.Rules.TrictracCore do
     reprise_actor = reprise_actor_color(runtime.trictrac, id, color)
 
     reprise =
-      if not is_nil(reprise_actor) and not runtime.match.is_over do
+      if not is_nil(reprise_actor) and not runtime.match.is_over and
+           not turn_decision_answered?(runtime, reprise_actor, "reprise") do
         [
           %{
             "key" => "reprise",
@@ -697,6 +705,33 @@ defmodule HermesTrictrac.Rules.TrictracCore do
     end
   end
 
+  defp turn_decision_answered?(runtime, color, key) do
+    signature = turn_decision_signature(runtime, color, key)
+
+    runtime
+    |> get_in([:variant_state, :answered_turn_decisions])
+    |> Kernel.||([])
+    |> Enum.member?(signature)
+  end
+
+  defp mark_turn_decision_answered(runtime, color, key) do
+    signature = turn_decision_signature(runtime, color, key)
+    existing = get_in(runtime, [:variant_state, :answered_turn_decisions]) || []
+
+    put_in(
+      runtime,
+      [:variant_state, :answered_turn_decisions],
+      Enum.take(Enum.uniq([signature | existing]), 64)
+    )
+  end
+
+  defp turn_decision_signature(runtime, color, key) do
+    "#{runtime.turn_number}:#{normalize_color(color)}:#{key}"
+  end
+
+  defp normalize_color(color) when is_atom(color), do: Atom.to_string(color)
+  defp normalize_color(color), do: to_string(color)
+
   defp ensure_state(runtime, variant) do
     trictrac =
       runtime.trictrac
@@ -763,6 +798,13 @@ defmodule HermesTrictrac.Rules.TrictracCore do
   defp trous_for(trictrac, :white), do: Classique.trous_for(trictrac, :white)
   defp trous_for(trictrac, :black), do: Classique.trous_for(trictrac, :black)
   defp clear_keep_turn(runtime), do: put_in(runtime, [:variant_state, :keep_turn], false)
+
+  defp remember_completed_turn_moves(runtime) do
+    case Map.get(runtime, :turn_moves) do
+      moves when is_list(moves) and moves != [] -> Map.put(runtime, :last_turn_moves, moves)
+      _ -> runtime
+    end
+  end
 
   defp opposite(:white), do: :black
   defp opposite(:black), do: :white

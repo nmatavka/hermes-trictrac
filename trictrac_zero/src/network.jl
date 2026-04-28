@@ -1,6 +1,8 @@
 using Base: @kwdef
 import AlphaZero: Flux, Network
 
+abstract type TricTracSparsePolicyNet <: AlphaZero.FluxLib.FluxNetwork end
+
 @kwdef struct TricTracSparseNetHP
   num_blocks::Int
   num_filters::Int
@@ -11,7 +13,24 @@ import AlphaZero: Flux, Network
   batch_norm_momentum::Float32 = 0.1f0
 end
 
-mutable struct TricTracSparseNet <: AlphaZero.FluxLib.FluxNetwork
+@kwdef struct TricTracMetalSparseNetHP
+  trunk_width::Int = 256
+  num_blocks::Int = 4
+  state_latent_dim::Int = 128
+  action_hidden_dim::Int = 128
+  value_hidden_dim::Int = 128
+end
+
+mutable struct TricTracSparseNet <: TricTracSparsePolicyNet
+  gspec
+  hyper
+  common
+  state_head
+  action_head
+  value_head
+end
+
+mutable struct TricTracMetalSparseNet <: TricTracSparsePolicyNet
   gspec
   hyper
   common
@@ -110,15 +129,83 @@ function TricTracSparseNet(gspec::GI.AbstractGameSpec, hyper::TricTracSparseNetH
   return TricTracSparseNet(gspec, hyper, common, state_head, action_head, value_head)
 end
 
+function dense_residual_block(width::Int)
+  return Flux.Chain(
+    Flux.SkipConnection(
+      Flux.Chain(
+        Flux.Dense(width, width, Flux.relu),
+        Flux.Dense(width, width)
+      ),
+      +
+    ),
+    Flux.relu
+  )
+end
+
+function TricTracMetalSparseNet(gspec::GI.AbstractGameSpec, hyper::TricTracMetalSparseNetHP)
+  input_dim = prod(GI.state_dim(gspec))
+  width = hyper.trunk_width
+  latent = hyper.state_latent_dim
+  action_hidden = hyper.action_hidden_dim
+  value_hidden = hyper.value_hidden_dim
+
+  common = Flux.Chain(
+    Flux.flatten,
+    Flux.Dense(input_dim, width, Flux.relu),
+    [dense_residual_block(width) for _ in 1:hyper.num_blocks]...
+  )
+
+  state_head = Flux.Dense(width, latent, Flux.relu)
+
+  action_head = Flux.Chain(
+    Flux.Dense(NUM_ACTION_FEATURES, action_hidden, Flux.relu),
+    Flux.Dense(action_hidden, latent, Flux.relu)
+  )
+
+  value_head = Flux.Chain(
+    Flux.Dense(width, value_hidden, Flux.relu),
+    Flux.Dense(value_hidden, 1, tanh)
+  )
+
+  return TricTracMetalSparseNet(gspec, hyper, common, state_head, action_head, value_head)
+end
+
 Network.HyperParams(::Type{<:TricTracSparseNet}) = TricTracSparseNetHP
-Network.hyperparams(nn::TricTracSparseNet) = nn.hyper
-Network.game_spec(nn::TricTracSparseNet) = nn.gspec
-function Network.on_gpu(nn::TricTracSparseNet)
-  head = nn.value_head
-  if isnothing(head)
-    return AlphaZero.FluxLib.array_on_gpu(nn.action_head[end].bias)
-  end
-  return AlphaZero.FluxLib.array_on_gpu(head[end].bias)
+Network.HyperParams(::Type{<:TricTracMetalSparseNet}) = TricTracMetalSparseNetHP
+Network.hyperparams(nn::TricTracSparsePolicyNet) = nn.hyper
+Network.game_spec(nn::TricTracSparsePolicyNet) = nn.gspec
+
+network_probe_array(nn::TricTracSparsePolicyNet) =
+  isnothing(nn.value_head) ? nn.action_head[end].bias : nn.value_head[end].bias
+network_backend(nn::TricTracSparsePolicyNet) = array_device_backend(network_probe_array(nn))
+
+function Network.on_gpu(nn::TricTracSparsePolicyNet)
+  return is_gpu_backend(network_backend(nn))
+end
+
+Network.to_cpu(nn::TricTracSparsePolicyNet) = move_to_backend(nn, DEVICE_CPU)
+
+function Network.to_gpu(nn::TricTracSparsePolicyNet)
+  backend = active_device_backend()
+  is_gpu_backend(backend) || return nn
+  return move_to_backend(nn, backend)
+end
+
+function Network.convert_input(nn::TricTracSparsePolicyNet, x)
+  return Network.on_gpu(nn) ? move_to_backend(x, network_backend(nn)) : x
+end
+
+Network.convert_output(nn::TricTracSparsePolicyNet, x) = move_to_backend(x, DEVICE_CPU)
+
+function masked_sparse_policy(scores, M)
+  masked_scores = scores .+ (M .- one(eltype(M))) .* 1f9
+  P = Flux.softmax(masked_scores; dims = 1)
+  P = P .* M
+  return P ./ (sum(P; dims = 1) .+ eps(eltype(P)))
+end
+
+function zero_policy_row(scores)
+  return sum(scores .* zero(eltype(scores)); dims = 1)
 end
 
 function sparse_policy_forward(nn::TricTracSparseNet, X, F, M)
@@ -127,17 +214,26 @@ function sparse_policy_forward(nn::TricTracSparseNet, X, F, M)
   action_hidden = nn.action_head(F)
   state_hidden = reshape(state_hidden, size(state_hidden, 1), 1, size(state_hidden, 2))
   scores = dropdims(sum(state_hidden .* action_hidden; dims = 1); dims = 1)
-  if isnothing(nn.value_head)
-    V = zeros(eltype(scores), 1, size(scores, 2))
-  else
-    V = nn.value_head(common)
-  end
-  masked_scores = scores .+ (M .- one(eltype(M))) .* 1f9
-  P = Flux.softmax(masked_scores; dims = 1)
-  P = P .* M
-  P = P ./ (sum(P; dims = 1) .+ eps(eltype(P)))
-  p_invalid = zeros(eltype(P), 1, size(P, 2))
-  return (P, V, p_invalid)
+  V =
+    isnothing(nn.value_head) ?
+      zero_policy_row(scores) :
+      nn.value_head(common)
+  p_invalid = zero_policy_row(scores)
+  return (masked_sparse_policy(scores, M), V, p_invalid)
+end
+
+function sparse_policy_forward(nn::TricTracMetalSparseNet, X, F, M)
+  common = nn.common(X)
+  state_hidden = nn.state_head(common)
+  action_hidden = nn.action_head(F)
+  state_hidden = reshape(state_hidden, size(state_hidden, 1), 1, size(state_hidden, 2))
+  scores = dropdims(sum(state_hidden .* action_hidden; dims = 1); dims = 1)
+  V =
+    isnothing(nn.value_head) ?
+      zero_policy_row(scores) :
+      nn.value_head(common)
+  p_invalid = zero_policy_row(scores)
+  return (masked_sparse_policy(scores, M), V, p_invalid)
 end
 
 function sparse_policy_batch(gspec::TricTracGameSpec, states::AbstractVector{TricTracState})
@@ -158,7 +254,7 @@ function sparse_policy_batch(gspec::TricTracGameSpec, states::AbstractVector{Tri
   return (; X, F, M, actions)
 end
 
-function state_value_only(nn::TricTracSparseNet, state::TricTracState)
+function state_value_only(nn::TricTracSparsePolicyNet, state::TricTracState)
   isnothing(nn.value_head) && return 0.0
   x = GI.vectorize_state(nn.gspec, state)
   x = reshape(x, size(x)..., 1)
@@ -168,7 +264,7 @@ function state_value_only(nn::TricTracSparseNet, state::TricTracState)
   return Float64(value[1])
 end
 
-function Network.evaluate(nn::TricTracSparseNet, state::TricTracState)
+function Network.evaluate(nn::TricTracSparsePolicyNet, state::TricTracState)
   actions = state_catalog_actions(state)
   isempty(actions) && return (Float32[], state_value_only(nn, state))
 
@@ -179,7 +275,7 @@ function Network.evaluate(nn::TricTracSparseNet, state::TricTracState)
   return (Vector{Float32}(P[1:length(actions), 1]), Float64(V[1]))
 end
 
-function Network.evaluate_batch(nn::TricTracSparseNet, states)
+function Network.evaluate_batch(nn::TricTracSparsePolicyNet, states)
   states = collect(states)
   isempty(states) && return Tuple{Vector{Float32}, Float64}[]
 
@@ -249,7 +345,7 @@ function AlphaZero.convert_samples(
 end
 
 function AlphaZero.losses(
-  nn::TricTracSparseNet,
+  nn::TricTracSparsePolicyNet,
   params,
   Wmean,
   Hp,

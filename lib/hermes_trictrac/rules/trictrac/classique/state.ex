@@ -9,6 +9,8 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.State do
     TurnState
   }
 
+  alias HermesTrictrac.Rules.Trictrac.Classique.Dice
+
   def ensure(trictrac) do
     trictrac = trictrac || %{}
 
@@ -26,14 +28,17 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.State do
   end
 
   def apply_options(trictrac, options) do
+    options = options || %{}
     margot = Map.get(options, "margotEnabled") || Map.get(options, :margotEnabled) || false
     put_in(ensure(trictrac), [:options, "margotEnabled"], margot)
   end
 
   def set_turn_event_queue(trictrac, events), do: %{ensure(trictrac) | turn_event_queue: events}
 
-  def shift_turn_event_queue(trictrac),
-    do: %{ensure(trictrac) | turn_event_queue: tl_or_empty(ensure(trictrac).turn_event_queue)}
+  def shift_turn_event_queue(trictrac) do
+    trictrac = ensure(trictrac)
+    %{trictrac | turn_event_queue: tl_or_empty(trictrac.turn_event_queue)}
+  end
 
   def current_pending_event(trictrac), do: ensure(trictrac).turn_event_queue |> List.first()
   def clear_scores(trictrac), do: %{ensure(trictrac) | score: [score_entry(), score_entry()]}
@@ -88,10 +93,17 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.State do
   def denorm_pos(position, :white), do: position
   def denorm_pos(position, :black), do: 23 - position
 
-  def double?(%{values: values}) when is_list(values) and length(values) >= 2,
-    do: hd(values) == List.last(values)
+  def dice_values(dice), do: Dice.values(dice)
+  def normalized_throw(dice), do: Dice.normalized_throw(dice)
+  def dice_pair(dice), do: Dice.faces(dice)
+  def double?(dice), do: Dice.double?(dice)
 
-  def double?(_dice), do: false
+  def outside_count(nil, _color), do: 0
+
+  def outside_count(board, color) do
+    outside = Map.get(board, :outside, %{}) || %{}
+    Map.get(outside, color, Map.get(outside, Atom.to_string(color), 0))
+  end
 
   def impuissance_base(%{values: values}) when is_list(values) and length(values) > 2, do: 4
   def impuissance_base(_dice), do: 2
@@ -200,17 +212,22 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.State do
   def normalize_events(events) when is_list(events), do: Enum.map(events, &normalize_event/1)
   def normalize_events(_events), do: []
 
-  def normalize_event(%ScoreEvent{} = event), do: event
+  def normalize_event(%ScoreEvent{} = event), do: normalize_event(Map.from_struct(event))
 
   def normalize_event(event) do
+    label = fetch(event, :label, nil)
+    source = normalize_source(fetch(event, :source, nil))
+    rule = normalize_rule(fetch(event, :rule, nil), label, source)
+
     %ScoreEvent{
-      label: fetch(event, :label, nil),
+      rule: rule,
+      label: normalize_label(label, rule),
       piece_type: fetch(event, :piece_type, nil),
       beneficiary: fetch(event, :beneficiary, nil),
       points: fetch(event, :points, 0),
       trous_delta: fetch(event, :trous_delta, 0),
       turn_number: fetch(event, :turn_number, nil),
-      source: normalize_source(fetch(event, :source, nil)),
+      source: source || Constants.score_source(rule),
       metadata: fetch(event, :metadata, %{})
     }
   end
@@ -243,9 +260,34 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.State do
   def normalize_source(source) when is_atom(source), do: source
 
   def normalize_source(source) when is_binary(source) do
-    Enum.find_value(Constants.score_sources(), source, fn {_key, value} ->
-      if Atom.to_string(value) == source, do: value, else: nil
-    end)
+    Constants.score_source(source) ||
+      Enum.find_value(Constants.score_sources(), source, fn {_label, value} ->
+        value_as_string =
+          value
+          |> Atom.to_string()
+          |> String.trim_leading("Elixir.")
+
+        if value_as_string == source, do: value, else: nil
+      end) ||
+      source
+  end
+
+  def normalize_rule(rule, label \\ nil, source \\ nil)
+
+  def normalize_rule(rule, _label, _source) when is_atom(rule) do
+    Constants.score_rule(rule) || rule
+  end
+
+  def normalize_rule(rule, label, source) when is_binary(rule) do
+    Constants.score_rule(rule) || Constants.score_rule(label) || Constants.score_rule(source)
+  end
+
+  def normalize_rule(_rule, label, source) do
+    Constants.score_rule(label) || Constants.score_rule(source)
+  end
+
+  def normalize_label(label, rule) do
+    Constants.score_label(rule) || label
   end
 
   def normalize_table_key(nil), do: nil
@@ -258,8 +300,21 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.State do
   def normalize_table_keys(keys) when is_list(keys), do: Enum.map(keys, &normalize_table_key/1)
   def normalize_table_keys(_keys), do: []
 
-  def event_label(%ScoreEvent{label: label}), do: label
-  def event_label(event), do: fetch(event, :label, nil)
+  def event_label(%ScoreEvent{label: label, rule: rule}), do: normalize_label(label, rule)
+
+  def event_label(event),
+    do: normalize_label(fetch(event, :label, nil), fetch(event, :rule, nil))
+
+  def event_rule(%ScoreEvent{rule: rule, label: label, source: source}),
+    do: normalize_rule(rule, label, source)
+
+  def event_rule(event),
+    do:
+      normalize_rule(
+        fetch(event, :rule, nil),
+        fetch(event, :label, nil),
+        fetch(event, :source, nil)
+      )
 
   def normalize_for_snapshot(trictrac), do: ensure(trictrac)
 

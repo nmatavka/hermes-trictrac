@@ -202,11 +202,63 @@ defmodule HermesTrictracWeb.GamesChannelTest do
     assert {:error, "Player not found in lobby."} = GameServer.roll(lobby, "nick", "client-1")
   end
 
+  test "same-name rejoin challenges an occupied seat even when the opponent seat is empty" do
+    original = Application.get_env(:hermes_trictrac, :seat_reclaim_window_ms)
+    Application.put_env(:hermes_trictrac, :seat_reclaim_window_ms, 25)
+
+    on_exit(fn ->
+      if is_nil(original) do
+        Application.delete_env(:hermes_trictrac, :seat_reclaim_window_ms)
+      else
+        Application.put_env(:hermes_trictrac, :seat_reclaim_window_ms, original)
+      end
+    end)
+
+    lobby = "single-seat-reclaim-#{System.unique_integer([:positive])}"
+
+    {:ok, host_reply, _host_socket} =
+      UserSocket
+      |> socket("user:single-seat-host", %{})
+      |> subscribe_and_join(HermesTrictracWeb.GamesChannel, "games:#{lobby}", %{
+        "user" => "nick",
+        "variant" => "backgammon",
+        "client_id" => "single-seat-old-client"
+      })
+
+    assert host_reply.player["color"] == "white"
+    assert host_reply.game["players"]["guest"] == nil
+
+    assert {:error, %{code: "seat_reclaim_pending"}} =
+             UserSocket
+             |> socket("user:single-seat-reclaim", %{})
+             |> subscribe_and_join(HermesTrictracWeb.GamesChannel, "games:#{lobby}", %{
+               "user" => "nick",
+               "variant" => "backgammon",
+               "client_id" => "single-seat-new-client"
+             })
+
+    assert_broadcast "update", %{game: %{"seat_reclaim" => %{"seat_color" => "white"}}}
+    Process.sleep(60)
+    assert_broadcast "update", %{game: %{"seat_reclaim" => nil}}
+
+    snapshot = GameServer.peek(lobby)
+    assert snapshot["players"]["host"]["name"] == "nick"
+    assert snapshot["players"]["guest"] == nil
+
+    pid = GenServer.whereis(GameServer.reg(lobby))
+    state = :sys.get_state(pid)
+    assert state.engine.players.host.client_id == "single-seat-new-client"
+
+    assert {:error, "Player not found in lobby."} =
+             GameServer.roll(lobby, "nick", "single-seat-old-client")
+  end
+
   test "first backgammon roll updates the opening roll state", %{
     host_socket: socket
   } do
     assert_broadcast "update", %{game: %{"opening_roll" => %{"rolls" => %{"white" => nil}}}}
-    push(socket, "roll", %{})
+    ref = push(socket, "roll", %{})
+    assert_reply ref, :ok, %{}
     assert_broadcast "update", %{game: _game}
   end
 

@@ -178,6 +178,7 @@ defmodule HermesTrictrac.Rules.RaceCore do
 
       runtime =
         runtime
+        |> Map.put(:turn_moves, [])
         |> put_in([:variant_state, :last_roll_double], Enum.uniq(values) |> length() == 1)
         |> maybe_put_garanguet_force_mode(effective_variant, values)
         |> Map.put(:dice, %{
@@ -211,6 +212,7 @@ defmodule HermesTrictrac.Rules.RaceCore do
       runtime =
         runtime
         |> maybe_finish_game(variant, effective_variant, color)
+        |> remember_completed_turn_moves()
         |> queue_turn_decision_if_needed(effective_variant, color)
         |> advance_turn_if_needed(effective_variant, color)
 
@@ -238,11 +240,30 @@ defmodule HermesTrictrac.Rules.RaceCore do
         runtime
         |> push_history()
         |> apply_move(effective_variant, color, legal_move)
+        |> Map.put(:last_move, last_move_payload(color, legal_move))
+        |> append_turn_move(color, legal_move)
         |> recalc_legal_moves(effective_variant, color)
         |> maybe_end_game_on_move(variant, effective_variant, color)
 
       {:ok, next}
     end
+  end
+
+  defp last_move_payload(color, move) do
+    %{
+      color: Atom.to_string(color),
+      from: move.from,
+      to: move.to,
+      die: move.die,
+      dice_used: Map.get(move, :dice_used),
+      sequence: Map.get(move, :sequence),
+      via: Map.get(move, :via)
+    }
+  end
+
+  defp append_turn_move(runtime, color, move) do
+    payload = last_move_payload(color, move)
+    Map.update(runtime, :turn_moves, [payload], fn moves -> (moves || []) ++ [payload] end)
   end
 
   def submit_turn_decision(runtime, variant, color, decision) do
@@ -255,7 +276,12 @@ defmodule HermesTrictrac.Rules.RaceCore do
       decision not in payload["choices"] ->
         {:error, "Invalid turn decision."}
 
+      turn_decision_answered?(runtime, color, payload["key"]) ->
+        {:error, "Turn decision already resolved."}
+
       true ->
+        runtime = mark_turn_decision_answered(runtime, color, payload["key"])
+
         updated =
           case {variant.id, decision} do
             {id, "tenir"} when id in ["trictrac_aecrire", "trictrac_combine"] ->
@@ -378,6 +404,13 @@ defmodule HermesTrictrac.Rules.RaceCore do
 
   defp recalc_legal_moves(runtime, variant, color) do
     %{runtime | legal_moves: legal_moves(runtime, variant, color)}
+  end
+
+  defp remember_completed_turn_moves(runtime) do
+    case Map.get(runtime, :turn_moves) do
+      moves when is_list(moves) and moves != [] -> Map.put(runtime, :last_turn_moves, moves)
+      _ -> runtime
+    end
   end
 
   defp push_history(runtime) do
@@ -1974,14 +2007,14 @@ defmodule HermesTrictrac.Rules.RaceCore do
     end
   end
 
-  defp queue_turn_decision_if_needed(runtime, %{id: id}, _color)
+  defp queue_turn_decision_if_needed(runtime, %{id: id}, color)
        when id in ["trictrac_aecrire", "trictrac_combine"] do
     if runtime.match.is_over do
       %{runtime | dice: nil, legal_moves: []}
     else
       gained = get_in(runtime, [:variant_state, :last_trous_gained]) || 0
 
-      if gained > 0 do
+      if gained > 0 and not turn_decision_answered?(runtime, color, "reprise") do
         Map.put(runtime, :pending_turn_decision, %{
           "key" => "reprise",
           "prompt" => "Choose how to continue the marque.",
@@ -1994,6 +2027,33 @@ defmodule HermesTrictrac.Rules.RaceCore do
   end
 
   defp queue_turn_decision_if_needed(runtime, _variant, _color), do: runtime
+
+  defp turn_decision_answered?(runtime, color, key) do
+    signature = turn_decision_signature(runtime, color, key)
+
+    runtime
+    |> get_in([:variant_state, :answered_turn_decisions])
+    |> Kernel.||([])
+    |> Enum.member?(signature)
+  end
+
+  defp mark_turn_decision_answered(runtime, color, key) do
+    signature = turn_decision_signature(runtime, color, key)
+    existing = get_in(runtime, [:variant_state, :answered_turn_decisions]) || []
+
+    put_in(
+      runtime,
+      [:variant_state, :answered_turn_decisions],
+      Enum.take(Enum.uniq([signature | existing]), 64)
+    )
+  end
+
+  defp turn_decision_signature(runtime, color, key) do
+    "#{runtime.turn_number}:#{normalize_color(color)}:#{key}"
+  end
+
+  defp normalize_color(color) when is_atom(color), do: Atom.to_string(color)
+  defp normalize_color(color), do: to_string(color)
 
   defp trictrac_state(%{id: id})
        when id in ["trictrac_classique", "trictrac_aecrire", "trictrac_combine", "toc", "plein"] do

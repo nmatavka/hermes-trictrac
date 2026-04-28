@@ -103,6 +103,15 @@ defmodule HermesTrictracWeb.GamesChannelBotTest do
     end
   end
 
+  defmodule InvalidActionFakeTrictracBot do
+    def model_name, do: "InvalidActionFakeTricTracZero"
+    def model_name(_preset), do: "InvalidActionFakeTricTracZero"
+    def ready, do: :ok
+    def ready(_preset), do: :ok
+    def choose_action(_serialized_state), do: {:ok, %{"type" => "special", "id" => "CONFIRM"}}
+    def choose_action(_preset, serialized_state), do: choose_action(serialized_state)
+  end
+
   setup do
     original = Application.get_env(:hermes_trictrac, :trictrac_model_bot_impl)
     Application.put_env(:hermes_trictrac, :trictrac_model_bot_impl, FakeTrictracBot)
@@ -452,6 +461,69 @@ defmodule HermesTrictracWeb.GamesChannelBotTest do
              "key" => "synthetic",
              "prompt" => "Synthetic"
            }
+  end
+
+  test "human turn decision is not reported as failed when bot follow-up action fails" do
+    Application.put_env(:hermes_trictrac, :trictrac_model_bot_impl, InvalidActionFakeTrictracBot)
+
+    lobby = "tt-bot-decision-followup-#{System.unique_integer([:positive])}"
+    GameServer.reg(lobby)
+    GameServer.start(lobby, "trictrac_classique")
+
+    assert {:ok, %{game: _game, player: _player}} =
+             GameServer.join(lobby, "nick", "tt-bot-decision-host", "trictrac_classique", %{
+               "bot" => "trictrac_zero"
+             })
+
+    pid = GenServer.whereis(GameServer.reg(lobby))
+
+    :sys.replace_state(pid, fn state ->
+      engine = state.engine
+
+      pending = %{
+        "key" => "reprise",
+        "prompt" => "Synthetic reprise",
+        "actorColor" => "white",
+        "choices" => ["tenir", "s'en aller"]
+      }
+
+      runtime =
+        engine
+        |> Engine.runtime_view()
+        |> Map.put(:turn_color, :white)
+        |> Map.put(:turn_number, 1)
+        |> Map.put(:dice, nil)
+        |> Map.put(:legal_moves, [])
+        |> Map.put(:pending_turn_decision, pending)
+
+      updated_engine = %{
+        engine
+        | runtime: runtime,
+          turn_color: :white,
+          turn_number: 1,
+          dice: nil,
+          legal_moves: [],
+          pending_turn_decision: pending
+      }
+
+      %{state | engine: updated_engine}
+    end)
+
+    log =
+      capture_log(fn ->
+        assert {:ok, snapshot} =
+                 GameServer.submit_turn_decision(
+                   lobby,
+                   "tenir",
+                   "nick",
+                   "tt-bot-decision-host"
+                 )
+
+        assert snapshot["pending_turn_decision"] == nil
+        assert snapshot["turn"]["color"] == "black"
+      end)
+
+    assert log =~ "Bot follow-up failed"
   end
 
   test "peek advances a bot decision when actorColor is black even if turn_color is white" do
