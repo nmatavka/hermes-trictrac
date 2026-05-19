@@ -1,0 +1,40 @@
+server:
+  port: 84
+  servlet:
+    context-path: /player
+spring:
+  application:
+    name: player-service
+  datasource:
+    url: jdbc:postgresql://postgres-service:5432/backgammon
+    driver-class-name: org.postgresql.Driver
+    username: postgres
+    password: admin
+  jpa:
+    generate-ddl: true
+    hibernate:
+      ddl-auto: validate
+  sql:
+    init:
+      mode: always
+  kafka:
+    bootstrap-servers: 176.108.249.125:9092
+    consumer:
+      group-id: menu
+
+kafka:
+  topic:
+    narde:
+      event:
+        game-end: narde.game-event.end
+
+
+jwt:
+  secret: ${JWT_SECRET:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}
+  expire: ${PLAYER_TOKEN_EXPIRATION_TIME:100000}
+
+storage:
+  image:
+    path: /var/image-data
+
+debug: false

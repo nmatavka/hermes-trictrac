@@ -1,0 +1,16 @@
+spring:
+  application:
+    name: menu
+
+server:
+  port: 81
+
+cfg:
+  start-game-id: 1
+
+route:
+  config:
+    backgammon-game:
+      uri: 'http://game-service:82'
+
+disable-job: true

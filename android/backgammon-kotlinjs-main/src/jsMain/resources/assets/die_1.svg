@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="512px"
+   height="512px"
+   viewBox="-32 0 512 512"
+   version="1.1"
+   id="svg2455"
+   sodipodi:docname="die_1.svg"
+   inkscape:version="1.2.1 (9c6d41e410, 2022-07-14)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs2459" />
+  <sodipodi:namedview
+     id="namedview2457"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     showgrid="false"
+     inkscape:zoom="1.6152344"
+     inkscape:cx="255.69045"
+     inkscape:cy="256.30955"
+     inkscape:window-width="1920"
+     inkscape:window-height="1007"
+     inkscape:window-x="0"
+     inkscape:window-y="0"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg2455" />
+  <path
+     d="M384 32H64C28.65 32 0 60.65 0 96v320c0 35.35 28.65 64 64 64h320c35.35 0 64-28.65 64-64V96c0-35.35-28.65-64-64-64zM224 288c-17.67 0-32-14.33-32-32s14.33-32 32-32 32 14.33 32 32-14.33 32-32 32z"
+     id="path2453" />
+  <path
+     style="fill:#ffffff;stroke-width:3.66198"
+     d="m 248.46882,286.69361 c -11.90609,-2.88748 -21.8335,-13.84205 -23.75246,-26.21006 -2.86985,-18.49667 12.36619,-36.05792 31.28364,-36.05792 18.93893,0 34.15675,17.54025 31.28364,36.05792 -2.84272,18.32175 -20.94326,30.5443 -38.81482,26.21006 z"
+     id="path2461"
+     transform="translate(-32)" />
+  <path
+     style="fill:#ffffff;stroke-width:3.66198"
+     d="m 248.47656,286.69535 c -11.96508,-2.90229 -21.83257,-13.78792 -23.7602,-26.2118 -2.86985,-18.49667 12.36619,-36.05792 31.28364,-36.05792 18.93893,0 34.15675,17.54025 31.28364,36.05792 -2.84211,18.31785 -20.94419,30.54469 -38.80708,26.2118 z"
+     id="path2463"
+     transform="translate(-32)" />
+</svg>

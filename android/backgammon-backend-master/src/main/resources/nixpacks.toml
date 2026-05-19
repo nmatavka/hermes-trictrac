@@ -1,0 +1,10 @@
+[phases.setup]
+# 1. Define the environment packages you need.
+# Nixpacks will fetch specific versions of Java, Typst, and GnuBg for you.
+nixPkgs = ["jdk25", "gnubg"]
+
+[start]
+# 3. Run your command.
+# Adjust the path below to match your actual script location.
+# If using Ktor's installDist, it's usually: ./build/install/YOUR_APP_NAME/bin/YOUR_APP_NAME
+cmd = "./bin/my-start-script"

@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">Backgammon Dice</string>
+    <string name="roll">Roll</string>
+    <string name="previous_dice_string">Previous Dice: %1$d - %2$s</string>
+    <string name="please_shake_text">To roll the dice shake your phone or press the SHAKE button</string>
+    <string name="first_dice">Previous Dice: 1 – 1</string>
+    <string name="okay">Okay</string>
+    <string name="dont_show_text">Don\'t show this screen again</string>
+    <string name="welcome_string">Welcome</string>
+
+</resources>

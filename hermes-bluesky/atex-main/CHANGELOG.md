@@ -1,0 +1,290 @@
+# Changelog
+
+All notable changes to atex will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to
+[Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Breaking Changes
+
+- `Atex.OAuth` refactor:
+  - `Atex.OAuth.get_key/0` removed - use `Atex.Config.OAuth.get_key/0` directly
+  - `Atex.OAuth.create_client_metadata/1`, `create_client_assertion/3`,
+    `create_authorization_url/5`, `validate_authorization_code/5`,
+    `refresh_token/5`, `revoke_tokens/2` moved to `Atex.OAuth.Flow`
+  - `Atex.OAuth.create_dpop_token/4`, `send_oauth_dpop_request/3`,
+    `request_protected_dpop_resource/5` moved to `Atex.OAuth.DPoP`
+  - `Atex.OAuth.get_authorization_server/2`,
+    `get_authorization_server_metadata/2` moved to `Atex.OAuth.Discovery`
+  - Error atom `:invaild_issuer` corrected to `:invalid_issuer` in
+    `Atex.OAuth.Discovery`
+- `Atex.Config.OAuth.is_localhost/0` renamed to `Atex.Config.OAuth.localhost?/0`
+- `Atex.ServiceAuth.validate_jwt/2` now returns `{:error, :invalid_jwt}` on
+  malformed input instead of raising
+
+### Added
+
+- `Atex.OAuth.session_keys_name/0` and
+  `Atex.OAuth.session_active_session_name/0` expose Plug session key atoms
+- `Atex.IdentityResolver` now has full module and function documentation
+- `Atex.XRPC.LoginClient` now has a `@moduledoc`
+- Optional `:telemetry` instrumentation via `Atex.Telemetry`. Add `{:telemetry, "~> 1.0"}` to
+  your deps to receive events from XRPC requests, identity resolution, OAuth flows, and service
+  auth validation. See `Atex.Telemetry` for the full event catalogue.
+- New `:user_agent` config key under `config :atex`. When set, all outgoing XRPC
+  requests include a `User-Agent` header of `"<user_agent> (atex/<version>)"`.
+  Defaults to `"atex/<version>"`. See `Atex.Config.user_agent/0`.
+
+### Fixed
+
+- Fix `raw_input` not actually being set as the request's body in
+  `Atex.XRPC.post/3` when providing a struct as input.
+- `Atex.XRPC.LoginClient.handle_failure/3` now returns consistent 3-tuples
+  `{:error, response, client}`
+- `Atex.OAuth.Cache` metadata cache `ttl_check_interval` corrected to 5 minutes
+  (was 30 seconds)
+- Typo in `Atex.OAuth.Error` moduledoc corrected ("extesion" -> "exception")
+
+## [0.9.1] - 2026-04-17
+
+### Fixed
+
+- Fix a problem with error struct generation with some lexicons in `deflexicon`.
+
+## [0.9.0] - 2026-04-16
+
+### Breaking Changes
+
+- `Atex.NSID` is now a struct (`%Atex.NSID{authority, name, fragment}`). Public
+  functions now accept and return structs. You can use `new/1`, `new!/1` or the
+  new `~NSID""` for constructing from a NSID string.
+
+### Added
+
+- `Atex.Repo` module for building, mutating, signing, serialising, and loading
+  AT Protocol repositories. Also supports lazily streaming from a CAR binary for
+  efficient processing of large repository exports.
+- `Atex.XRPC.UnauthedClient` module for running unauthenticated XRPC fetches on
+  public APIs or PDSes.
+- `Atex.Lexicon.Resolver` module for resolving published lexicons by NSID,
+  following the
+  [publication and resolution spec](https://atproto.com/specs/lexicon#lexicon-publication-and-resolution).
+- `mix atex.lexicons.resolve` task for resolving one or more lexicons by NSID
+  and writing to a JSON file.
+- Sigils for `Atex.AtURI` and `Atex.TID`, `~AT"at://..."` and `~TID"..."`
+  respectively.
+- `/logout` route for `Atex.OAuth.Plug` to revoke the current session, as well
+  as `Atex.OAuth.Plug.revoke_session/2` to revoke a conn's session
+  programmaticly (e.g. from a session management dashboard).
+- `deflexicon` now generates structs for errors defined by queries and
+  procedures, under a `Errors` submodule.
+- `deflexicon` generated models now have a `coerce_error/1` function that takes
+  in a map and tries to convert it to one of its known error structs.
+- `Atex.XRPC.Error` struct for wrapping XRPC error responses, including both
+  known errors (with typed `error_struct`) and unknown errors.
+
+### Fixed
+
+- Fix issue when trying to validate OAuth authorisation codes in localhost mode
+  on PDS implementations that are more strict than the Bluesky reference
+  implementation.
+
+## [0.8.0] - 2026-03-29
+
+### Breaking Changes
+
+- The `Atex.IdentityResolver` config key has been replaced with a flat config
+  option. Update your config from:
+
+  ```elixir
+    config :atex, Atex.IdentityResolver,
+      directory_url: "https://plc.directory"
+  ```
+
+  to:
+
+  ```elixir
+    config :atex,
+      plc_directory_url: "https://plc.directory"
+  ```
+
+- `Atex.Config.IdentityResolver` has been renamed to `Atex.Config`.
+- `Atex.IdentityResolver.DIDDocument` has been renamed to `Atex.DID.Document`.
+- Replace existing `Atex.DID.Document.new/1` method with the method previously
+  named `from_json/1`.
+
+### Added
+
+- `Atex.Crypto` module for performing AT Protocol-related cryptographic
+  operations.
+- `Atex.PLC` module for interacting with
+  [a did:plc directory API](https://web.plc.directory/).
+- `Atex.ServiceAuth` module for validating
+  [inter-service authentication tokens](https://atproto.com/specs/xrpc#inter-service-authentication-jwt).
+- Various improvements to `Atex.Did.Document`
+  - Add `Atex.DID.Document.Service` and `Atex.DID.Document.VerificationMethod`
+    sub-structs.
+  - Add `to_json/1` methods and `JSON.Encoder` protocols for easy conversion to
+    camelCase JSON.
+- `Atex.XRPC.Router` module with `query/3` and `procedure/3` macros for easily
+  building XRPC server routes inside a `Plug.Router`, with built-in service auth
+  validation and validation if passed the name of a module using `deflexicon`.
+- `deflexicon` now emits `content_type/0` functions (on `Input` submodules for
+  typed JSON bodies, otherwise on the root module) for procedures.
+- `Atex.XRPC.ServiceAuthClient` module for making requests to other atproto
+  services using a service auth token.
+
+### Fixed
+
+- Fix a problem where generated `%<LexiconId>.Params` structs could not be
+  passed to an XRPC call due to not having the Enumerable protocol implemented.
+- Correctly generate `Input`/`Output` submodules with `from_json` methods for
+  queries and procedures that use `ref` or `union` types.
+
+## [0.7.1] - 2026-02-06
+
+### Breaking Changes
+
+- Included `Com.Atproto.*` lexicon modules have been removed and put into
+  `atex_atproto` instead.
+
+### Added
+
+- The PLC directory used for identity resolution can now be configured. See
+  `Atex.Config.IdentityResolve` for more information. (Thanks
+  [@hexmani.ac](https://tangled.org/did:plc:5szlrh3xkfxxsuu4mo6oe6h7)!)
+- Add an extra optional `opts` parameter to some `Atex.OAuth` functions, to
+  allow for better integration with other ecosystems. (Thanks
+  [@lekkice.moe](https://tangled.org/did:plc:dgzvruva4jbzqbta335jtvoz)!)
+
+## [0.7.0] - 2026-01-07
+
+### Breaking Changes
+
+- `Atex.OAuth.Plug` now raises `Atex.OAuth.Error` exceptions instead of handling
+  error situations internally. Applications should implement `Plug.ErrorHandler`
+  to catch and gracefully handle them.
+- `Atex.OAuth.Plug` now saves only the user's DID in the session instead of the
+  entire OAuth session object. Applications must use `Atex.OAuth.SessionStore`
+  to manage OAuth sessions.
+- `Atex.XRPC.OAuthClient` has been overhauled to use `Atex.OAuth.SessionStore`
+  for retrieving and managing OAuth sessions, making it easier to use with not
+  needing to manually keep a Plug session in sync.
+
+### Added
+
+- `Atex.OAuth.SessionStore` behaviour and `Atex.OAuth.Session` struct for
+  managing OAuth sessions with pluggable storage backends.
+  - `Atex.OAuth.SessionStore.ETS` - in-memory session store implementation.
+  - `Atex.OAuth.SessionStore.DETS` - persistent disk-based session store
+    implementation.
+- `Atex.OAuth.Plug` now requires a `:callback` option that is a MFA tuple
+  (Module, Function, Args), denoting a callback function to be invoked by after
+  a successful OAuth login. See [the OAuth example](./examples/oauth.ex) for a
+  simple usage of this.
+- `Atex.OAuth.Permission` module for creating
+  [AT Protocol permission](https://atproto.com/specs/permission) strings for
+  OAuth.
+- `Atex.OAuth.Error` exception module for OAuth flow errors. Contains both a
+  human-readable `message` string and a machine-readable `reason` atom for error
+  handling.
+- `Atex.OAuth.Cache` module provides TTL caching for OAuth authorization server
+  metadata with a 1-hour default TTL to reduce load on third-party PDSs.
+- `Atex.OAuth.get_authorization_server/2` and
+  `Atex.OAuth.get_authorization_server_metadata/2` now support an optional
+  `fresh` parameter to bypass the cache when needed.
+
+### Changed
+
+- `mix atex.lexicons` now adds `@moduledoc false` to generated modules to stop
+  them from automatically cluttering documentation.
+- `Atex.IdentityResolver.Cache.ETS` now uses ConCache instead of ETS directly,
+  with a 1-hour TTL for cached identity information.
+
+## [0.6.0] - 2025-11-25
+
+### Breaking Changes
+
+- `deflexicon` now converts all def names to be in snake_case instead of the
+  casing as written the lexicon.
+
+### Added
+
+- `deflexicon` now emits structs for records, objects, queries, and procedures.
+- `Atex.XRPC.get/3` and `Atex.XRPC.post/3` now support having a lexicon struct
+  as the second argument instead of the method's name, making it easier to have
+  properly checked XRPC calls.
+- Add pre-transpiled modules for the core `com.atproto` lexicons.
+
+## [0.5.0] - 2025-10-11
+
+### Breaking Changes
+
+- Remove `Atex.HTTP` and associated modules as the abstraction caused a bit too
+  much complexities for how early atex is. It may come back in the future as
+  something more fleshed out once we're more stable.
+- Rename `Atex.XRPC.Client` to `Atex.XRPC.LoginClient`
+
+### Added
+
+- `Atex.OAuth` module with utilites for handling some OAuth functionality.
+- `Atex.OAuth.Plug` module (if Plug is loaded) which provides a basic but
+  complete OAuth flow, including storing the tokens in `Plug.Session`.
+- `Atex.XRPC.Client` behaviour for implementing custom client variants.
+- `Atex.XRPC` now supports using different client implementations.
+- `Atex.XRPC.OAuthClient` to make XRPC calls on the behalf of a user who has
+  authenticated with ATProto OAuth.
+
+## [0.4.0] - 2025-08-27
+
+### Added
+
+- `Atex.Lexicon` module that provides the `deflexicon` macro, taking in a JSON
+  Lexicon definition and converts it into a series of schemas for each
+  definition within it.
+- `mix atex.lexicons` for converting lexicon JSON files into modules using
+  `deflexicon` easily.
+
+## [0.3.0] - 2025-06-29
+
+### Changed
+
+- `Atex.XRPC.Adapter` renamed to `Atex.HTTP.Adapter`.
+
+### Added
+
+- `Atex.HTTP` module that delegates to the currently configured adapter.
+- `Atex.HTTP.Response` struct to be returned by `Atex.HTTP.Adapter`.
+- `Atex.IdentityResolver` module for resolving and validating an identity,
+  either by DID or a handle.
+  - Also has a pluggable cache (with a default ETS implementation) for keeping
+    some data locally.
+
+## [0.2.0] - 2025-06-09
+
+### Added
+
+- `Atex.TID` module for manipulating ATProto TIDs.
+- `Atex.Base32Sortable` module for encoding/decoding numbers as
+  `base32-sortable` strings.
+- Basic XRPC client.
+
+## [0.1.0] - 2025-06-07
+
+Initial release.
+
+[unreleased]: https://github.com/cometsh/atex/compare/v0.9.1...HEAD
+[0.9.1]: https://github.com/cometsh/atex/releases/tag/v0.9.1
+[0.9.0]: https://github.com/cometsh/atex/releases/tag/v0.9.0
+[0.8.0]: https://github.com/cometsh/atex/releases/tag/v0.8.0
+[0.7.1]: https://github.com/cometsh/atex/releases/tag/v0.7.1
+[0.7.0]: https://github.com/cometsh/atex/releases/tag/v0.7.0
+[0.6.0]: https://github.com/cometsh/atex/releases/tag/v0.6.0
+[0.5.0]: https://github.com/cometsh/atex/releases/tag/v0.5.0
+[0.4.0]: https://github.com/cometsh/atex/releases/tag/v0.4.0
+[0.3.0]: https://github.com/cometsh/atex/releases/tag/v0.3.0
+[0.2.0]: https://github.com/cometsh/atex/releases/tag/v0.2.0
+[0.1.0]: https://github.com/cometsh/atex/releases/tag/v0.1.0

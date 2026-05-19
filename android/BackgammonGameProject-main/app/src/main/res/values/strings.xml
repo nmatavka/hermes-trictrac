@@ -1,0 +1,20 @@
+<resources>
+    <string name="app_name">Backgammon Game</string>
+
+    <!-- MainActivity -->
+    <string name="backgammon_image">Backgammon image</string>
+    <string name="description_text">When TWO PLAYERS are playing the game, the score won’t be a problem anymore. This app will store the score securely.</string>
+    <string name="player1_hint">Player 1</string>
+    <string name="player2_hint">Player 2</string>
+    <string name="start_button">START</string>
+    <string name="score_format">%1$d - %2$d</string>
+    <string name="player1_wins">Player 1 wins</string>
+    <string name="player2_wins">Player 2 wins</string>
+    <string name="player_wins">%1$s wins</string>
+
+    <!-- ResultActivity -->
+    <string name="congrats_image">Congratulations image</string>
+    <string name="winner_button">WINNER</string>
+    <string name="winner_suffix">is the winner</string>
+    <string name="reset_button">RESET</string>
+</resources>

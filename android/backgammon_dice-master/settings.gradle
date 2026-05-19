@@ -1,0 +1,2 @@
+rootProject.name='TavlaZari'
+include ':app'

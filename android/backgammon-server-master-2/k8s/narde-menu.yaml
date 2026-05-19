@@ -1,0 +1,38 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: narde-menu
+  labels:
+    app: narde-menu
+spec:
+  replicas: 1 # пока коннект завязан на очередь в рантайме нельзя делать больше одной реплики
+  selector:
+    matchLabels:
+      app: narde-menu
+  template:
+    metadata:
+      labels:
+        app: narde-menu
+    spec:
+      containers:
+        - name: menu
+          image: 176.108.249.125:5000/narde-menu:latest
+          ports:
+            - containerPort: 81
+          envFrom:
+            - configMapRef:
+                name: narde-config
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: menu-service
+spec:
+  ports:
+    - port: 81
+      targetPort: 81
+  selector:
+    app: narde-menu
+  type: ClusterIP

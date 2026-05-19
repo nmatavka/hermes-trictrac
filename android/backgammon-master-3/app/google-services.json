@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "200249105601",
+    "project_id": "backgammon-d0760",
+    "storage_bucket": "backgammon-d0760.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:200249105601:android:327cf93875adfaaa7a8840",
+        "android_client_info": {
+          "package_name": "com.example.backgammon"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDdq4Fl7LigXFRyzAkRxj1FVd3lKrvNHek"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

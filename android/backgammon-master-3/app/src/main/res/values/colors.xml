@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    
+    <!-- Login Screen Colors -->
+    <color name="loginBackground">#F5F5F5</color>
+    <color name="titleColor">#2C3E50</color>
+    <color name="subtitleColor">#7F8C8D</color>
+    <color name="statsColor">#27AE60</color>
+    <color name="logoBackground">#ECF0F1</color>
+    
+    <!-- Game Colors -->
+    <color name="lossColor">#E74C3C</color>
+</resources>

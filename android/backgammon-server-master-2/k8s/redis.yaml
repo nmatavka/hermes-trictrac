@@ -1,0 +1,36 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: narde-redis
+  labels:
+    app: narde-redis
+spec:
+  replicas: 1 # я не знаю как масштабировать редис)
+  selector:
+    matchLabels:
+      app: narde-redis
+  template:
+    metadata:
+      labels:
+        app: narde-redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7.2.7-alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 6379
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-service
+spec:
+  ports:
+    - port: 6379
+      targetPort: 6379
+  selector:
+    app: narde-redis
+  type: ClusterIP

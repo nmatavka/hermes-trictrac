@@ -84,6 +84,8 @@ defmodule HermesTrictrac.BackgammonAiBot do
       "from" => Map.get(move, :from),
       "to" => Map.get(move, :to),
       "die" => Map.get(move, :die),
+      "dice_used" => Map.get(move, :dice_used),
+      "sequence" => Map.get(move, :sequence),
       "count" => Map.get(move, :count, 1),
       "hit" => Map.get(move, :hit?, false)
     }
@@ -112,7 +114,10 @@ defmodule HermesTrictrac.BackgammonAiBot do
   defp move_payload(action) do
     %{
       "from" => action["from"],
-      "to" => action["to"]
+      "to" => action["to"],
+      "die" => action["die"],
+      "dice_used" => action["dice_used"],
+      "sequence" => action["sequence"]
     }
   end
 

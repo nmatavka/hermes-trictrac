@@ -1,0 +1,91 @@
+GNUBG Response:
+’.
+ GNU Backgammon  Position ID: 4HPwATDgc/ABMA
+                 Match ID   : cImmAAAAAAAE
+ +13-14-15-16-17-18------19-20-21-22-23-24-+     O: gnubg
+ | X           O    |   | O              X |     0 points
+ | X           O    |   | O              X |
+ | X           O    |   | O                |
+ | X                |   | O                |
+ | X                |   | O                |
+v|                  |BAR|                  |     5 points match (Cube: 1)
+ | O                |   | X                |
+ | O                |   | X                |
+ | O           X    |   | X                |
+ | O           X    |   | X              O |     Rolled 51
+ | O           X    |   | X              O |     0 points
+ +12-11-10--9--8--7-------6--5--4--3--2--1-+     X: kyleth95
+
+The prompt is set to ‘
+’.
+ GNU Backgammon  Position ID: 4PPgASjgc/ABMA
+                 Match ID   : MAGgAAAAAAAE
+ +12-11-10--9--8--7-------6--5--4--3--2--1-+     O: gnubg
+ | X           O    |   | O           X  X |     0 points
+ | X           O    |   | O                |     On roll
+ | X           O    |   | O                |
+ | X                |   | O                |
+ |                  |   | O                |
+^|                  |BAR|                  |     5 points match (Cube: 1)
+ | O                |   | X                |
+ | O           X    |   | X                |
+ | O           X    |   | X                |
+ | O           X    |   | X              O |
+ | O           X    |   | X              O |     0 points
+ +13-14-15-16-17-18------19-20-21-22-23-24-+     X: kyleth95
+
+ GNU Backgammon  Position ID: 4PPgASjgc/ABMA
+                 Match ID   : MAGvAAAAAAAE
+ +12-11-10--9--8--7-------6--5--4--3--2--1-+     O: gnubg
+ | X           O    |   | O           X  X |     0 points
+ | X           O    |   | O                |     Rolled 36
+ | X           O    |   | O                |
+ | X                |   | O                |
+ |                  |   | O                |
+^|                  |BAR|                  |     5 points match (Cube: 1)
+ | O                |   | X                |
+ | O           X    |   | X                |
+ | O           X    |   | X                |
+ | O           X    |   | X              O |
+ | O           X    |   | X              O |     0 points
+ +13-14-15-16-17-18------19-20-21-22-23-24-+     X: kyleth95
+
+gnubg moves 24/15.
+ GNU Backgammon  Position ID: 4HPwCSDg8+ABKA
+                 Match ID   : cAmgAAAAAAAE
+ +13-14-15-16-17-18------19-20-21-22-23-24-+     O: gnubg
+ | X           O    |   | O           X  X |     0 points
+ | X           O    |   | O                |
+ | X           O    |   | O                |
+ | X                |   | O                |
+ |                  |   | O                |
+v|                  |BAR|                  |     5 points match (Cube: 1)
+ | O                |   | X                |
+ | O           X    |   | X                |
+ | O           X    |   | X                |
+ | O           X    |   | X                |     On roll
+ | O     O     X    |   | X              O |     0 points
+ +12-11-10--9--8--7-------6--5--4--3--2--1-+     X: kyleth95
+
+The prompt is set to ‘
+’.
+
+Cube analysis
+2-ply cubeless equity +0.069 (Money: +0.072)
+  0.516 0.152 0.006 - 0.484 0.114 0.004
+Cubeful equities:
+1. No double           +0.096
+2. Double, pass        +1.000  (+0.904)
+3. Double, take        -0.196  (-0.292)
+Proper cube action: No double, take (24.4%)
+
+The prompt is set to ‘
+’.
+The prompt is set to ‘
+GnubgCommandResponse[]:
+PositionId(positionId=4HPwATDgc/ABMA)
+MatchID(matchId=GnubgMatchId(value=cImmAAAAAAAE))
+Roll(roll=DiceRoll(firstDice=5, secondDice=1))
+Move(playerName=gnubg, moveString=24/15)
+PositionId(positionId=4HPwCSDg8+ABKA)
+MatchID(matchId=GnubgMatchId(value=cAmgAAAAAAAE))

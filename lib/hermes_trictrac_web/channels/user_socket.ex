@@ -1,6 +1,8 @@
 defmodule HermesTrictracWeb.UserSocket do
   use Phoenix.Socket
 
+  alias HermesTrictrac.Identity
+
   ## Channels
   channel "games:*", HermesTrictracWeb.GamesChannel
 
@@ -15,8 +17,30 @@ defmodule HermesTrictracWeb.UserSocket do
   #
   # See `Phoenix.Token` documentation for examples in
   # performing token verification on connect.
-  def connect(_params, socket, _connect_info) do
-    {:ok, socket}
+  def connect(_params, socket, connect_info) do
+    identity_mode = Identity.mode()
+
+    cond do
+      Identity.manual?(identity_mode) ->
+        {:ok, assign(socket, :identity_mode, identity_mode)}
+
+      true ->
+        session = Map.get(connect_info || %{}, :session, %{})
+
+        case Identity.from_session_map(session) do
+          {:ok, identity} ->
+            {:ok,
+             socket
+             |> assign(:identity_mode, identity_mode)
+             |> assign(:identity, identity)
+             |> assign(:identity_did, identity.did)
+             |> assign(:identity_handle, identity.handle)
+             |> assign(:identity_session_key, identity.session_key)}
+
+          _ ->
+            :error
+        end
+    end
   end
 
   # Socket id's are topics that allow you to identify all sockets for a given user:
@@ -29,5 +53,8 @@ defmodule HermesTrictracWeb.UserSocket do
   #     HermesTrictracWeb.Endpoint.broadcast("user_socket:#{user.id}", "disconnect", %{})
   #
   # Returning `nil` makes this socket anonymous.
+  def id(%{assigns: %{identity_mode: :bluesky_oauth, identity_did: did}}) when is_binary(did),
+    do: "user_socket:#{did}"
+
   def id(_socket), do: nil
 end

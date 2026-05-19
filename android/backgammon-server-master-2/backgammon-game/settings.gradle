@@ -1,0 +1,2 @@
+rootProject.name = 'backgammon-game'
+includeFlat 'game-lib', 'api'

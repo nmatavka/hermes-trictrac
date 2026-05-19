@@ -1,0 +1,124 @@
+<section
+  id="model-lab-root"
+  class="model-lab app-shell"
+  data-models={Jason.encode!(@models)}
+>
+  <section class="hero-panel model-lab-hero">
+    <div>
+      <p class="eyebrow">Unlinked test page</p>
+      <h1>Model move sampler</h1>
+      <p class="hero-copy">
+        Paste an XGID, choose dice and a model, then sample repeated choices from the same
+        table position.
+      </p>
+    </div>
+    <div class="hero-meta">
+      <span>XGID</span>
+      <span>10 / 25 / 50 samples</span>
+      <span>Trictrac scoring events</span>
+    </div>
+  </section>
+
+  <div class="game-layout model-lab-game-layout">
+    <aside class="action-rail">
+      <section class="rail-card model-lab-panel">
+        <h2>Position</h2>
+
+        <div class="model-lab-controls">
+          <div>
+            <span class="model-lab-control-label">Dice</span>
+            <div class="model-lab-dice-editor" aria-label="Dice">
+              <button type="button" class="model-lab-die-button" data-model-lab-die="1" value="6">
+                6
+              </button>
+              <button type="button" class="model-lab-die-button" data-model-lab-die="2" value="1">
+                1
+              </button>
+            </div>
+          </div>
+
+          <label>
+            To play
+            <select data-model-lab-turn>
+              <option value="from_xgid">From XGID</option>
+              <option value="white">White</option>
+              <option value="black">Black</option>
+            </select>
+          </label>
+
+          <label>
+            Black direction
+            <select data-model-lab-black-direction>
+              <option value="toward_1" selected>Black 24 → 1</option>
+              <option value="toward_24">Black 1 → 24</option>
+            </select>
+          </label>
+        </div>
+
+        <label>
+          Model
+          <select data-model-lab-model>
+            <%= for model <- @models do %>
+              <option value={model.id} selected={model.id == "trictrac_zero:classique"}>
+                <%= model.label %>
+              </option>
+            <% end %>
+          </select>
+        </label>
+
+        <fieldset class="model-lab-editor-mode">
+          <legend>Board edit</legend>
+          <div class="model-lab-editor-options">
+            <label>
+              <input type="radio" name="model_lab_editor_color" value="white" data-model-lab-editor-color checked />
+              White
+            </label>
+            <label>
+              <input type="radio" name="model_lab_editor_color" value="black" data-model-lab-editor-color />
+              Black
+            </label>
+            <label>
+              <input type="radio" name="model_lab_editor_color" value="clear" data-model-lab-editor-color />
+              Clear
+            </label>
+          </div>
+          <p class="muted-copy">Click a point to add or cycle men. Right-click or option-click subtracts.</p>
+        </fieldset>
+
+        <div class="button-grid model-lab-actions">
+          <button type="button" data-model-lab-load>Load board</button>
+          <button type="button" data-model-lab-run="10">Run 10</button>
+          <button type="button" data-model-lab-run="25">Run 25</button>
+          <button type="button" data-model-lab-run="50">Run 50</button>
+        </div>
+
+        <p class="model-lab-status" data-model-lab-status aria-live="polite"></p>
+      </section>
+
+      <section class="rail-card model-lab-results">
+        <h2>Most common choices</h2>
+        <div data-model-lab-results>
+          <p class="muted-copy">Run the model to see aggregated moves.</p>
+        </div>
+      </section>
+    </aside>
+
+    <main class="table-stage model-lab-table-stage">
+      <section class="rail-card model-lab-board-meta" data-model-lab-board-meta>
+        No position loaded.
+      </section>
+      <div class="model-lab-board-slot" data-model-lab-board></div>
+      <section class="rail-card model-lab-xgid-panel">
+        <label>
+          XGID
+          <textarea
+            data-model-lab-xgid
+            rows="3"
+            spellcheck="false"
+            placeholder="XGID=-O----------------------o-:0:0:-1:61:0:0:0:1:0"
+          >XGID=-O----------------------o-:0:0:-1:61:0:0:0:1:0</textarea>
+        </label>
+      </section>
+    </main>
+  </div>
+</section>

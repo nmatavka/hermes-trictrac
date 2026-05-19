@@ -1,0 +1,52 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="120dp"
+    android:height="120dp"
+    android:viewportWidth="120"
+    android:viewportHeight="120">
+    
+    <!-- Background circle -->
+    <path
+        android:fillColor="#8B4513"
+        android:pathData="M60,60m-55,0a55,55 0,1 1,110 0a55,55 0,1 1,-110 0" />
+    
+    <!-- Inner circle -->
+    <path
+        android:fillColor="#D2691E"
+        android:pathData="M60,60m-45,0a45,45 0,1 1,90 0a45,45 0,1 1,-90 0" />
+    
+    <!-- Backgammon triangles -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M30,25 L40,45 L20,45 Z" />
+    <path
+        android:fillColor="#000000"
+        android:pathData="M50,25 L60,45 L40,45 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M70,25 L80,45 L60,45 Z" />
+    <path
+        android:fillColor="#000000"
+        android:pathData="M90,25 L100,45 L80,45 Z" />
+        
+    <!-- Bottom triangles -->
+    <path
+        android:fillColor="#000000"
+        android:pathData="M30,95 L40,75 L20,75 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M50,95 L60,75 L40,75 Z" />
+    <path
+        android:fillColor="#000000"
+        android:pathData="M70,95 L80,75 L60,75 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M90,95 L100,75 L80,75 Z" />
+        
+    <!-- Game pieces as circles -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M35,35m-4,0a4,4 0,1 1,8 0a4,4 0,1 1,-8 0" />
+    <path
+        android:fillColor="#000000"
+        android:pathData="M85,85m-4,0a4,4 0,1 1,8 0a4,4 0,1 1,-8 0" />
+</vector> 

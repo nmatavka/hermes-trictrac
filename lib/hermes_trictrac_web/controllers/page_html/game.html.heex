@@ -7,7 +7,16 @@
       data-variant={@variant}
       data-bot={@bot || ""}
       data-bot-margot={@bot_margot || ""}
+      data-queue-size={@queue_size || ""}
+      data-ante={@ante || ""}
+      data-stake={@stake || ""}
+      data-hole-value={@hole_value || ""}
+      data-margot-enabled={@margot_enabled || "false"}
+      data-a-ecrire-partie-length={@a_ecrire_partie_length}
+      data-cash-per-jeton-minor={@cash_per_jeton_minor || ""}
       data-client-id-scope={@client_id_scope || "tab"}
+      data-identity-mode={Atom.to_string(@identity_mode || :manual)}
+      data-authenticated={if(@current_identity, do: "true", else: "false")}
       data-join-topic={"games:#{@game}"}
     >
       <p data-i18n="join.reactMissing">React app not loaded...</p>

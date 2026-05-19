@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="512px"
+   height="512px"
+   viewBox="-32 0 512 512"
+   version="1.1"
+   id="svg2505"
+   sodipodi:docname="die_2.svg"
+   inkscape:version="1.2.1 (9c6d41e410, 2022-07-14)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs2509" />
+  <sodipodi:namedview
+     id="namedview2507"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     showgrid="false"
+     inkscape:zoom="1.6152344"
+     inkscape:cx="255.69045"
+     inkscape:cy="256.30955"
+     inkscape:window-width="1920"
+     inkscape:window-height="1007"
+     inkscape:window-x="0"
+     inkscape:window-y="0"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg2505" />
+  <path
+     d="M384 32H64C28.65 32 0 60.65 0 96v320c0 35.35 28.65 64 64 64h320c35.35 0 64-28.65 64-64V96c0-35.35-28.65-64-64-64zM128 192c-17.67 0-32-14.33-32-32s14.33-32 32-32 32 14.33 32 32-14.33 32-32 32zm192 192c-17.67 0-32-14.33-32-32s14.33-32 32-32 32 14.33 32 32-14.33 32-32 32z"
+     id="path2503" />
+  <path
+     style="fill:#ffffff;stroke-width:3.66198"
+     d="m 152.4273,190.64935 c -12.45761,-3.35314 -21.79037,-13.68882 -23.72712,-26.27692 -2.31776,-15.06451 7.90021,-30.61799 22.83543,-34.75941 13.32603,-3.69519 27.38182,1.67822 34.93571,13.35563 6.66043,10.29621 6.65991,23.83905 -0.001,34.14524 -7.20927,11.15414 -21.61298,16.88108 -34.04271,13.53546 z"
+     id="path2511"
+     transform="translate(-32)" />
+  <path
+     style="fill:#ffffff;stroke-width:3.66198"
+     d="m 344.03138,382.60653 c -13.92209,-3.82729 -23.48879,-16.3274 -23.45369,-30.64522 0.036,-14.69827 9.6082,-26.883 24.08015,-30.65247 17.28902,-4.50321 35.52955,7.72867 38.60219,25.88617 2.61556,15.45633 -7.92513,31.25833 -23.64099,35.44125 -4.07607,1.08489 -11.58524,1.07056 -15.58766,-0.0297 z"
+     id="path2513"
+     transform="translate(-32)" />
+</svg>

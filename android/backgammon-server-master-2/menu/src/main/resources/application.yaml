@@ -1,0 +1,55 @@
+spring:
+  application:
+    name: menu
+  datasource:
+    url: jdbc:postgresql://postgres-service:5432/menu
+    driver-class-name: org.postgresql.Driver
+    username: postgres
+    password: admin
+  jpa:
+    generate-ddl: true
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+  cloud:
+    openfeign:
+      client:
+        config:
+          player-service:
+            url: "http://player-service:84"
+            read-timeout: 6_000
+  cache:
+    type: redis
+    redis:
+      time-to-live: 2m
+  data:
+    redis:
+      host: redis-service
+      port: 6379
+  kafka:
+    bootstrap-servers: 176.108.249.125:9092
+    consumer:
+      group-id: 1
+      enable-auto-commit: true
+
+kafka:
+  topic:
+    narde:
+      event:
+        game-end: narde.game-event.end
+
+server:
+  port: 81
+
+route:
+  config:
+    backgammon-game:
+      uri: 'http://game-service:82'
+
+disable-job: false
+
+app:
+  search-job:
+    timeout: 3000

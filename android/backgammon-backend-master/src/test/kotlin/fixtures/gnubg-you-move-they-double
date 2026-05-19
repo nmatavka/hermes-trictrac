@@ -1,0 +1,35 @@
+(kyle) move 22/16 8/5
+ GNU Backgammon  Position ID: 0Cf4EQKYZ8xBBA
+                 Match ID   : MAGgAAAAAAAE
+ +12-11-10--9--8--7-------6--5--4--3--2--1-+     O: gnubg
+ | X  O     X  O    |   | O  X  O          |     0 points
+ | X  O        O    |   | O     O          |     On roll
+ | X                |   | O                |
+ | X                |   | O                |
+ | 6                |   |                  |
+^|                  |BAR|                  |     5 points match (Cube: 1)
+ |                  |   | X                |
+ |                  |   | X                |
+ | O                |   | X                |
+ | O                |   | X                |
+ | O           X  O |   | X  X  O          |     0 points
+ +13-14-15-16-17-18------19-20-21-22-23-24-+     X: kyle
+
+gnubg doubles.
+ GNU Backgammon  Position ID: 0Cf4EQKYZ8xBBA
+                 Match ID   : MBmgAAAAAAAE
+ +12-11-10--9--8--7-------6--5--4--3--2--1-+     O: gnubg
+ | X  O     X  O    |   | O  X  O          |     0 points
+ | X  O        O    |   | O     O          |
+ | X                |   | O                |
+ | X                |   | O                |
+ | 6                |   |                  |
+^|                  |BAR|                  |
+ |                  |   | X                |
+ |                  |   | X                |
+ | O                |   | X                |
+ | O                |   | X                |     Cube offered at 2
+ | O           X  O |   | X  X  O          |     0 points
+ +13-14-15-16-17-18------19-20-21-22-23-24-+     X: kyle
+
+(kyle)

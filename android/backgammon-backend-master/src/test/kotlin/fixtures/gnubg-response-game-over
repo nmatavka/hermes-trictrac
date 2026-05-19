@@ -1,0 +1,155 @@
+Command: roll
+GNUBG Response:
+’.
+ GNU Backgammon  Position ID: AQAATAAAAAAAAA
+                 Match ID   : UQmgAAAAAAAE
+ +13-14-15-16-17-18------19-20-21-22-23-24-+     O: gnubg
+ |                  |   |                O | OOO 0 points
+ |                  |   |                  | OOO
+ |                  |   |                  | OOO
+ |                  |   |                  | OOO
+ |                  |   |                  | OO
+v|                  |BAR|                  |     5 points match
+ |                  |   |                  | XX
+ |                  |   |                  | XX
+ |                  |   |                  | XX
+ |                  |   |                X | XXX On roll
+ |                  |   |          X     X | XXX 0 points
+ +12-11-10--9--8--7-------6--5--4--3--2--1-+     X: kyleth95 (Cube: 2)
+
+The prompt is set to ‘
+’.
+ GNU Backgammon  Position ID: AQAATAAAAAAAAA
+                 Match ID   : UYmuAAAAAAAE
+ +13-14-15-16-17-18------19-20-21-22-23-24-+     O: gnubg
+ |                  |   |                O | OOO 0 points
+ |                  |   |                  | OOO
+ |                  |   |                  | OOO
+ |                  |   |                  | OOO
+ |                  |   |                  | OO
+v|                  |BAR|                  |     5 points match
+ |                  |   |                  | XX
+ |                  |   |                  | XX
+ |                  |   |                  | XX
+ |                  |   |                X | XXX Rolled 53
+ |                  |   |          X     X | XXX 0 points
+ +12-11-10--9--8--7-------6--5--4--3--2--1-+     X: kyleth95 (Cube: 2)
+
+kyleth95 moves 3/off 1/off.
+ GNU Backgammon  Position ID: AQAABAAAAAAAAA
+                 Match ID   : EQGgAAAAAAAE
+ +12-11-10--9--8--7-------6--5--4--3--2--1-+     O: gnubg
+ |                  |   |                O | OOO 0 points
+ |                  |   |                  | OOO On roll
+ |                  |   |                  | OOO
+ |                  |   |                  | OOO
+ |                  |   |                  | OO
+^|                  |BAR|                  |     5 points match
+ |                  |   |                  | XX
+ |                  |   |                  | XXX
+ |                  |   |                  | XXX
+ |                  |   |                  | XXX
+ |                  |   |                X | XXX 0 points
+ +13-14-15-16-17-18------19-20-21-22-23-24-+     X: kyleth95 (Cube: 2)
+
+ GNU Backgammon  Position ID: AQAABAAAAAAAAA
+                 Match ID   : EQGuAAAAAAAE
+ +12-11-10--9--8--7-------6--5--4--3--2--1-+     O: gnubg
+ |                  |   |                O | OOO 0 points
+ |                  |   |                  | OOO Rolled 43
+ |                  |   |                  | OOO
+ |                  |   |                  | OOO
+ |                  |   |                  | OO
+^|                  |BAR|                  |     5 points match
+ |                  |   |                  | XX
+ |                  |   |                  | XXX
+ |                  |   |                  | XXX
+ |                  |   |                  | XXX
+ |                  |   |                X | XXX 0 points
+ +13-14-15-16-17-18------19-20-21-22-23-24-+     X: kyleth95 (Cube: 2)
+
+gnubg moves 1/off.
+gnubg wins a single game and 2 points.
+The score (after 1 game) is: gnubg 2, kyleth95 0 (match to 5 points)
+gnubg rolls 1, kyleth95 rolls 4.
+ GNU Backgammon  Position ID: 4HPwATDgc/ABMA
+                 Match ID   : cAmmACAAAAAE
+ +13-14-15-16-17-18------19-20-21-22-23-24-+     O: gnubg
+ | X           O    |   | O              X |     2 points
+ | X           O    |   | O              X |
+ | X           O    |   | O                |
+ | X                |   | O                |
+ | X                |   | O                |
+v|                  |BAR|                  |     5 points match (Cube: 1)
+ | O                |   | X                |
+ | O                |   | X                |
+ | O           X    |   | X                |
+ | O           X    |   | X              O |     Rolled 41
+ | O           X    |   | X              O |     0 points
+ +12-11-10--9--8--7-------6--5--4--3--2--1-+     X: kyleth95
+
+ GNU Backgammon  Position ID: 4HPwATDgc/ABMA
+                 Match ID   : cAmmACAAAAAE
+ +13-14-15-16-17-18------19-20-21-22-23-24-+     O: gnubg
+ | X           O    |   | O              X |     2 points
+ | X           O    |   | O              X |
+ | X           O    |   | O                |
+ | X                |   | O                |
+ | X                |   | O                |
+v|                  |BAR|                  |     5 points match (Cube: 1)
+ | O                |   | X                |
+ | O                |   | X                |
+ | O           X    |   | X                |
+ | O           X    |   | X              O |     Rolled 41
+ | O           X    |   | X              O |     0 points
+ +12-11-10--9--8--7-------6--5--4--3--2--1-+     X: kyleth95
+
+ GNU Backgammon  Position ID: 4HPwATDgc/ABMA
+                 Match ID   : cAmmACAAAAAE
+ +13-14-15-16-17-18------19-20-21-22-23-24-+     O: gnubg
+ | X           O    |   | O              X |     2 points
+ | X           O    |   | O              X |
+ | X           O    |   | O                |
+ | X                |   | O                |
+ | X                |   | O                |
+v|                  |BAR|                  |     5 points match (Cube: 1)
+ | O                |   | X                |
+ | O                |   | X                |
+ | O           X    |   | X                |
+ | O           X    |   | X              O |     Rolled 41
+ | O           X    |   | X              O |     0 points
+ +12-11-10--9--8--7-------6--5--4--3--2--1-+     X: kyleth95
+
+The prompt is set to ‘
+’.
+    1. Cubeful 2-ply    24/23 13/9                   Eq.: +0.074
+       0.496 0.140 0.006 - 0.504 0.135 0.006
+        2-ply cubeful prune [world class]
+    2. Cubeful 2-ply    13/9 6/5                     Eq.: +0.057 (-0.017)
+       0.493 0.141 0.008 - 0.507 0.147 0.010
+        2-ply cubeful prune [world class]
+    3. Cubeful 2-ply    24/23 24/20                  Eq.: +0.043 (-0.031)
+       0.493 0.126 0.005 - 0.507 0.134 0.005
+        2-ply cubeful prune [world class]
+    4. Cubeful 2-ply    13/8                         Eq.: +0.043 (-0.032)
+       0.490 0.136 0.006 - 0.510 0.143 0.006
+        2-ply cubeful prune [world class]
+    5. Cubeful 2-ply    24/20 6/5                    Eq.: +0.024 (-0.050)
+       0.489 0.126 0.006 - 0.511 0.143 0.008
+        2-ply cubeful prune [world class]
+    6. Cubeful 2-ply    13/9 8/7                     Eq.: -0.032 (-0.106)
+       0.469 0.135 0.007 - 0.531 0.156 0.011
+        2-ply cubeful prune [world class]
+    7. Cubeful 2-ply    24/23 8/4                    Eq.: -0.050 (-0.124)
+       0.467 0.127 0.006 - 0.533 0.156 0.008
+        2-ply cubeful prune [world class]
+    8. Cubeful 2-ply    24/20 8/7                    Eq.: -0.052 (-0.126)
+       0.468 0.121 0.005 - 0.532 0.147 0.008
+        2-ply cubeful prune [world class]
+    9. Cubeful 0-ply    24/23 6/2                    Eq.: -0.065 (-0.139)
+       0.467 0.119 0.006 - 0.533 0.160 0.008
+        0-ply cubeful prune [expert]
+   10. Cubeful 0-ply    8/4 6/5                      Eq.: -0.084 (-0.159)
+       0.462 0.125 0.009 - 0.538 0.176 0.016
+        0-ply cubeful prune [expert]
+The prompt is set to

@@ -6,7 +6,14 @@ defmodule HermesTrictracWeb.PageControllerTest do
 
     body = html_response(conn, 200)
     assert body =~ "Start or Join a Table"
+    assert body =~ ~s(name="play_mode")
+    assert body =~ "Table mode"
+    assert body =~ "Head-to-head"
+    assert body =~ "Multi-seat"
     assert body =~ ~s(name="variant")
+    assert body =~ ~s(data-play-mode-choice)
+    assert body =~ ~s(data-play-mode-input)
+    assert body =~ ~s(data-variant-input)
     assert body =~ "Choose a Game"
     assert body =~ "Backgammon"
     assert body =~ "Trictrac classique"
@@ -32,8 +39,57 @@ defmodule HermesTrictracWeb.PageControllerTest do
     assert body =~ "Sbaraglino"
     assert body =~ "Bräde"
     assert body =~ "Plein"
+    assert body =~ ~s(name="head_to_head_variant")
+    assert body =~ ~s(data-head-to-head-variant)
+    assert body =~ ~s(name="multi_seat_variant")
+    assert body =~ ~s(data-multi-seat-variant)
+    assert body =~ ~s(data-session-kind="poule")
+    assert body =~ ~s(data-session-kind="multiplayer")
+    assert body =~ ~s(data-poule-style="growing_pot")
+    assert body =~ ~s(data-poule-style="plucked_pot")
+    assert body =~ ~s(data-multiplayer-mode="a_tourner")
+    assert body =~ ~s(data-multiplayer-mode="chouette")
+    assert body =~ ~s(data-multiplayer-mode="combine_deux_contre_deux")
+    assert body =~ "Choose a Multi-seat Table"
+    assert body =~ "Trictrac en poule"
+    assert body =~ "Toccategli en poule"
+    assert body =~ "Trictrac en poule (plumée)"
+    assert body =~ "Toccategli en poule (plumée)"
+    assert body =~ "Trictrac à écrire à tourner"
+    assert body =~ "Trictrac à écrire chouette"
+    assert body =~ "Trictrac à écrire deux contre deux"
+    assert body =~ "Trictrac combiné chouette"
+    assert body =~ "Trictrac combiné deux contre deux"
+
+    assert body =~
+             "Some multi-seat tables rotate a queue, while others use fixed roles."
+
+    assert body =~ ~s(name="queue_size")
+    assert body =~ "Queue Size:"
+    assert body =~ ~s(name="ante")
+    assert body =~ "Ante:"
+    assert body =~ ~s(name="stake")
+    assert body =~ "Stake:"
+    assert body =~ ~s(name="hole_value")
+    assert body =~ "Hole value:"
+    assert body =~ ~s(name="cash_per_jeton")
+    assert body =~ "Cash per jeton:"
+    assert body =~ ~s(name="margot_enabled")
+
+    assert body =~
+             "Extra joiners watch as spectators. If a roster spot opens, a spectator can claim it."
+
+    assert body =~ ~s(data-poule-growing-config)
+    assert body =~ ~s(data-plucked-pot-config)
+    assert body =~ ~s(data-poule-margot-config)
+    assert body =~ ~s(data-multiplayer-cash-config)
+    assert body =~ "Enter Multi-seat Table"
     refute body =~ "Brade Suedois"
     refute body =~ "Jeu du Plein"
+    refute body =~ ~s(name="multi_seat_format")
+    refute body =~ ~s(data-multiplayer-fixed-config)
+    refute body =~ "being wired"
+    refute body =~ "This historical table always uses 12 coups."
 
     assert body =~ "More games are not available for computer play yet."
     assert body =~ "Computer play uses BackgammonAI for English backgammon"
@@ -47,6 +103,59 @@ defmodule HermesTrictracWeb.PageControllerTest do
     assert body =~ ~s(data-join-topic="games:lobby")
     assert body =~ ~s(data-variant="tapa")
     assert body =~ ~s(data-client-id-scope="tab")
+  end
+
+  test "POST /game preserves multi-seat poule config", %{conn: conn} do
+    conn =
+      post(conn, "/game", %{
+        game: "poule-lobby",
+        name: "nick",
+        variant: "trictrac_en_poule",
+        queue_size: "3",
+        ante: "7",
+        margot_enabled: "true"
+      })
+
+    body = html_response(conn, 200)
+    assert body =~ ~s(data-variant="trictrac_en_poule")
+    assert body =~ ~s(data-queue-size="3")
+    assert body =~ ~s(data-ante="7")
+    assert body =~ ~s(data-margot-enabled="true")
+  end
+
+  test "POST /game preserves plucked-poule config", %{conn: conn} do
+    conn =
+      post(conn, "/game", %{
+        game: "plumee-lobby",
+        name: "nick",
+        variant: "trictrac_en_poule_plumee",
+        queue_size: "2",
+        stake: "100",
+        hole_value: "5",
+        margot_enabled: "false"
+      })
+
+    body = html_response(conn, 200)
+    assert body =~ ~s(data-variant="trictrac_en_poule_plumee")
+    assert body =~ ~s(data-queue-size="2")
+    assert body =~ ~s(data-stake="100")
+    assert body =~ ~s(data-hole-value="5")
+    assert body =~ ~s(data-margot-enabled="false")
+  end
+
+  test "POST /game preserves multiplayer cash accounting config", %{conn: conn} do
+    conn =
+      post(conn, "/game", %{
+        game: "tourner-lobby",
+        name: "nick",
+        variant: "trictrac_aecrire_a_tourner",
+        cash_per_jeton: "1.25"
+      })
+
+    body = html_response(conn, 200)
+    assert body =~ ~s(data-variant="trictrac_aecrire_a_tourner")
+    assert body =~ ~s(data-cash-per-jeton-minor="125")
+    refute body =~ ~s(data-a-ecrire-partie-length=)
   end
 
   test "POST /game preserves trictrac bot settings for supported variants", %{conn: conn} do

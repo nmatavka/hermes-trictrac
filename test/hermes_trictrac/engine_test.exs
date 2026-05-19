@@ -151,6 +151,7 @@ defmodule HermesTrictrac.EngineTest do
 
     snapshot = Engine.snapshot(engine)
     assert snapshot["variant"]["id"] == "backgammon"
+    assert snapshot["variant"]["uses_bar"] == true
     assert snapshot["status"] == "playing"
   end
 
@@ -159,6 +160,7 @@ defmodule HermesTrictrac.EngineTest do
     snapshot = Engine.snapshot(engine)
     points = snapshot["board"]["points"]
 
+    assert snapshot["variant"]["uses_bar"] == false
     assert Enum.at(points, 0)["pieces"] == List.duplicate("black", 15)
     assert Enum.at(points, 23)["pieces"] == List.duplicate("white", 15)
   end
@@ -198,6 +200,39 @@ defmodule HermesTrictrac.EngineTest do
     assert jacquet.doubles_mode == :repeat_four
     assert jacquet.opening_roll_mode == :highest
     assert jacquet.start_points == %{white: [{23, 15}], black: [{0, 15}]}
+  end
+
+  test "registry records inherent contrary and parallel movement families" do
+    contrary_ids = [
+      "backgammon",
+      "toccategli",
+      "trictrac_classique",
+      "trictrac_aecrire",
+      "trictrac_combine"
+    ]
+
+    parallel_ids = ["brade", "jacquet", "tapa"]
+
+    assert Enum.all?(contrary_ids, &(Registry.fetch!(&1).movement_mode == :contrary))
+    assert Enum.all?(parallel_ids, &(Registry.fetch!(&1).movement_mode == :parallel))
+  end
+
+  test "registry records which analysis variants use a bar" do
+    bar_ids = ["backgammon", "brade"]
+
+    no_bar_ids = [
+      "trictrac_classique",
+      "trictrac_aecrire",
+      "trictrac_combine",
+      "toccategli",
+      "plein",
+      "toc",
+      "jacquet",
+      "tapa"
+    ]
+
+    assert Enum.all?(bar_ids, &(Registry.fetch!(&1).uses_bar == true))
+    assert Enum.all?(no_bar_ids, &(Registry.fetch!(&1).uses_bar == false))
   end
 
   test "jacquet routes both players counterclockwise on the shared loop" do
@@ -1581,6 +1616,46 @@ defmodule HermesTrictrac.EngineTest do
              Engine.submit_turn_decision(stale_engine, "tenir", "nick", "tab-a")
   end
 
+  test "classique grande bredouille ends the match as a double win" do
+    engine = prepare_classique_reprise_engine("tt-classique-grande-bredouille")
+
+    score = [
+      engine.trictrac.score
+      |> Enum.at(0)
+      |> Map.merge(%{
+        points: 8,
+        trous: 11,
+        doubling_active: true,
+        bredouille: true,
+        etendard: true,
+        grande_bredouille: true
+      }),
+      engine.trictrac.score
+      |> Enum.at(1)
+      |> Map.merge(%{
+        points: 0,
+        trous: 0,
+        doubling_active: false,
+        bredouille: false,
+        etendard: false,
+        grande_bredouille: false
+      })
+    ]
+
+    trictrac = %{engine.trictrac | score: score}
+    engine = %{engine | trictrac: trictrac, runtime: %{engine.runtime | trictrac: trictrac}}
+
+    assert {:ok, engine} = Engine.confirm(engine, "nick", "tab-a")
+    snapshot = Engine.snapshot(engine)
+
+    assert snapshot["match"]["is_over"] == true
+    assert snapshot["match"]["winner"] == "white"
+    assert snapshot["match"]["winner_kind"] == "grande_bredouille"
+    assert snapshot["match"]["score"]["white"] == 2
+    assert snapshot["pending_turn_decision"] == nil
+    assert get_in(snapshot, ["trictrac", "score", Access.at(0), "trous"]) >= 12
+  end
+
   test "classique s'en aller resets the board and keeps the same player on reprise" do
     engine = prepare_classique_reprise_engine("tt-classique-reprise")
 
@@ -1597,6 +1672,92 @@ defmodule HermesTrictrac.EngineTest do
     assert get_in(snapshot, ["trictrac", "score_history"]) |> length() == 1
     assert Enum.at(snapshot["board"]["points"], 23)["pieces"] == List.duplicate("white", 15)
     assert Enum.at(snapshot["board"]["points"], 0)["pieces"] == List.duplicate("black", 15)
+  end
+
+  test "classique plucked poule does not offer reprise before six trous" do
+    engine =
+      prepare_classique_reprise_engine("tt-classique-plucked-pre-six")
+      |> Engine.seed_match_options(%{"pluckedPouleMode" => true})
+
+    assert {:ok, engine} = Engine.confirm(engine, "nick", "tab-a")
+    snapshot = Engine.snapshot(engine)
+
+    assert snapshot["pending_turn_decision"] == nil
+    assert snapshot["match"]["is_over"] == false
+    assert snapshot["turn"]["color"] == "black"
+    assert get_in(snapshot, ["trictrac", "score", Access.at(0), "trous"]) == 2
+  end
+
+  test "classique plucked poule s'en aller ends the round without resetting the board" do
+    engine = prepare_classique_reprise_engine("tt-classique-plucked-exit")
+
+    score = [
+      engine.trictrac.score
+      |> Enum.at(0)
+      |> Map.merge(%{
+        points: 8,
+        trous: 4,
+        doubling_active: true,
+        bredouille: true
+      }),
+      Enum.at(engine.trictrac.score, 1)
+    ]
+
+    trictrac = %{engine.trictrac | score: score}
+
+    engine =
+      %{
+        engine
+        | trictrac: trictrac,
+          runtime: %{engine.runtime | trictrac: trictrac}
+      }
+      |> Engine.seed_match_options(%{"pluckedPouleMode" => true})
+
+    assert {:ok, engine} = Engine.confirm(engine, "nick", "tab-a")
+    assert Engine.snapshot(engine)["pending_turn_decision"]["key"] == "reprise"
+
+    assert {:ok, engine} = Engine.submit_turn_decision(engine, "s'en aller", "nick", "tab-a")
+    snapshot = Engine.snapshot(engine)
+
+    assert snapshot["pending_turn_decision"] == nil
+    assert snapshot["match"]["is_over"] == true
+    assert snapshot["match"]["winner"] == "white"
+    assert snapshot["match"]["winner_kind"] == "grande_bredouille"
+    assert get_in(snapshot, ["trictrac", "score", Access.at(0), "trous"]) == 6
+    assert Enum.at(snapshot["board"]["points"], 17)["pieces"] == ["white", "white"]
+  end
+
+  test "classique plucked poule suppresses the ordinary twelve-trou auto-finish" do
+    engine = prepare_classique_reprise_engine("tt-classique-plucked-twelve")
+
+    score = [
+      engine.trictrac.score
+      |> Enum.at(0)
+      |> Map.merge(%{
+        points: 8,
+        trous: 10,
+        doubling_active: true,
+        bredouille: true
+      }),
+      Enum.at(engine.trictrac.score, 1)
+    ]
+
+    trictrac = %{engine.trictrac | score: score}
+
+    engine =
+      %{
+        engine
+        | trictrac: trictrac,
+          runtime: %{engine.runtime | trictrac: trictrac}
+      }
+      |> Engine.seed_match_options(%{"pluckedPouleMode" => true})
+
+    assert {:ok, engine} = Engine.confirm(engine, "nick", "tab-a")
+    snapshot = Engine.snapshot(engine)
+
+    assert snapshot["match"]["is_over"] == false
+    assert snapshot["pending_turn_decision"]["key"] == "reprise"
+    assert get_in(snapshot, ["trictrac", "score", Access.at(0), "trous"]) >= 12
   end
 
   test "reprise decisions can belong to the Toccategli beneficiary even on the opponent turn" do
@@ -2450,6 +2611,100 @@ defmodule HermesTrictrac.EngineTest do
     snapshot = Engine.snapshot(engine)
     assert "impuissance" in get_in(snapshot, ["trictrac", "last_events"])
     assert get_in(snapshot, ["trictrac", "score", Access.at(1), "points"]) == 2
+  end
+
+  test "classique match can end on an opponent-beneficiary scoring event" do
+    engine = Engine.new("tt-opponent-beneficiary-match-end", "trictrac_classique")
+    assert {:ok, engine, _} = Engine.join(engine, "nick", "tab-a")
+    assert {:ok, engine, _} = Engine.join(engine, "jane", "tab-b")
+
+    score = [
+      engine.trictrac.score
+      |> Enum.at(0)
+      |> Map.merge(%{
+        points: 0,
+        trous: 0,
+        doubling_active: false,
+        bredouille: false,
+        etendard: false,
+        grande_bredouille: false
+      }),
+      engine.trictrac.score
+      |> Enum.at(1)
+      |> Map.merge(%{
+        points: 10,
+        trous: 11,
+        doubling_active: true,
+        bredouille: true,
+        etendard: true,
+        grande_bredouille: true
+      })
+    ]
+
+    points =
+      Enum.map(0..23, fn index ->
+        cond do
+          index == 6 -> %{white: 15, black: 0}
+          index in [0, 1] -> %{white: 0, black: 2}
+          true -> %{white: 0, black: 0}
+        end
+      end)
+
+    board = %{engine.board | points: points}
+    dice = %{values: [1, 6], moves: [1, 6], moves_left: [1, 6], moves_played: []}
+
+    trictrac =
+      HermesTrictrac.Rules.Trictrac.Classique.begin_turn(
+        %{engine.trictrac | score: score},
+        board,
+        engine.variant,
+        :white,
+        dice
+      )
+
+    runtime =
+      engine.runtime
+      |> Map.put(:trictrac, trictrac)
+      |> Map.put(:board, board)
+      |> Map.put(:dice, dice)
+      |> Map.put(:turn_color, :white)
+      |> Map.put(:turn_number, 1)
+      |> Map.put(:match, engine.match)
+      |> Map.put(:history, [])
+
+    runtime =
+      Map.put(
+        runtime,
+        :legal_moves,
+        HermesTrictrac.Rules.Trictrac.Classique.legal_moves(runtime, engine.variant, :white)
+      )
+
+    engine = %{
+      engine
+      | runtime: runtime,
+        trictrac: trictrac,
+        board: board,
+        turn_color: :white,
+        turn_number: 1,
+        dice: dice,
+        legal_moves: runtime.legal_moves,
+        history: [],
+        status: :playing,
+        pending_match_options: nil
+    }
+
+    assert {:ok, engine} =
+             Engine.move(engine, %{"from" => 6, "to" => 5, "sequence" => nil}, "nick", "tab-a")
+
+    assert {:ok, engine} = Engine.confirm(engine, "nick", "tab-a")
+    snapshot = Engine.snapshot(engine)
+
+    assert "impuissance" in get_in(snapshot, ["trictrac", "last_events"])
+    assert snapshot["match"]["is_over"] == true
+    assert snapshot["match"]["winner"] == "black"
+    assert snapshot["match"]["winner_kind"] == "grande_bredouille"
+    assert snapshot["match"]["score"]["black"] == 2
+    assert snapshot["pending_turn_decision"] == nil
   end
 
   test "trictrac pile de misere can conserve on a later still-blocked turn" do

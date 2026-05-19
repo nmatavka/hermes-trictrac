@@ -13,6 +13,7 @@ defmodule HermesTrictrac.Rules.TrictracArchitectureTest do
     Dice,
     Events.Context,
     Events.RuleResult,
+    Moves,
     Obligation,
     Opening,
     OpeningState,
@@ -40,6 +41,46 @@ defmodule HermesTrictrac.Rules.TrictracArchitectureTest do
     assert %BranchAnalysis{} = analysis
     assert analysis.max_played > 0
     assert length(analysis.branches) > 0
+  end
+
+  test "best_end_branches ignores raw coin-rest singleton branches for conservation" do
+    variant = %{id: "trictrac_classique", family: :trictrac, total_pieces: 15}
+
+    board =
+      empty_board()
+      |> Map.put(:outside, %{white: 1, black: 0})
+      |> fill_range(:white, 18, 23, 2)
+      |> put_piece(:white, State.own_coin(:white), 2)
+
+    dice = %{values: [6, 1], moves: [6, 1], moves_left: [6, 1], moves_played: []}
+    analysis = Branches.best_end_branches(board, variant, :white, dice)
+
+    refute Enum.any?(analysis.branches, &Moves.all_paired?(&1, :white, 18, 23))
+
+    refute Enum.any?(
+             analysis.branches,
+             &(Moves.pieces_at(&1, State.own_coin(:white), :white) == 1)
+           )
+
+    assert Validation.build_conservation_candidates(board, variant, :white, dice, analysis) == []
+  end
+
+  test "petit jan conservation is not forced when spare men cannot pass into protected cases" do
+    variant = %{id: "trictrac_classique", family: :trictrac, total_pieces: 15}
+
+    board =
+      empty_board()
+      |> fill_range(:white, 18, 23, 2)
+      |> put_piece(:white, 17, 2)
+      |> put_piece(:white, 15, 1)
+      |> put_piece(:black, 0, 13)
+      |> put_piece(:black, 10, 2)
+
+    dice = %{values: [6, 1], moves: [6, 1], moves_left: [6, 1], moves_played: []}
+    analysis = Branches.best_end_branches(board, variant, :white, dice)
+
+    refute Enum.any?(analysis.branches, &Moves.all_paired?(&1, :white, 18, 23))
+    assert Validation.build_conservation_candidates(board, variant, :white, dice, analysis) == []
   end
 
   test "obligation building and satisfaction stay paired" do

@@ -1,8 +1,9 @@
 defmodule HermesTrictrac.GameServer do
   use GenServer
 
-  alias HermesTrictrac.GameSnapshot
+  alias HermesTrictrac.{GameSnapshot, TableSession}
   alias HermesTrictrac.Rules.Engine
+  alias HermesTrictrac.Rules.Registry, as: VariantRegistry
   alias HermesTrictrac.Training.TrictracBridge
 
   require Logger
@@ -21,13 +22,13 @@ defmodule HermesTrictrac.GameServer do
   @seat_reclaim_code "seat_reclaim_pending"
 
   def reg(name) do
-    {:via, Registry, {HermesTrictrac.GameReg, name}}
+    {:via, Elixir.Registry, {HermesTrictrac.GameReg, name}}
   end
 
-  def start(name, variant \\ "backgammon") do
+  def start(name, variant \\ "backgammon", opts \\ %{}) do
     spec = %{
       id: {__MODULE__, name},
-      start: {__MODULE__, :start_link, [name, variant]},
+      start: {__MODULE__, :start_link, [name, variant, opts]},
       restart: :permanent,
       type: :worker
     }
@@ -35,8 +36,8 @@ defmodule HermesTrictrac.GameServer do
     HermesTrictrac.GameSup.start_child(spec)
   end
 
-  def start_link(name, variant) do
-    GenServer.start_link(__MODULE__, {name, variant}, name: reg(name))
+  def start_link(name, variant, opts) do
+    GenServer.start_link(__MODULE__, {name, variant, opts}, name: reg(name))
   end
 
   def join(name, user, client_id, variant \\ "backgammon", opts \\ %{}) do
@@ -71,8 +72,8 @@ defmodule HermesTrictrac.GameServer do
     GenServer.call(reg(name), {:resign, user, client_id}, @call_timeout)
   end
 
-  def chat(name, chat, user) do
-    GenServer.call(reg(name), {:chat, chat, user}, @call_timeout)
+  def chat(name, chat, user, client_id) do
+    GenServer.call(reg(name), {:chat, chat, user, client_id}, @call_timeout)
   end
 
   def peek(name) do
@@ -87,37 +88,55 @@ defmodule HermesTrictrac.GameServer do
     GenServer.call(reg(name), {:remain_seated, user, client_id}, @call_timeout)
   end
 
-  def init({name, variant}) do
-    engine = Engine.new(name, variant)
-    {:ok, %{name: name, chat: [], engine: engine, bot: nil, seat_reclaim: nil}}
+  def claim_queue_spot(name, user, client_id) do
+    GenServer.call(reg(name), {:claim_queue_spot, user, client_id}, @call_timeout)
+  end
+
+  def claim_roster_slot(name, user, client_id) do
+    GenServer.call(reg(name), {:claim_roster_slot, user, client_id}, @call_timeout)
+  end
+
+  def leave(name, user, client_id) do
+    GenServer.call(reg(name), {:leave, user, client_id}, @call_timeout)
+  end
+
+  def viewer(name, user, client_id) do
+    GenServer.call(reg(name), {:viewer, user, client_id}, @call_timeout)
+  end
+
+  def init({name, variant_id, opts}) do
+    table_variant = VariantRegistry.get(variant_id)
+    base_variant_id = Map.get(table_variant, :base_variant_id, table_variant.id)
+    engine = Engine.new(name, base_variant_id)
+
+    session =
+      if VariantRegistry.session_variant?(variant_id) do
+        {:ok, session} = TableSession.new(table_variant, opts)
+        session
+      end
+
+    {:ok,
+     %{
+       name: name,
+       chat: [],
+       engine: engine,
+       bot: nil,
+       seat_reclaim: nil,
+       table_variant: table_variant,
+       session: session
+     }}
   end
 
   def handle_call({:join, user, client_id, requested_variant, opts}, _from, state) do
-    with :ok <- ensure_variant_match(state.engine, requested_variant, state.name),
-         {:ok, requested_bot} <- normalize_requested_bot(opts, state.engine.variant.id) do
-      if reclaimable_seat(state.engine, user, client_id, state.bot) do
-        reply_with_seat_reclaim(state, user, client_id)
+    auth_id = Map.get(opts, "auth_id")
+
+    with :ok <- ensure_variant_match(state, requested_variant, state.name),
+         {:ok, requested_bot} <-
+           normalize_requested_bot(opts, state.table_variant.id, state.session) do
+      if reclaimable_seat(state.engine, user, client_id, auth_id, state.bot) do
+        reply_with_seat_reclaim(state, user, client_id, auth_id)
       else
-        case normalize_engine_join(Engine.join(state.engine, user, client_id)) do
-          {:ok, engine, player} ->
-            with {:ok, cleared} <- maybe_clear_seat_reclaim(state, player),
-                 {:ok, updated} <-
-                   maybe_configure_bot(%{cleared | engine: engine}, player, requested_bot),
-                 {:ok, updated} <-
-                   maybe_prepare_bot_game(updated, user, client_id, requested_bot) do
-              persist(updated)
-              {:reply, {:ok, %{game: snapshot(updated), player: player}}, updated}
-            else
-              {:error, msg} ->
-                {:reply, {:error, error_payload(msg)}, state}
-            end
-
-          {:error, "Lobby is full."} ->
-            reply_with_seat_reclaim(state, user, client_id)
-
-          {:error, msg} ->
-            {:reply, {:error, error_payload(msg)}, state}
-        end
+        join_table(state, user, client_id, requested_bot, auth_id)
       end
     else
       {:error, msg} ->
@@ -125,55 +144,233 @@ defmodule HermesTrictrac.GameServer do
     end
   end
 
-  def handle_call({:move, move, user, client_id}, _from, state) do
-    proxy(state, Engine.move(state.engine, move, user, client_id))
+  def handle_call({:viewer, user, client_id}, _from, state) do
+    {:reply, viewer_payload(state, user, client_id), state}
   end
 
-  def handle_call({:roll, user, client_id}, _from, state) do
-    proxy(state, Engine.roll(state.engine, user, client_id))
+  def handle_call({:leave, _user, _client_id}, _from, %{session: nil} = state) do
+    {:reply, :ok, state}
   end
 
-  def handle_call({:undo, user, client_id}, _from, state) do
-    proxy(state, Engine.undo(state.engine, user, client_id))
+  def handle_call({:leave, _user, client_id}, _from, state) do
+    {:ok, session, _action} = TableSession.leave(state.session, client_id)
+    updated = %{state | session: session}
+    persist(updated)
+    broadcast_snapshot(updated)
+    {:reply, :ok, updated}
   end
 
-  def handle_call({:confirm, user, client_id}, _from, state) do
-    proxy(state, Engine.confirm(state.engine, user, client_id))
+  def handle_call({:claim_queue_spot, _user, _client_id}, _from, %{session: nil} = state) do
+    {:reply, {:error, "No open queue slot is available."}, state}
   end
 
-  def handle_call({:submit_match_options, options, user, client_id}, _from, state) do
-    proxy(state, Engine.submit_match_options(state.engine, options, user, client_id))
-  end
+  def handle_call({:claim_queue_spot, user, client_id}, _from, state) do
+    case TableSession.claim_queue_spot(state.session, client_id) do
+      {:ok, session, _viewer, {:start_round, host_id, guest_id}} ->
+        updated =
+          state
+          |> Map.put(:session, session)
+          |> clear_seat_reclaim()
+          |> start_session_round(host_id, guest_id)
 
-  def handle_call({:submit_turn_decision, decision, user, client_id}, _from, state) do
-    proxy(state, Engine.submit_turn_decision(state.engine, decision, user, client_id))
-  end
-
-  def handle_call({:resign, user, client_id}, _from, state) do
-    proxy(state, Engine.resign(state.engine, user, client_id))
-  end
-
-  def handle_call({:remain_seated, user, client_id}, _from, state) do
-    case maybe_cancel_seat_reclaim(state, user, client_id) do
-      {:ok, updated} ->
         persist(updated)
-        {:reply, {:ok, snapshot(updated)}, updated}
+        {:reply, {:ok, snapshot_for(updated, user, client_id)}, updated}
+
+      {:ok, session, _viewer, nil} ->
+        updated = %{state | session: session}
+        persist(updated)
+        {:reply, {:ok, snapshot_for(updated, user, client_id)}, updated}
 
       {:error, msg} ->
         {:reply, {:error, msg}, state}
     end
   end
 
-  def handle_call({:chat, chat, _user}, _from, state) do
-    updated = %{state | chat: state.chat ++ [chat]}
+  def handle_call({:claim_roster_slot, _user, _client_id}, _from, %{session: nil} = state) do
+    {:reply, {:error, "No open roster slot is available."}, state}
+  end
+
+  def handle_call({:claim_roster_slot, user, client_id}, _from, state) do
+    case TableSession.claim_roster_slot(state.session, client_id) do
+      {:ok, session, _viewer, {:start_round, host_id, guest_id}} ->
+        updated =
+          state
+          |> Map.put(:session, session)
+          |> clear_seat_reclaim()
+          |> start_session_round(host_id, guest_id)
+
+        persist(updated)
+        {:reply, {:ok, snapshot_for(updated, user, client_id)}, updated}
+
+      {:ok, session, _viewer, {:seat_pair, host_id, guest_id}} ->
+        updated =
+          state
+          |> Map.put(:session, session)
+          |> clear_seat_reclaim()
+          |> seat_session_pair(host_id, guest_id)
+
+        persist(updated)
+        {:reply, {:ok, snapshot_for(updated, user, client_id)}, updated}
+
+      {:ok, session, _viewer, {:seat_pair, host_id, guest_id, metadata}} ->
+        updated =
+          state
+          |> Map.put(:session, session)
+          |> clear_seat_reclaim()
+          |> seat_session_pair(host_id, guest_id, metadata)
+
+        persist(updated)
+        {:reply, {:ok, snapshot_for(updated, user, client_id)}, updated}
+
+      {:ok, session, _viewer, nil} ->
+        updated = %{state | session: session}
+        persist(updated)
+        {:reply, {:ok, snapshot_for(updated, user, client_id)}, updated}
+
+      {:error, msg} ->
+        {:reply, {:error, msg}, state}
+    end
+  end
+
+  def handle_call({:move, move, user, client_id}, _from, state) do
+    with :ok <- ensure_active_viewer(state, user, client_id) do
+      proxy(state, Engine.move(state.engine, move, user, client_id))
+    else
+      {:error, msg} -> {:reply, {:error, msg}, state}
+    end
+  end
+
+  def handle_call({:roll, user, client_id}, _from, %{session: session} = state)
+      when not is_nil(session) do
+    cond do
+      TableSession.pending_order_draw?(session) ->
+        case TableSession.roll_for_order(session, client_id) do
+          {:ok, next_session, nil} ->
+            updated = %{state | session: next_session}
+            persist(updated)
+            {:reply, {:ok, snapshot_for(updated, user, client_id)}, updated}
+
+          {:error, msg} ->
+            {:reply, {:error, msg}, state}
+        end
+
+      true ->
+        with :ok <- ensure_active_viewer(state, user, client_id) do
+          proxy(state, Engine.roll(state.engine, user, client_id))
+        else
+          {:error, msg} -> {:reply, {:error, msg}, state}
+        end
+    end
+  end
+
+  def handle_call({:roll, user, client_id}, _from, state) do
+    with :ok <- ensure_active_viewer(state, user, client_id) do
+      proxy(state, Engine.roll(state.engine, user, client_id))
+    else
+      {:error, msg} -> {:reply, {:error, msg}, state}
+    end
+  end
+
+  def handle_call({:undo, user, client_id}, _from, state) do
+    with :ok <- ensure_active_viewer(state, user, client_id) do
+      proxy(state, Engine.undo(state.engine, user, client_id))
+    else
+      {:error, msg} -> {:reply, {:error, msg}, state}
+    end
+  end
+
+  def handle_call({:confirm, user, client_id}, _from, state) do
+    with :ok <- ensure_active_viewer(state, user, client_id) do
+      proxy(state, Engine.confirm(state.engine, user, client_id))
+    else
+      {:error, msg} -> {:reply, {:error, msg}, state}
+    end
+  end
+
+  def handle_call({:submit_match_options, options, user, client_id}, _from, state) do
+    cond do
+      state.session && TableSession.pending_match_options?(state.session) ->
+        case TableSession.submit_match_options(state.session, options, client_id) do
+          {:ok, session, {:start_round, host_id, guest_id}} ->
+            updated =
+              state
+              |> Map.put(:session, session)
+              |> clear_seat_reclaim()
+              |> start_session_round(host_id, guest_id)
+
+            persist(updated)
+            {:reply, {:ok, snapshot_for(updated, user, client_id)}, updated}
+
+          {:ok, session, nil} ->
+            updated = %{state | session: session}
+            persist(updated)
+            {:reply, {:ok, snapshot_for(updated, user, client_id)}, updated}
+
+          {:error, msg} ->
+            {:reply, {:error, msg}, state}
+        end
+
+      true ->
+        with :ok <- ensure_active_viewer(state, user, client_id) do
+          proxy(state, Engine.submit_match_options(state.engine, options, user, client_id))
+        else
+          {:error, msg} -> {:reply, {:error, msg}, state}
+        end
+    end
+  end
+
+  def handle_call({:submit_turn_decision, decision, user, client_id}, _from, state) do
+    with :ok <- ensure_active_viewer(state, user, client_id) do
+      proxy(state, Engine.submit_turn_decision(state.engine, decision, user, client_id))
+    else
+      {:error, msg} -> {:reply, {:error, msg}, state}
+    end
+  end
+
+  def handle_call({:resign, user, client_id}, _from, state) do
+    with :ok <- ensure_active_viewer(state, user, client_id),
+         :ok <- ensure_resign_available(state) do
+      proxy(state, Engine.resign(state.engine, user, client_id))
+    else
+      {:error, msg} -> {:reply, {:error, msg}, state}
+    end
+  end
+
+  def handle_call({:remain_seated, user, client_id}, _from, state) do
+    case maybe_cancel_seat_reclaim(state, user, client_id) do
+      {:ok, updated} ->
+        persist(updated)
+        {:reply, {:ok, snapshot_for(updated, user, client_id)}, updated}
+
+      {:error, msg} ->
+        {:reply, {:error, msg}, state}
+    end
+  end
+
+  def handle_call({:chat, chat, user, client_id}, _from, state) do
+    updated = %{state | chat: state.chat ++ [enrich_chat(chat, state, user, client_id)]}
     persist(updated)
-    {:reply, {:ok, snapshot(updated)}, updated}
+    {:reply, {:ok, snapshot_for(updated, user, client_id)}, updated}
   end
 
   def handle_call(:peek, _from, state) do
     {:ok, updated} = maybe_run_bot_turns(state)
     persist(updated)
     {:reply, snapshot(updated), updated}
+  end
+
+  def handle_call(:reset, _from, %{session: session} = state) when not is_nil(session) do
+    if session.phase == :finished do
+      updated =
+        state
+        |> reset_session_table()
+        |> clear_seat_reclaim()
+
+      persist(updated)
+      {:reply, {:ok, snapshot(updated)}, updated}
+    else
+      {:reply, {:error, "Reset is only available after the match is over."}, state}
+    end
   end
 
   def handle_call(:reset, _from, state) do
@@ -206,7 +403,11 @@ defmodule HermesTrictrac.GameServer do
   end
 
   defp proxy(state, {:ok, engine}) do
-    updated = %{state | engine: engine}
+    updated =
+      state
+      |> Map.put(:engine, engine)
+      |> maybe_advance_session()
+
     {:ok, updated} = maybe_run_bot_turns(updated, broadcast: true)
     persist(updated)
     {:reply, {:ok, snapshot(updated)}, updated}
@@ -215,11 +416,390 @@ defmodule HermesTrictrac.GameServer do
   defp proxy(state, {:error, msg}), do: {:reply, {:error, msg}, state}
 
   defp snapshot(state) do
-    state.engine
-    |> Engine.snapshot()
-    |> GameSnapshot.with_chat(state.chat)
-    |> GameSnapshot.with_bot(state.bot)
-    |> GameSnapshot.with_seat_reclaim(state.seat_reclaim)
+    base_snapshot =
+      state.engine
+      |> Engine.snapshot()
+      |> GameSnapshot.with_chat(state.chat)
+      |> GameSnapshot.with_bot(state.bot)
+      |> GameSnapshot.with_seat_reclaim(state.seat_reclaim)
+
+    if state.session do
+      TableSession.inject_snapshot(base_snapshot, state.session)
+    else
+      base_snapshot
+    end
+  end
+
+  defp snapshot_for(state, user, client_id) do
+    snapshot(state)
+    |> GameSnapshot.with_viewer(viewer_payload(state, user, client_id))
+  end
+
+  defp viewer_payload(%{session: session} = _state, _user, client_id) when not is_nil(session) do
+    TableSession.viewer(session, client_id)
+  end
+
+  defp viewer_payload(state, _user, client_id) do
+    case actor_by_client_id(state.engine, client_id) do
+      nil ->
+        nil
+
+      player ->
+        %{
+          "id" => player.id,
+          "name" => player.name,
+          "role" => "active",
+          "seat" => if(player.color == :white, do: "host", else: "guest"),
+          "seat_color" => Atom.to_string(player.color),
+          "can_claim_queue_spot" => false
+        }
+    end
+  end
+
+  defp join_table(%{session: session} = state, user, client_id, _requested_bot, auth_id)
+       when not is_nil(session) do
+    join_session_table(state, user, client_id, auth_id)
+  end
+
+  defp join_table(state, user, client_id, requested_bot, auth_id) do
+    case normalize_engine_join(Engine.join(state.engine, user, client_id, auth_id)) do
+      {:ok, engine, player} ->
+        with {:ok, cleared} <- maybe_clear_seat_reclaim(state, player),
+             {:ok, updated} <-
+               maybe_configure_bot(%{cleared | engine: engine}, player, requested_bot),
+             {:ok, updated} <-
+               maybe_prepare_bot_game(updated, user, client_id, requested_bot) do
+          persist(updated)
+
+          {:reply,
+           {:ok,
+            %{
+              game: snapshot_for(updated, user, client_id),
+              player: player,
+              viewer: viewer_payload(updated, user, client_id)
+            }}, updated}
+        else
+          {:error, msg} ->
+            {:reply, {:error, error_payload(msg)}, state}
+        end
+
+      {:error, "Lobby is full."} ->
+        reply_with_seat_reclaim(state, user, client_id, auth_id)
+
+      {:error, msg} ->
+        {:reply, {:error, error_payload(msg)}, state}
+    end
+  end
+
+  defp join_session_table(state, user, client_id, auth_id) do
+    case TableSession.join(state.session, user, client_id, auth_id) do
+      {:ok, session, viewer, {:start_round, host_id, guest_id}} ->
+        updated =
+          state
+          |> Map.put(:session, session)
+          |> clear_seat_reclaim()
+          |> start_session_round(host_id, guest_id)
+
+        persist(updated)
+
+        {:reply,
+         {:ok,
+          %{
+            game: snapshot_for(updated, user, client_id),
+            player: viewer_player(viewer),
+            viewer: viewer
+          }}, updated}
+
+      {:ok, session, viewer, {:seat_pair, host_id, guest_id}} ->
+        updated =
+          state
+          |> Map.put(:session, session)
+          |> clear_seat_reclaim()
+          |> seat_session_pair(host_id, guest_id)
+
+        persist(updated)
+
+        {:reply,
+         {:ok,
+          %{
+            game: snapshot_for(updated, user, client_id),
+            player: viewer_player(viewer),
+            viewer: viewer
+          }}, updated}
+
+      {:ok, session, viewer, {:seat_pair, host_id, guest_id, metadata}} ->
+        updated =
+          state
+          |> Map.put(:session, session)
+          |> clear_seat_reclaim()
+          |> seat_session_pair(host_id, guest_id, metadata)
+
+        persist(updated)
+
+        {:reply,
+         {:ok,
+          %{
+            game: snapshot_for(updated, user, client_id),
+            player: viewer_player(viewer),
+            viewer: viewer
+          }}, updated}
+
+      {:ok, session, viewer, nil} ->
+        updated = %{state | session: session}
+        persist(updated)
+
+        {:reply,
+         {:ok,
+          %{
+            game: snapshot_for(updated, user, client_id),
+            player: viewer_player(viewer),
+            viewer: viewer
+          }}, updated}
+    end
+  end
+
+  defp viewer_player(%{"role" => "active"} = viewer) do
+    %{
+      "id" => viewer["id"],
+      "name" => viewer["name"],
+      "color" => viewer["seat_color"]
+    }
+  end
+
+  defp viewer_player(_viewer), do: nil
+
+  defp fresh_session_engine(state) do
+    state.name
+    |> Engine.new(state.engine.variant.id)
+    |> Engine.seed_match_options(TableSession.round_options(state.session))
+  end
+
+  defp start_session_round(state, host_id, guest_id) do
+    state =
+      if state.session do
+        %{state | session: TableSession.round_started(state.session)}
+      else
+        state
+      end
+
+    host_member = state.session.members[host_id]
+    guest_member = state.session.members[guest_id]
+
+    engine =
+      fresh_session_engine(state)
+      |> join_round_player(host_member)
+      |> join_round_player(guest_member)
+      |> maybe_force_session_start(state.session)
+
+    %{state | engine: engine}
+  end
+
+  defp start_waiting_poule_round(%{session: %{active: %{host: nil}}} = state) do
+    %{state | engine: fresh_session_engine(state)}
+  end
+
+  defp start_waiting_poule_round(state) do
+    host_member = state.session.members[state.session.active.host]
+    engine = fresh_session_engine(state) |> join_round_player(host_member)
+    %{state | engine: engine}
+  end
+
+  defp seat_session_pair(state, host_id, guest_id, metadata \\ nil) do
+    host_member = state.session.members[host_id]
+    guest_member = state.session.members[guest_id]
+
+    engine =
+      state.engine
+      |> replace_round_players(host_member, guest_member)
+      |> maybe_force_session_pair_start(metadata)
+
+    %{state | engine: engine}
+  end
+
+  defp join_round_player(engine, nil), do: engine
+
+  defp join_round_player(engine, member) do
+    {:ok, engine, _player} = Engine.join(engine, member.name, member.client_id, member.auth_id)
+    engine
+  end
+
+  defp maybe_force_session_start(engine, %{kind: :multiplayer} = session) do
+    Engine.force_start_turn(engine, TableSession.round_start_color(session))
+  end
+
+  defp maybe_force_session_start(engine, _session), do: engine
+
+  defp maybe_force_session_pair_start(engine, %{start_color: color})
+       when color in [:white, :black] do
+    Engine.force_coup_starter(engine, color)
+  end
+
+  defp maybe_force_session_pair_start(engine, _metadata), do: engine
+
+  defp maybe_advance_session(%{session: nil} = state), do: state
+
+  defp maybe_advance_session(state) do
+    case TableSession.advance(state.session, state.engine) do
+      {:ok, session, :finished} ->
+        %{state | session: session}
+
+      {:ok, session, {:start_round, host_id, guest_id}} ->
+        state
+        |> Map.put(:session, session)
+        |> clear_seat_reclaim()
+        |> start_session_round(host_id, guest_id)
+
+      {:ok, session, {:seat_pair, host_id, guest_id}} ->
+        state
+        |> Map.put(:session, session)
+        |> clear_seat_reclaim()
+        |> seat_session_pair(host_id, guest_id)
+
+      {:ok, session, {:seat_pair, host_id, guest_id, metadata}} ->
+        state
+        |> Map.put(:session, session)
+        |> clear_seat_reclaim()
+        |> seat_session_pair(host_id, guest_id, metadata)
+
+      {:ok, session, :waiting_for_queue_refill} ->
+        state
+        |> Map.put(:session, session)
+        |> clear_seat_reclaim()
+        |> start_waiting_poule_round()
+
+      {:ok, session, nil} ->
+        %{state | session: session}
+
+      {:error, _msg} ->
+        state
+    end
+  end
+
+  defp reset_session_table(state) do
+    {:ok, fresh_session} =
+      TableSession.new(state.table_variant, session_reset_opts(state.session))
+
+    {session, action} =
+      Enum.reduce(
+        TableSession.connected_competitors(state.session),
+        {fresh_session, nil},
+        fn member, {session_acc, _action_acc} ->
+          {:ok, session_next, _viewer, action_next} =
+            TableSession.join(session_acc, member.name, member.client_id, member.auth_id)
+
+          {session_next, action_next}
+        end
+      )
+
+    {session, action} =
+      Enum.reduce(TableSession.connected_spectators(state.session), {session, action}, fn member,
+                                                                                          {session_acc,
+                                                                                           action_acc} ->
+        {:ok, session_next, _viewer} =
+          TableSession.add_spectator(
+            session_acc,
+            member.name,
+            member.client_id,
+            member.auth_id
+          )
+
+        {session_next, action_acc}
+      end)
+
+    base = %{state | session: session, chat: []}
+
+    case action do
+      {:start_round, host_id, guest_id} ->
+        start_session_round(base, host_id, guest_id)
+
+      {:seat_pair, host_id, guest_id} ->
+        base
+        |> Map.put(:engine, fresh_session_engine(base))
+        |> seat_session_pair(host_id, guest_id)
+
+      {:seat_pair, host_id, guest_id, metadata} ->
+        base
+        |> Map.put(:engine, fresh_session_engine(base))
+        |> seat_session_pair(host_id, guest_id, metadata)
+
+      _ ->
+        %{base | engine: fresh_session_engine(base)}
+    end
+  end
+
+  defp ensure_active_viewer(%{session: nil}, _user, _client_id), do: :ok
+
+  defp ensure_active_viewer(state, user, client_id) do
+    case viewer_payload(state, user, client_id) do
+      %{"role" => "active"} -> :ok
+      _ -> {:error, "Only an active player can do that."}
+    end
+  end
+
+  defp ensure_resign_available(%{session: %{kind: :poule, style: :plucked_pot}}),
+    do: {:error, "Resign is unavailable for plucked-pool tables."}
+
+  defp ensure_resign_available(_state), do: :ok
+
+  defp enrich_chat(chat, state, user, client_id) do
+    viewer =
+      viewer_payload(state, user, client_id) ||
+        %{"id" => nil, "name" => user, "role" => "spectator"}
+
+    text =
+      get_in(chat, ["data", "text"]) ||
+        get_in(chat, [:data, :text]) ||
+        Map.get(chat, "text") ||
+        Map.get(chat, :text) ||
+        ""
+
+    %{
+      "author" => viewer["name"],
+      "author_id" => viewer["id"],
+      "author_role" => viewer["role"],
+      "author_color" => viewer["seat_color"],
+      "type" => "text",
+      "data" => %{"text" => to_string(text)}
+    }
+  end
+
+  defp maybe_put_session_config(map, _key, nil), do: map
+  defp maybe_put_session_config(map, key, value), do: Map.put(map, key, value)
+
+  defp replace_round_players(engine, host_member, guest_member) do
+    engine
+    |> put_in([:players, :host], replace_player(engine.players.host, host_member, :white))
+    |> put_in([:players, :guest], replace_player(engine.players.guest, guest_member, :black))
+  end
+
+  defp replace_player(nil, nil, _color), do: nil
+
+  defp replace_player(player, member, color) do
+    %{
+      id: if(player, do: player.id, else: System.unique_integer([:positive])),
+      name: member.name,
+      color: color,
+      client_id: member.client_id,
+      auth_id: Map.get(member, :auth_id)
+    }
+  end
+
+  defp session_reset_opts(%{kind: :poule} = session) do
+    %{
+      "queue_size" => session.queue_size,
+      "margot_enabled" => session.margot_enabled
+    }
+    |> maybe_put_session_config("ante", session.ante)
+    |> maybe_put_session_config("stake", session.stake)
+    |> maybe_put_session_config("hole_value", session.hole_value)
+  end
+
+  defp session_reset_opts(%{kind: :multiplayer, mode: :a_tourner} = session) do
+    %{"cash_per_jeton_minor" => session.cash_per_jeton_minor}
+  end
+
+  defp session_reset_opts(%{kind: :multiplayer} = session) do
+    %{"cash_per_jeton_minor" => session.cash_per_jeton_minor}
   end
 
   defp broadcast_snapshot(state) do
@@ -243,8 +823,8 @@ defmodule HermesTrictrac.GameServer do
   defp error_payload(msg) when is_binary(msg), do: %{msg: msg}
   defp error_payload(payload) when is_map(payload), do: payload
 
-  defp reply_with_seat_reclaim(state, user, client_id) do
-    case maybe_start_seat_reclaim(state, user, client_id) do
+  defp reply_with_seat_reclaim(state, user, client_id, auth_id) do
+    case maybe_start_seat_reclaim(state, user, client_id, auth_id) do
       {:ok, updated, error} ->
         persist(updated)
         broadcast_snapshot(updated)
@@ -255,7 +835,16 @@ defmodule HermesTrictrac.GameServer do
     end
   end
 
-  defp normalize_requested_bot(opts, variant_id) when is_map(opts) do
+  defp normalize_requested_bot(opts, _variant_id, session)
+       when is_map(opts) and not is_nil(session) do
+    case Map.get(opts, "bot", Map.get(opts, :bot)) do
+      nil -> {:ok, nil}
+      "" -> {:ok, nil}
+      _ -> {:error, "Bot opponents are not available for multi-seat tables."}
+    end
+  end
+
+  defp normalize_requested_bot(opts, variant_id, _session) when is_map(opts) do
     case Map.get(opts, "bot", Map.get(opts, :bot)) do
       nil ->
         {:ok, nil}
@@ -285,10 +874,10 @@ defmodule HermesTrictrac.GameServer do
     end
   end
 
-  defp ensure_variant_match(%{variant: %{id: requested_variant}}, requested_variant, _name),
+  defp ensure_variant_match(%{table_variant: %{id: requested_variant}}, requested_variant, _name),
     do: :ok
 
-  defp ensure_variant_match(%{variant: variant}, requested_variant, name) do
+  defp ensure_variant_match(%{table_variant: variant}, requested_variant, name) do
     requested = requested_variant || "backgammon"
 
     if requested == variant.id do
@@ -301,8 +890,12 @@ defmodule HermesTrictrac.GameServer do
   defp normalize_engine_join({:ok, engine, player}), do: {:ok, engine, player}
   defp normalize_engine_join({:error, msg}), do: {:error, msg}
 
-  defp maybe_start_seat_reclaim(state, user, client_id) do
-    case reclaimable_seat(state.engine, user, client_id, state.bot) do
+  defp actor_by_client_id(engine, client_id) do
+    Enum.find([engine.players.host, engine.players.guest], &(&1 && &1.client_id == client_id))
+  end
+
+  defp maybe_start_seat_reclaim(state, user, client_id, auth_id) do
+    case reclaimable_seat(state.engine, user, client_id, auth_id, state.bot) do
       nil ->
         {:error, error_payload("Lobby is full."), state}
 
@@ -389,12 +982,12 @@ defmodule HermesTrictrac.GameServer do
     %{state | seat_reclaim: nil}
   end
 
-  defp reclaimable_seat(engine, user, client_id, bot) do
+  defp reclaimable_seat(engine, user, client_id, auth_id, bot) do
     cond do
-      eligible_reclaim_player?(engine.players.host, user, client_id, bot) ->
+      eligible_reclaim_player?(engine.players.host, user, client_id, auth_id, bot) ->
         {:host, engine.players.host}
 
-      eligible_reclaim_player?(engine.players.guest, user, client_id, bot) ->
+      eligible_reclaim_player?(engine.players.guest, user, client_id, auth_id, bot) ->
         {:guest, engine.players.guest}
 
       true ->
@@ -402,11 +995,12 @@ defmodule HermesTrictrac.GameServer do
     end
   end
 
-  defp eligible_reclaim_player?(nil, _user, _client_id, _bot), do: false
+  defp eligible_reclaim_player?(nil, _user, _client_id, _auth_id, _bot), do: false
 
-  defp eligible_reclaim_player?(player, user, client_id, bot) do
+  defp eligible_reclaim_player?(player, user, client_id, auth_id, bot) do
     player.name == user &&
       player.client_id != client_id &&
+      (is_nil(auth_id) or Map.get(player, :auth_id) != auth_id) &&
       not bot_client?(player, bot)
   end
 

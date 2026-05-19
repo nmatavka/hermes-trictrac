@@ -566,7 +566,10 @@ function build_params(;
     mem_buffer_size =
       smoke ?
         PLSchedule([0, 1], [256, 512]) :
-        PLSchedule([0, 1, 3], [10_000, 25_000, 50_000])
+        PLSchedule(
+          collect(0:3),
+          collect(25_000:25_000:100_000)
+        )
   )
 end
 function session_iteration_count(dir::String)

@@ -5,7 +5,7 @@ defmodule HermesTrictrac.MixProject do
     [
       app: :hermes_trictrac,
       version: "0.1.0",
-      elixir: "~> 1.16",
+      elixir: "~> 1.18",
       elixirc_paths: elixirc_paths(Mix.env()),
       listeners: [Phoenix.CodeReloader],
       start_permanent: Mix.env() == :prod,
@@ -40,7 +40,8 @@ defmodule HermesTrictrac.MixProject do
       {:gettext, "~> 1.0"},
       {:jason, "~> 1.4"},
       {:plug_cowboy, "~> 2.8"},
-      {:esbuild, "~> 0.10", runtime: Mix.env() == :dev}
+      {:esbuild, "~> 0.10", runtime: Mix.env() == :dev},
+      {:hermes_bluesky, path: "hermes-bluesky"}
     ]
   end
 

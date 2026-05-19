@@ -1,0 +1,137 @@
+/*********** Main game container ***********/
+.game-container {
+    width: fit-content;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    margin-top: 20px;
+    /* set the transformation properties when scaled using the `scale` key dynamically */
+    transform-origin: 50% top;
+}
+
+
+/*********** Status row ***********/
+
+.player-profile {
+    font-size: 36pt;
+    padding: 3px;
+    align-items: center;
+}
+
+.player-profile.active {
+    box-shadow: 3px 3px 10px black;
+}
+
+.player-profile span {
+    padding-left: 10px;
+    padding-right: 10px;
+}
+
+.status-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    margin-top: 5px;
+    margin-bottom: 5px;
+    padding: 2px;
+}
+
+.status-row > div {
+    display: flex;
+    width: 100%;
+}
+
+.status-row > div:nth-child(2) {
+    justify-content: center;
+}
+
+.status-row > div:nth-child(3) {
+    justify-content: flex-end;
+}
+
+#scoreboard {
+    font-size: 40pt;
+}
+
+
+/*********** board ***********/
+
+.board {
+    position: relative;
+    z-index: 1;
+}
+
+.board .background {
+    fill: saddlebrown;
+}
+
+.board .board-background {
+    fill: wheat;
+}
+
+.board .bar {
+    fill: saddlebrown;
+}
+
+.board  polygon {
+    stroke-width: 1;
+    stroke: black;
+}
+
+.board  polygon.dark {
+    fill: brown;
+}
+
+.board  polygon.light {
+    fill: beige;
+}
+
+circle {
+    stroke-width: 1;
+    stroke: black;
+}
+
+circle.dark {
+    fill: darkred;
+}
+
+circle.light {
+    fill: peru;
+}
+
+
+.board-container {
+    position: relative;
+    width: fit-content;
+}
+
+/*********** Board overlay for buttons, etc. ***********/
+
+.board-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+}
+
+.board-overlay > div {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.board-container .rolldice-button {
+    z-index: 20;
+    font-size: 28px;
+    padding-left: 20px;
+    padding-right: 20px;
+    border-style: solid;
+    border-color: black;
+    background: peru !important;
+    border-color: peru !important;
+}
+

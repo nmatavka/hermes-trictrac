@@ -32,7 +32,7 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique do
     )
     |> put_in(
       [:coin_rest_start_count_by_type, color],
-      Moves.coin_count_from_board(board, State.own_coin(color), color)
+      Moves.coin_count_from_board(board, State.own_coin(variant, color), color)
     )
     |> Map.put(:turn, %{
       State.turn_state()
@@ -111,7 +111,7 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique do
       not Validation.coin_rest_satisfied?(board, variant, color) ->
         {:error, :coin_rest}
 
-      Validation.obligations_satisfied?(board, color, analysis.obligations) ->
+      Validation.obligations_satisfied?(board, variant, color, analysis.obligations) ->
         {:ok, analysis}
 
       true ->

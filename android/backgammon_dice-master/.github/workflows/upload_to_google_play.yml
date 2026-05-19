@@ -1,0 +1,73 @@
+# This is a basic workflow to help you get started with Actions
+name: upload_to_google_play
+
+# Controls when the action will run. Triggers the workflow on push or pull request
+# events but only for the master branch
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  # This workflow contains a single job called "build"
+  build:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+    # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+    - uses: actions/checkout@v2
+        
+    # Prints out the GITHUB_RUN_ID and GITHUB_RUN_NUMBER
+    - name: Run a one-line script
+      run: echo $GITHUB_RUN_ID and $GITHUB_RUN_NUMBER
+      
+    # Put enviromental variables for the gradle  
+    - name: Dump secrets to .env
+      run: env > .env
+      env:
+          REQUIRED_ENV: ${{ secrets.REQUIRED_ENV }}
+  
+  apk:
+    name: Upload app to GooglePlay
+    runs-on: ubuntu-18.04
+
+    steps:
+      - uses: actions/checkout@v1
+      - name: set up JDK 1.8
+        uses: actions/setup-java@v1
+        with:
+          java-version: 1.8
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+      - name: Assemble Release Bundle
+        run: |
+          ./gradlew bundleRelease  
+      - name: Sign Release
+        uses: r0adkll/sign-android-release@v1
+        with:
+          releaseDirectory: app/build/outputs/bundle/release
+          signingKeyBase64: ${{ secrets.SIGNING_KEY }}
+          alias: ${{ secrets.ALIAS }}
+          keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
+          keyPassword: ${{ secrets.KEY_PASSWORD }}
+     # - name: Upload AAB
+     #   uses: actions/upload-artifact@v1
+     #   with:
+     #     name: app
+     #     path: app/build/outputs/bundle/release/app-release.aab
+      - name: Decode service account key
+        env:
+          SERVICE_ACCOUNT: ${{ secrets.SERVICE_ACCOUNT_JSON }}
+        run: echo $SERVICE_ACCOUNT | base64 --decode > app/service_account.json
+      - name: Deploy to Production
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJson: app/service_account.json
+          packageName: com.emredogan.tavlazari
+          releaseFile: app/build/outputs/bundle/release/app-release.aab
+          track: production
+     

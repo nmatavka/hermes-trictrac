@@ -1,0 +1,19 @@
+getGame:
+SELECT * FROM games WHERE id=?;
+
+getGames:
+SELECT last_move_at, id, winner, player_one_score, player_two_score, matchLength FROM games;
+
+insertGame:
+INSERT OR REPLACE INTO games VALUES ?;
+
+updateGameHistory:
+UPDATE games
+    SET
+        history=?,
+        matchLength=?,
+        player_one_score=?,
+        player_two_score=?,
+        last_move_at=?,
+        winner=?
+    WHERE id=?;

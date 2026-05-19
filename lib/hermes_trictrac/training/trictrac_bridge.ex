@@ -102,11 +102,17 @@ defmodule HermesTrictrac.Training.TrictracBridge do
   defp variant_and_options(config) do
     config = normalize_map(config)
     variant_id = Map.get(config, "variant_id", @default_variant_id)
-    variant = Registry.fetch!(variant_id)
+    black_direction = Map.get(config, "black_direction", Map.get(config, :black_direction))
+
+    variant =
+      variant_id
+      |> Registry.fetch!()
+      |> apply_black_direction(black_direction)
 
     options =
       base_match_options(variant_id)
       |> Map.merge(normalize_map(Map.get(config, "match_options", %{})))
+      |> maybe_put_black_direction(black_direction)
       |> normalize_option_values()
 
     {variant, options}
@@ -114,6 +120,35 @@ defmodule HermesTrictrac.Training.TrictracBridge do
 
   defp base_match_options("toc"), do: Map.merge(@toc_default_options, @default_match_options)
   defp base_match_options(_variant_id), do: @default_match_options
+
+  defp apply_black_direction(variant, direction) when direction in ["toward_1", :toward_1] do
+    case movement_mode(variant) do
+      :parallel -> Map.put(variant, :orientation, :parallel_toward_1)
+      :contrary -> Map.put(variant, :orientation, :split_home)
+    end
+  end
+
+  defp apply_black_direction(variant, direction) when direction in ["toward_24", :toward_24] do
+    case movement_mode(variant) do
+      :parallel -> Map.put(variant, :orientation, :parallel_toward_24)
+      :contrary -> Map.put(variant, :orientation, :ascending)
+    end
+  end
+
+  defp apply_black_direction(variant, _direction), do: variant
+
+  defp movement_mode(%{movement_mode: mode}) when mode in [:parallel, :contrary], do: mode
+  defp movement_mode(%{orientation: :jacquet_parallel}), do: :parallel
+  defp movement_mode(%{orientation: :parallel}), do: :parallel
+  defp movement_mode(_variant), do: :contrary
+
+  defp maybe_put_black_direction(options, direction) when direction in ["toward_1", :toward_1],
+    do: Map.put(options, "black_direction", "toward_1")
+
+  defp maybe_put_black_direction(options, direction) when direction in ["toward_24", :toward_24],
+    do: Map.put(options, "black_direction", "toward_24")
+
+  defp maybe_put_black_direction(options, _direction), do: options
 
   defp normalize_option_values(options) do
     Enum.into(options, %{}, fn
@@ -236,7 +271,8 @@ defmodule HermesTrictrac.Training.TrictracBridge do
   defp actions_for_phase("move", runtime) do
     {variant, _options} =
       variant_and_options(%{
-        "variant_id" => get_in(runtime, [:match, :variant_id]) || @default_variant_id
+        "variant_id" => get_in(runtime, [:match, :variant_id]) || @default_variant_id,
+        "black_direction" => runtime_black_direction(runtime)
       })
 
     move_actions =
@@ -288,6 +324,11 @@ defmodule HermesTrictrac.Training.TrictracBridge do
       sequence when is_list(sequence) -> Map.put(payload, "sequence", sequence)
       _ -> payload
     end
+  end
+
+  defp runtime_black_direction(runtime) do
+    options = get_in(runtime, [:match, :options]) || %{}
+    Map.get(options, "black_direction", Map.get(options, :black_direction))
   end
 
   defp confirm_available?(runtime, variant) do

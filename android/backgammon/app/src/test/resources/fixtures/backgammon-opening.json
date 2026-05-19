@@ -1,0 +1,207 @@
+{
+  "board": {
+    "bar": {
+      "black": 0,
+      "white": 0
+    },
+    "outside": {
+      "black": 0,
+      "white": 0
+    },
+    "points": [
+      {
+        "index": 0,
+        "pieces": [
+          "white",
+          "white"
+        ]
+      },
+      {
+        "index": 1,
+        "pieces": []
+      },
+      {
+        "index": 2,
+        "pieces": []
+      },
+      {
+        "index": 3,
+        "pieces": []
+      },
+      {
+        "index": 4,
+        "pieces": []
+      },
+      {
+        "index": 5,
+        "pieces": [
+          "black",
+          "black",
+          "black",
+          "black",
+          "black"
+        ]
+      },
+      {
+        "index": 6,
+        "pieces": []
+      },
+      {
+        "index": 7,
+        "pieces": [
+          "black",
+          "black",
+          "black"
+        ]
+      },
+      {
+        "index": 8,
+        "pieces": []
+      },
+      {
+        "index": 9,
+        "pieces": []
+      },
+      {
+        "index": 10,
+        "pieces": []
+      },
+      {
+        "index": 11,
+        "pieces": [
+          "white",
+          "white",
+          "white",
+          "white",
+          "white"
+        ]
+      },
+      {
+        "index": 12,
+        "pieces": [
+          "black",
+          "black",
+          "black",
+          "black",
+          "black"
+        ]
+      },
+      {
+        "index": 13,
+        "pieces": []
+      },
+      {
+        "index": 14,
+        "pieces": []
+      },
+      {
+        "index": 15,
+        "pieces": []
+      },
+      {
+        "index": 16,
+        "pieces": [
+          "white",
+          "white",
+          "white"
+        ]
+      },
+      {
+        "index": 17,
+        "pieces": []
+      },
+      {
+        "index": 18,
+        "pieces": [
+          "white",
+          "white",
+          "white",
+          "white",
+          "white"
+        ]
+      },
+      {
+        "index": 19,
+        "pieces": []
+      },
+      {
+        "index": 20,
+        "pieces": []
+      },
+      {
+        "index": 21,
+        "pieces": []
+      },
+      {
+        "index": 22,
+        "pieces": []
+      },
+      {
+        "index": 23,
+        "pieces": [
+          "black",
+          "black"
+        ]
+      }
+    ]
+  },
+  "dice": null,
+  "last_move": null,
+  "last_moves": [],
+  "legal_moves": [],
+  "match": {
+    "is_over": false,
+    "length": 1,
+    "options": {},
+    "results": [],
+    "score": {
+      "black": 0,
+      "white": 0
+    },
+    "winner": null,
+    "winner_kind": null
+  },
+  "opening_roll": {
+    "order": "highest",
+    "pending": true,
+    "prompt": "Roll one die to decide who starts. The higher die starts.",
+    "rolls": {
+      "black": null,
+      "white": null
+    }
+  },
+  "pending_match_options": null,
+  "pending_turn_decision": null,
+  "players": {
+    "guest": {
+      "color": "black",
+      "id": 6214,
+      "name": "jane"
+    },
+    "host": {
+      "color": "white",
+      "id": 6150,
+      "name": "nick"
+    }
+  },
+  "status": "playing",
+  "trictrac": null,
+  "turn": null,
+  "ui_actions": {
+    "can_confirm": false,
+    "can_end_turn": false,
+    "can_reset": true,
+    "can_roll": true,
+    "can_submit_match_options": false,
+    "can_submit_turn_decision": false,
+    "can_undo": false,
+    "end_turn_points": 0,
+    "end_turn_reason": null
+  },
+  "variant": {
+    "active_leg": null,
+    "id": "backgammon",
+    "rule_name": "Backgammon",
+    "title": "Backgammon"
+  }
+}

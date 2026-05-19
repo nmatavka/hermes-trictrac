@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: narde-game
+  labels:
+    app: narde-game
+spec:
+  replicas: 1 # на данный момент приложение statefull -- нельзя делать больше 1 реплики
+  selector:
+    matchLabels:
+      app: narde-game
+  template:
+    metadata:
+      labels:
+        app: narde-game
+    spec:
+      containers:
+        - name: game
+          image: 176.108.249.125:5000/narde-game:latest
+          ports:
+            - containerPort: 82
+          envFrom:
+            - configMapRef:
+                name: narde-config
+
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: game-service
+spec:
+  ports:
+    - port: 82
+      targetPort: 82
+  selector:
+    app: narde-game
+  type: ClusterIP

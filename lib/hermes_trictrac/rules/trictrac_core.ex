@@ -160,30 +160,52 @@ defmodule HermesTrictrac.Rules.TrictracCore do
     Plein.settle_match(runtime, color)
   end
 
-  defp maybe_settle_variant(runtime, _previous, variant, color) do
+  defp maybe_settle_variant(runtime, previous, variant, color) do
     runtime
-    |> maybe_finish_classique_match(variant, color)
+    |> maybe_finish_classique_match(previous, variant, color)
     |> maybe_finish_aecrire_match(variant)
   end
 
-  defp maybe_finish_classique_match(runtime, %{id: id}, color)
+  defp maybe_finish_classique_match(
+         %{match: %{is_over: true}} = runtime,
+         _previous,
+         _variant,
+         _color
+       ),
+       do: runtime
+
+  defp maybe_finish_classique_match(runtime, previous, %{id: id} = variant, _color)
        when id in ["trictrac_classique", "toccategli"] do
-    if trous_for(runtime.trictrac, color) >= 12 do
-      %{
-        runtime
-        | match: %{
-            runtime.match
-            | is_over: true,
-              winner: Atom.to_string(color),
-              winner_kind: "trous"
-          }
-      }
-    else
+    if plucked_poule?(runtime.match) do
       runtime
+    else
+      case first_classique_match_winner(
+             previous.trictrac,
+             runtime.trictrac,
+             variant,
+             runtime.match
+           ) do
+        nil ->
+          runtime
+
+        %{winner: winner, kind: kind} ->
+          score = Map.update!(runtime.match.score, winner, &(&1 + classique_match_award(kind)))
+
+          %{
+            runtime
+            | match: %{
+                runtime.match
+                | is_over: true,
+                  winner: Atom.to_string(winner),
+                  winner_kind: kind,
+                  score: score
+              }
+          }
+      end
     end
   end
 
-  defp maybe_finish_classique_match(runtime, _variant, _color), do: runtime
+  defp maybe_finish_classique_match(runtime, _previous, _variant, _color), do: runtime
 
   defp maybe_finish_combine_match(runtime) do
     cond do
@@ -279,6 +301,10 @@ defmodule HermesTrictrac.Rules.TrictracCore do
       turn_decision_answered?(runtime, color, pending["key"]) ->
         {:error, "Turn decision already resolved."}
 
+      decision == "s'en aller" and pending["key"] == "reprise" and plucked_poule?(runtime.match) and
+          not plucked_reprise_allowed?(runtime.trictrac, color) ->
+        {:error, "Need at least 6 trous and the lead to take the plucked-pool payout."}
+
       true ->
         runtime =
           mark_turn_decision_answered(runtime, color, pending["key"])
@@ -352,7 +378,7 @@ defmodule HermesTrictrac.Rules.TrictracCore do
       end)
 
     runtime
-    |> maybe_finish_classique_match(variant, color)
+    |> maybe_finish_classique_match(previous, variant, color)
     |> maybe_finish_aecrire_match(variant)
   end
 
@@ -401,7 +427,8 @@ defmodule HermesTrictrac.Rules.TrictracCore do
 
     reprise =
       if not is_nil(reprise_actor) and not runtime.match.is_over and
-           not turn_decision_answered?(runtime, reprise_actor, "reprise") do
+           not turn_decision_answered?(runtime, reprise_actor, "reprise") and
+           reprise_allowed?(runtime, reprise_actor) do
         [
           %{
             "key" => "reprise",
@@ -564,27 +591,31 @@ defmodule HermesTrictrac.Rules.TrictracCore do
 
   defp apply_turn_decision(runtime, variant, color, "reprise", "s'en aller")
        when variant.id in ["trictrac_classique", "toccategli"] do
-    fresh = new(variant)
-    current_trictrac = Classique.ensure(runtime.trictrac)
-    releve_count = get_in(current_trictrac, [:opening, :releve_count]) || 0
+    if plucked_poule?(runtime.match) do
+      finish_plucked_poule_round(runtime, variant)
+    else
+      fresh = new(variant)
+      current_trictrac = Classique.ensure(runtime.trictrac)
+      releve_count = get_in(current_trictrac, [:opening, :releve_count]) || 0
 
-    reset_trictrac =
-      fresh.trictrac
-      |> Map.put(:score, current_trictrac.score)
-      |> Map.put(:score_history, current_trictrac.score_history || [])
-      |> Map.put(:options, current_trictrac.options || %{"margotEnabled" => false})
-      |> put_in([:opening, :releve_count], releve_count + 1)
+      reset_trictrac =
+        fresh.trictrac
+        |> Map.put(:score, current_trictrac.score)
+        |> Map.put(:score_history, current_trictrac.score_history || [])
+        |> Map.put(:options, current_trictrac.options || %{"margotEnabled" => false})
+        |> put_in([:opening, :releve_count], releve_count + 1)
 
-    runtime
-    |> Map.put(:board, fresh.board)
-    |> Map.put(:dice, nil)
-    |> Map.put(:legal_moves, [])
-    |> Map.put(:history, [])
-    |> Map.put(:turn_color, color)
-    |> Map.put(:turn_number, runtime.turn_number + 1)
-    |> Map.put(:pending_turn_decision, nil)
-    |> put_in([:variant_state, :keep_turn], false)
-    |> update_trictrac(fn _ -> reset_trictrac end)
+      runtime
+      |> Map.put(:board, fresh.board)
+      |> Map.put(:dice, nil)
+      |> Map.put(:legal_moves, [])
+      |> Map.put(:history, [])
+      |> Map.put(:turn_color, color)
+      |> Map.put(:turn_number, runtime.turn_number + 1)
+      |> Map.put(:pending_turn_decision, nil)
+      |> put_in([:variant_state, :keep_turn], false)
+      |> update_trictrac(fn _ -> reset_trictrac end)
+    end
   end
 
   defp apply_turn_decision(runtime, variant, color, "suspension", decision)
@@ -792,6 +823,148 @@ defmodule HermesTrictrac.Rules.TrictracCore do
     previous_count = length(get_in(previous_trictrac, [:score_history]) || [])
     score_history = get_in(trictrac, [:score_history]) || []
     Enum.drop(score_history, previous_count)
+  end
+
+  defp first_classique_match_winner(previous_trictrac, trictrac, variant, match) do
+    previous_trous = %{
+      white: trous_for(previous_trictrac, :white),
+      black: trous_for(previous_trictrac, :black)
+    }
+
+    target = classique_target(match)
+
+    previous_trictrac
+    |> score_events_since(trictrac)
+    |> Enum.reduce_while({:cont, previous_trous}, fn event, {:cont, trous} ->
+      beneficiary = score_event_beneficiary(event)
+      delta = score_event_trous_delta(event)
+
+      if beneficiary in [:white, :black] and delta > 0 do
+        before_trous = Map.get(trous, beneficiary, 0)
+        updated_trous = Map.update!(trous, beneficiary, &(&1 + delta))
+        after_trous = Map.get(updated_trous, beneficiary, 0)
+
+        if before_trous < target and after_trous >= target do
+          {:halt,
+           {:winner,
+            %{
+              winner: beneficiary,
+              kind: classique_match_winner_kind(variant, beneficiary, updated_trous)
+            }}}
+        else
+          {:cont, {:cont, updated_trous}}
+        end
+      else
+        {:cont, {:cont, trous}}
+      end
+    end)
+    |> case do
+      {:winner, result} -> result
+      {:cont, _trous} -> nil
+    end
+  end
+
+  defp classique_match_winner_kind(variant, winner, trous) do
+    if VariantRules.apply_etendard?(variant) and Map.get(trous, opposite(winner), 0) == 0,
+      do: "grande_bredouille",
+      else: "trous"
+  end
+
+  defp classique_match_award("grande_bredouille"), do: 2
+  defp classique_match_award(_kind), do: 1
+
+  defp classique_target(match) do
+    case get_in(match || %{}, [:options, "classiqueHoleTarget"]) do
+      value when is_integer(value) and value >= 1 ->
+        value
+
+      value when is_binary(value) ->
+        case Integer.parse(value) do
+          {parsed, ""} when parsed >= 1 -> parsed
+          _ -> 12
+        end
+
+      _ ->
+        12
+    end
+  end
+
+  defp plucked_poule?(match) when is_map(match) do
+    get_in(match, [:options, "pluckedPouleMode"]) in [true, "true", 1, "1", "yes", "on"]
+  end
+
+  defp plucked_poule?(_match), do: false
+
+  defp reprise_allowed?(runtime, reprise_actor) do
+    if plucked_poule?(runtime.match) do
+      plucked_reprise_allowed?(runtime.trictrac, reprise_actor)
+    else
+      true
+    end
+  end
+
+  defp plucked_reprise_allowed?(trictrac, color) when color in [:white, :black] do
+    current = trous_for(trictrac, color)
+    opponent = trous_for(trictrac, opposite(color))
+    current >= 6 and current > opponent
+  end
+
+  defp plucked_reprise_allowed?(_trictrac, _color), do: false
+
+  defp finish_plucked_poule_round(runtime, variant) do
+    white_trous = trous_for(runtime.trictrac, :white)
+    black_trous = trous_for(runtime.trictrac, :black)
+
+    {winner, kind} =
+      cond do
+        white_trous > black_trous ->
+          {:white,
+           classique_match_winner_kind(variant, :white, %{white: white_trous, black: black_trous})}
+
+        black_trous > white_trous ->
+          {:black,
+           classique_match_winner_kind(variant, :black, %{white: white_trous, black: black_trous})}
+
+        true ->
+          {nil, "draw"}
+      end
+
+    score =
+      if winner in [:white, :black] do
+        Map.update!(runtime.match.score, winner, &(&1 + classique_match_award(kind)))
+      else
+        runtime.match.score
+      end
+
+    runtime
+    |> Map.put(:dice, nil)
+    |> Map.put(:legal_moves, [])
+    |> Map.put(:history, [])
+    |> Map.put(:pending_turn_decision, nil)
+    |> update_trictrac(&Classique.set_turn_event_queue(&1, []))
+    |> put_in([:variant_state, :keep_turn], false)
+    |> Map.put(:match, %{
+      runtime.match
+      | is_over: true,
+        winner: if(winner, do: Atom.to_string(winner), else: nil),
+        winner_kind: kind,
+        score: score
+    })
+  end
+
+  defp score_event_beneficiary(event) do
+    case Map.get(event, :beneficiary) || Map.get(event, "beneficiary") ||
+           Map.get(event, :piece_type) || Map.get(event, "piece_type") do
+      :white -> :white
+      "white" -> :white
+      :black -> :black
+      "black" -> :black
+      _ -> nil
+    end
+  end
+
+  defp score_event_trous_delta(event) do
+    Map.get(event, :trous_delta, Map.get(event, "trous_delta", 0)) || 0
   end
 
   defp trous_for(nil, _color), do: 0

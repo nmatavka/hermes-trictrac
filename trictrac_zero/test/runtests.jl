@@ -534,6 +534,21 @@ end
   ).self_play.sim.num_games == 10
 end
 
+@testset "Replay Buffer Schedule" begin
+  cpu_params = TricTracZero.build_params(smoke = false, preset = "classique", use_gpu = false)
+  gpu_params = TricTracZero.build_params(smoke = false, preset = "classique", use_gpu = true)
+  smoke_params = TricTracZero.build_params(smoke = true, preset = "classique", use_gpu = false)
+
+  for (offset, target) in enumerate(25_000:25_000:100_000)
+    idx = offset - 1
+    @test cpu_params.mem_buffer_size[idx] == target
+    @test gpu_params.mem_buffer_size[idx] == target
+  end
+
+  @test smoke_params.mem_buffer_size[0] == 256
+  @test smoke_params.mem_buffer_size[1] == 512
+end
+
 @testset "AEcrire Partie-Length Feature Exposure" begin
   spec = TricTracGameSpec(variant_id = "trictrac_aecrire")
   game = GI.init(spec)

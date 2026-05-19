@@ -16,9 +16,14 @@ defmodule HermesTrictrac.Rules.Snapshot do
         "id" => variant.id,
         "title" => variant.title,
         "rule_name" => variant.title,
+        "uses_bar" => uses_bar?(active_variant),
         "active_leg" =>
           if variant.id == "tavli" do
-            %{"id" => active_variant.id, "title" => active_variant.title}
+            %{
+              "id" => active_variant.id,
+              "title" => active_variant.title,
+              "uses_bar" => uses_bar?(active_variant)
+            }
           end
       },
       "status" => Atom.to_string(engine.status),
@@ -292,6 +297,9 @@ defmodule HermesTrictrac.Rules.Snapshot do
   end
 
   defp opening_roll_payload(_engine), do: nil
+
+  defp uses_bar?(%{uses_bar: uses_bar}), do: uses_bar
+  defp uses_bar?(_variant), do: false
 
   defp end_turn_points(%{turn_color: nil}), do: 0
 

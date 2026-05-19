@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.hermes.trictrac.android.offline.TestMoves" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-04-29T06:16:50" hostname="pandora.local" time="0.008">
+  <properties/>
+  <testcase name="testBasicMoves" classname="com.hermes.trictrac.android.offline.TestMoves" time="0.002"/>
+  <testcase name="testBar" classname="com.hermes.trictrac.android.offline.TestMoves" time="0.003"/>
+  <testcase name="testBar2" classname="com.hermes.trictrac.android.offline.TestMoves" time="0.0"/>
+  <testcase name="testBearOff" classname="com.hermes.trictrac.android.offline.TestMoves" time="0.001"/>
+  <testcase name="testHitPiece" classname="com.hermes.trictrac.android.offline.TestMoves" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

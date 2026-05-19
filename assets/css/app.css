@@ -221,6 +221,179 @@ form[action="/game"] legend {
   font-variation-settings: "wdth" 88;
   letter-spacing: 0.05em;
 }
+
+.model-lab {
+  display: grid;
+  gap: 20px;
+  padding: 24px 0 48px;
+}
+.model-lab-panel {
+  display: grid;
+  gap: 16px;
+}
+.model-lab-panel label {
+  display: grid;
+  gap: 8px;
+  color: var(--ink-muted);
+  font-weight: var(--weight-ui);
+}
+.model-lab-control-label {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--ink-muted);
+  font-weight: var(--weight-ui);
+}
+.model-lab-panel textarea,
+.model-lab-panel select {
+  width: 100%;
+}
+.model-lab-panel textarea {
+  min-height: 92px;
+  resize: vertical;
+}
+.model-lab-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  align-items: end;
+}
+.model-lab-actions {
+  margin-top: 0;
+}
+.model-lab-dice-editor {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.model-lab-die-button {
+  width: 52px;
+  height: 52px;
+  padding: 0;
+  border: 0;
+  border-radius: 13px;
+  background: transparent;
+  cursor: pointer;
+}
+.model-lab-die-button:hover:not(:disabled),
+.model-lab-die-button:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px rgba(255, 226, 184, 0.8),
+    0 12px 22px rgba(0, 0, 0, 0.22);
+}
+.model-lab-die-button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+.model-lab-die-button .themed-die {
+  display: block;
+}
+.model-lab-editor-mode {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid rgba(216, 178, 119, 0.18);
+  border-radius: 16px;
+}
+.model-lab-editor-mode legend {
+  padding: 0 6px;
+  color: var(--ink-muted);
+  font-weight: var(--weight-ui);
+}
+.model-lab-editor-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.model-lab-editor-options label {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.model-lab-editable-point,
+.model-lab-editable-bar {
+  cursor: copy;
+}
+.model-lab-editable-point:hover .point-triangle {
+  filter: brightness(1.2) saturate(1.15);
+}
+.model-lab-editable-bar:hover {
+  box-shadow: inset 0 0 0 1px rgba(255, 226, 184, 0.3);
+}
+.model-lab-status {
+  min-height: 1.3em;
+  margin: 0;
+  color: var(--ink-muted);
+}
+.model-lab-status.error,
+.model-lab .error {
+  color: var(--danger);
+}
+.model-lab-board-meta {
+  padding: 12px 16px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-muted);
+  font-size: 0.82rem;
+  font-weight: var(--weight-ui);
+}
+.model-lab-board-slot {
+  width: 100%;
+}
+.model-lab-board-shell {
+  width: min(100%, 1100px);
+}
+.model-lab-xgid-panel {
+  width: min(100%, 1100px);
+}
+.model-lab-xgid-panel label {
+  display: grid;
+  gap: 8px;
+  color: var(--ink-muted);
+  font-weight: var(--weight-ui);
+}
+.model-lab-xgid-panel textarea {
+  width: 100%;
+  min-height: 92px;
+  resize: vertical;
+}
+.model-lab-bar-column .bar-pocket p {
+  align-self: center;
+  width: 100%;
+  text-align: center;
+}
+.model-lab-bar-column .checker {
+  left: -7%;
+  width: 114%;
+}
+.model-lab-results {
+  display: grid;
+  gap: 12px;
+}
+.model-lab-result-list {
+  display: grid;
+  gap: 12px;
+}
+.model-lab-result {
+  padding: 12px;
+  border: 1px solid rgba(216, 178, 119, 0.16);
+  border-radius: 16px;
+  background: rgba(255, 248, 236, 0.05);
+}
+.model-lab-result h3 {
+  margin: 0 0 6px;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: var(--weight-display);
+}
+.model-lab-events {
+  display: grid;
+  gap: 5px;
+  margin: 10px 0 0;
+  padding-left: 1.2rem;
+  color: var(--ink-muted);
+}
 .variant-fieldset {
   gap: 14px;
 }
@@ -230,6 +403,18 @@ form[action="/game"] legend {
 }
 .variant-grid-headline {
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.multi-seat-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.multi-seat-config-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.multi-seat-config-grid label {
+  display: grid;
+  gap: 6px;
 }
 .variant-grid-secondary {
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -288,6 +473,24 @@ form[action="/game"] legend {
 .variant-chip-secondary {
   min-height: 52px;
 }
+.multi-seat-chip {
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 6px;
+  text-align: left;
+}
+.multi-seat-chip-title {
+  font-family: var(--font-display);
+  font-weight: var(--weight-display);
+}
+.multi-seat-chip-meta {
+  color: var(--ink-muted);
+  font-size: 0.84rem;
+  line-height: 1.35;
+}
+.variant-choice:checked + .multi-seat-chip .multi-seat-chip-meta {
+  color: rgba(43, 18, 12, 0.74);
+}
 .variant-option-disabled {
   display: none;
 }
@@ -305,19 +508,11 @@ form[action="/game"] legend {
 .variant-disclosure summary::-webkit-details-marker {
   display: none;
 }
-.variant-disclosure summary::after {
-  content: attr(data-closed-label);
-  margin-left: 10px;
-  color: var(--gold);
-  font-size: 0.85rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.variant-disclosure[open] summary::after {
-  content: attr(data-open-label);
-}
 .opponent-fieldset {
   gap: 16px;
+}
+.multi-seat-status-fieldset {
+  background: rgba(216, 178, 119, 0.08);
 }
 .segmented-line {
   display: flex;
@@ -416,7 +611,7 @@ button:hover:not(:disabled) {
 }
 button:disabled {
   opacity: 0.4;
-  cursor: not-allowed;
+  cursor: default;
 }
 .app-shell {
   padding: 24px 0 40px;
@@ -499,7 +694,7 @@ button:disabled {
   background: rgba(255, 248, 236, 0.11);
 }
 .sound-toggle:disabled {
-  cursor: not-allowed;
+  cursor: default;
   opacity: 0.55;
 }
 .sound-pack-select,
@@ -537,6 +732,25 @@ button:disabled {
 }
 .lobby-language-select {
   justify-self: end;
+}
+.lobby-top-rail {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+.lobby-control-stack {
+  display: grid;
+  gap: 8px;
+}
+.lobby-language-stack {
+  margin-left: auto;
+  align-items: flex-end;
+}
+.lobby-mode-tabs .segment-chip {
+  min-width: 0;
+  padding-inline: 18px;
 }
 .language-button-group {
   display: inline-flex;
@@ -650,6 +864,22 @@ button:disabled {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   margin-top: 8px;
 }
+.poule-ledger {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+.poule-ledger-row {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255, 248, 236, 0.07);
+}
+.poule-ledger-row span {
+  color: var(--ink-muted);
+  font-size: 0.92rem;
+}
 .stack-form {
   display: grid;
   gap: 12px;
@@ -735,8 +965,18 @@ button:disabled {
   border-radius: 16px;
 }
 @media (max-width: 720px) {
+  .lobby-top-rail {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .lobby-language-stack {
+    margin-left: 0;
+    align-items: flex-start;
+  }
   .variant-grid-headline,
-  .variant-grid-secondary {
+  .variant-grid-secondary,
+  .multi-seat-grid,
+  .multi-seat-config-grid {
     grid-template-columns: 1fr;
   }
   .segmented-line {
@@ -841,8 +1081,15 @@ button:disabled {
   background-position: center;
   background-size: 100% 100%;
   box-shadow: 0 32px 70px rgba(0, 0, 0, 0.35), inset 0 0 0 1px rgba(255, 230, 186, 0.08);
+  cursor: default;
   overflow: hidden;
 }
+
+.board-shell.board-interactive,
+.board-shell.board-interactive * {
+  cursor: pointer !important;
+}
+
 .board-shell::before {
   content: "";
   position: absolute;
@@ -909,11 +1156,20 @@ button:disabled {
   cursor: default;
 }
 
-.point-slot.source,
-.point-slot.target,
-.bar-pocket.source,
-.home-pocket.target {
-  cursor: pointer;
+.point-slot.actionable,
+.bar-pocket.actionable,
+.home-pocket.actionable,
+.point-slot.actionable *,
+.bar-pocket.actionable *,
+.home-pocket.actionable * {
+  cursor: pointer !important;
+}
+
+.point-slot.actionable:focus-visible,
+.bar-pocket.actionable:focus-visible,
+.home-pocket.actionable:focus-visible {
+  outline: 2px solid rgba(255, 236, 188, 0.85);
+  outline-offset: 2px;
 }
 .point-slot {
   display: block;
@@ -1077,6 +1333,12 @@ button:disabled {
   font-size: 0.78rem;
   text-transform: uppercase;
   letter-spacing: 0.12em;
+}
+
+.home-pocket p {
+  align-self: center;
+  width: 100%;
+  text-align: center;
 }
 .bar-pocket strong,
 .home-pocket strong,

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Tavla Zarı</string>
+    <string name="roll">Salla</string>
+    <string name="previous_dice_string">Bir önceki zar: %1$d - %2$s</string>
+    <string name="please_shake_text">Zar atmak için telefonunuzu sallayın veya SALLA buttonuna basın.</string>
+    <string name="first_dice">Bir önceki zar: 1 – 1</string>
+    <string name="okay">Tamam</string>
+    <string name="dont_show_text">Bu ekranı tekrar gösterme</string>
+    <string name="welcome_string">Hoşgeldiniz!</string>
+</resources>

@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: narde-config
+data:
+  # game-config
+  GAME_DB: 'http://localhost:5432/backgammon'
+  GAME_DB_USER: 'postgres'
+  GAME_DB_PASS: 'admin'
+  GAME_SSE_TIMEOUT: '300'
+
+
+  # player-config
+  PLAYER_DB: 'localhost:5432/backgammon'
+  PLAYER_DB_USER: 'postgres'
+  PLAYER_DB_PASS: 'admin'
+  PLAYER_TOKEN_EXPIRATION_TIME: "10000"
+
+  # gateway-config
+  MENU_HOST: 'http://menu-service:81'
+  GAME_HOST: 'http://game-service:82'

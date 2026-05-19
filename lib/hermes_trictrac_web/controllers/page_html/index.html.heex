@@ -2,15 +2,59 @@
   <div class="row">
     <div class="column">
       <h1 id="index-page" data-i18n="lobby.title">Start or Join a Table</h1>
-      <form action={~p"/game"} method="post" data-lobby-form>
+      <form
+        action={~p"/game"}
+        method="post"
+        data-lobby-form
+        data-identity-mode={Atom.to_string(@identity_mode || :manual)}
+        data-authenticated={if(@current_identity, do: "true", else: "false")}
+        data-login-url={@bluesky_login_url}
+        data-logout-url={@bluesky_logout_url}
+        data-return-to={@bluesky_return_to}
+      >
         <input type="hidden" name="_csrf_token" value={get_csrf_token()} />
+        <input type="hidden" name="play_mode" value="head_to_head" data-play-mode-input />
+        <input type="hidden" name="variant" value="backgammon" data-variant-input />
 
-        <div class="language-button-group lobby-language-select" role="group" aria-label="Language" data-i18n-aria-label="language">
-          <button type="button" class="language-flag-button" data-language-button="en" title="English" aria-label="English">&#x1F3F4;&#xE0067;&#xE0062;&#xE0065;&#xE006E;&#xE0067;&#xE007F;</button>
-          <button type="button" class="language-flag-button" data-language-button="fr" title="Français" aria-label="Français">🇫🇷</button>
-          <button type="button" class="language-flag-button" data-language-button="da" title="Dansk" aria-label="Dansk">🇩🇰</button>
-          <button type="button" class="language-flag-button" data-language-button="sv" title="Svenska" aria-label="Svenska">🇸🇪</button>
-          <button type="button" class="language-flag-button" data-language-button="de" title="Deutsch" aria-label="Deutsch">🇩🇪</button>
+        <div class="lobby-top-rail">
+          <div class="lobby-control-stack">
+            <p class="rail-label" data-i18n="lobby.playMode">Table mode</p>
+            <div class="segmented-control lobby-mode-tabs" role="radiogroup" aria-label="Table mode" data-i18n-aria-label="lobby.playMode">
+              <label class="segment-option">
+                <input
+                  class="segment-choice"
+                  type="radio"
+                  name="play_mode_ui"
+                  value="head_to_head"
+                  checked
+                  data-play-mode-choice
+                />
+                <span class="segment-chip" data-i18n="lobby.headToHead">Head-to-head</span>
+              </label>
+
+              <label class="segment-option">
+                <input
+                  class="segment-choice"
+                  type="radio"
+                  name="play_mode_ui"
+                  value="multi_seat"
+                  data-play-mode-choice
+                />
+                <span class="segment-chip" data-i18n="lobby.multiSeat">Multi-seat</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="lobby-control-stack lobby-language-stack">
+            <p class="rail-label" data-i18n="language">Language</p>
+            <div class="language-button-group lobby-language-select" role="group" aria-label="Language" data-i18n-aria-label="language">
+              <button type="button" class="language-flag-button" data-language-button="en" title="English" aria-label="English">&#x1F3F4;&#xE0067;&#xE0062;&#xE0065;&#xE006E;&#xE0067;&#xE007F;</button>
+              <button type="button" class="language-flag-button" data-language-button="fr" title="Français" aria-label="Français">🇫🇷</button>
+              <button type="button" class="language-flag-button" data-language-button="da" title="Dansk" aria-label="Dansk">🇩🇰</button>
+              <button type="button" class="language-flag-button" data-language-button="sv" title="Svenska" aria-label="Svenska">🇸🇪</button>
+              <button type="button" class="language-flag-button" data-language-button="de" title="Deutsch" aria-label="Deutsch">🇩🇪</button>
+            </div>
+          </div>
         </div>
 
         <label>
@@ -18,12 +62,42 @@
           <input type="text" name="game" />
         </label>
 
-        <label>
-          <span data-i18n="lobby.userName">User Name:</span>
-          <input type="text" name="name" />
-        </label>
+        <%= if @identity_mode == :bluesky_oauth do %>
+          <%= if @current_identity do %>
+            <div class="identity-banner">
+              <p class="status-line">
+                <span data-i18n="lobby.signedInAs">Signed in as</span>
+                <strong><%= @current_identity.handle %></strong>
+              </p>
+              <p class="muted-copy" data-i18n="lobby.blueskyIdentityLocked">
+                In production mode, table identity comes from Bluesky.
+              </p>
+              <a class="button-link" href={@bluesky_logout_url} data-i18n="lobby.logout">Log out</a>
+            </div>
+          <% else %>
+            <label>
+              <span data-i18n="lobby.blueskyHandle">Bluesky Handle:</span>
+              <input type="text" data-bluesky-handle-input autocomplete="username" required />
+            </label>
 
-        <fieldset class="variant-fieldset">
+            <div class="lobby-auth-actions">
+              <button type="button" data-bluesky-login-button data-i18n="lobby.signInWithBluesky">
+                Sign in with Bluesky
+              </button>
+            </div>
+
+            <p class="muted-copy" data-i18n="lobby.signInRequired">
+              Sign in before opening, joining, or watching a table.
+            </p>
+          <% end %>
+        <% else %>
+          <label>
+            <span data-i18n="lobby.userName">User Name:</span>
+            <input type="text" name="name" />
+          </label>
+        <% end %>
+
+        <fieldset class="variant-fieldset" data-mode-panel="head_to_head">
           <legend data-i18n="lobby.chooseGame">Choose a Game</legend>
 
           <div class="variant-grid variant-grid-headline">
@@ -32,9 +106,10 @@
                 <input
                   class="variant-choice"
                   type="radio"
-                  name="variant"
+                  name="head_to_head_variant"
                   value={variant.id}
                   data-computer-bot={Map.get(@computer_variant_bots, variant.id)}
+                  data-head-to-head-variant
                   checked={variant.id == "backgammon"}
                 />
                 <span class="variant-chip" data-variant-label={variant.id}><%= raw(variant.label) %></span>
@@ -43,11 +118,11 @@
           </div>
 
           <details class="variant-disclosure" data-human-only-variants>
-            <summary data-i18n="lobby.moreGames" data-i18n-summary-toggle>More games</summary>
+            <summary data-i18n="lobby.moreGames">More games</summary>
             <div class="variant-grid variant-grid-secondary">
               <%= for variant <- @secondary_variants do %>
                 <label class="variant-option">
-                  <input class="variant-choice" type="radio" name="variant" value={variant.id} />
+                  <input class="variant-choice" type="radio" name="head_to_head_variant" value={variant.id} data-head-to-head-variant />
                   <span class="variant-chip variant-chip-secondary" data-variant-label={variant.id}><%= variant.label %></span>
                 </label>
               <% end %>
@@ -59,7 +134,86 @@
           </p>
         </fieldset>
 
-        <fieldset class="opponent-fieldset">
+        <fieldset class="variant-fieldset multi-seat-fieldset" data-mode-panel="multi_seat" hidden>
+          <legend data-i18n="lobby.chooseMultiSeat">Choose a Multi-seat Table</legend>
+
+          <p class="muted-copy" data-i18n="lobby.multiSeatIntro">
+            Some multi-seat tables rotate a queue, while others use fixed roles. Pick a format and the relevant setup controls will appear below.
+          </p>
+
+          <div class="variant-grid multi-seat-grid">
+            <%= for format <- @multi_seat_formats do %>
+              <label class="variant-option">
+                <input
+                  class="variant-choice"
+                  type="radio"
+                  name="multi_seat_variant"
+                  value={format.id}
+                  data-session-kind={format.session_kind}
+                  data-poule-style={Map.get(format, :style, "")}
+                  data-multiplayer-mode={Map.get(format, :multiplayer_mode, "")}
+                  data-multi-seat-variant
+                  checked={format.id == "trictrac_en_poule"}
+                />
+                <span class="variant-chip multi-seat-chip">
+                  <span class="multi-seat-chip-title" data-i18n={format.title_key}><%= format.title %></span>
+                  <span class="multi-seat-chip-meta" data-i18n={format.meta_key}><%= format.meta %></span>
+                </span>
+              </label>
+            <% end %>
+          </div>
+          <div class="multi-seat-config-grid" data-poule-growing-config>
+            <label>
+              <span data-i18n="lobby.queueSize">Queue Size:</span>
+              <input type="number" name="queue_size" min="1" step="1" value="1" inputmode="numeric" />
+            </label>
+
+            <label data-growing-pot-config>
+              <span data-i18n="lobby.ante">Ante:</span>
+              <input type="number" name="ante" min="1" step="1" value="1" inputmode="numeric" />
+            </label>
+          </div>
+
+          <div class="multi-seat-config-grid" data-plucked-pot-config hidden>
+            <label data-plucked-pot-config>
+              <span data-i18n="lobby.stake">Stake:</span>
+              <input type="number" name="stake" min="1" step="1" value="50" inputmode="numeric" />
+            </label>
+
+            <label data-plucked-pot-config>
+              <span data-i18n="lobby.holeValue">Hole value:</span>
+              <input type="number" name="hole_value" min="1" step="1" value="5" inputmode="numeric" />
+            </label>
+          </div>
+
+          <div class="segmented-line" data-poule-margot-config>
+            <span class="segmented-label" data-i18n="lobby.margot">Margot</span>
+            <div class="segmented-control" role="radiogroup" aria-label="Margot" data-i18n-aria-label="lobby.margot">
+              <label class="segment-option">
+                <input class="segment-choice" type="radio" name="margot_enabled" value="false" checked />
+                <span class="segment-chip" data-i18n="off">Off</span>
+              </label>
+
+              <label class="segment-option">
+                <input class="segment-choice" type="radio" name="margot_enabled" value="true" />
+                <span class="segment-chip" data-i18n="on">On</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="multi-seat-config-grid" data-multiplayer-cash-config hidden>
+            <label>
+              <span data-i18n="lobby.cashPerJeton">Cash per jeton:</span>
+              <input type="number" name="cash_per_jeton" min="0.01" step="0.01" value="1.00" inputmode="decimal" required />
+            </label>
+          </div>
+
+          <p class="muted-copy" data-i18n="lobby.multiSeatSpectatorsNote">
+            Extra joiners watch as spectators. If a roster spot opens, a spectator can claim it.
+          </p>
+        </fieldset>
+
+        <fieldset class="opponent-fieldset" data-mode-panel="head_to_head">
           <legend data-i18n="lobby.opponent">Opponent</legend>
 
           <input type="hidden" name="bot" value="" data-bot-input />
@@ -115,7 +269,14 @@
           </p>
         </fieldset>
 
-        <button type="submit" data-i18n="lobby.enter">Enter Lobby</button>
+        <button
+          type="submit"
+          data-lobby-submit
+          disabled={@identity_mode == :bluesky_oauth and is_nil(@current_identity)}
+        >
+          <span data-head-to-head-submit-label data-i18n="lobby.enter">Enter Lobby</span>
+          <span data-multi-seat-submit-label data-i18n="lobby.multiSeatEnter" hidden>Enter Multi-seat Table</span>
+        </button>
       </form>
     </div>
   </div>

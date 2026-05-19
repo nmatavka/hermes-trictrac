@@ -221,8 +221,19 @@ defmodule HermesTrictrac.Rules.RaceCore do
   end
 
   defp confirm_sequence_match?(candidate, move) do
+    sequence = move_value(move, "sequence")
+    die = move_value(move, "die")
+    dice_used = move_value(move, "dice_used")
+
     candidate.from == move["from"] and candidate.to == move["to"] and
-      (is_nil(move["sequence"]) or Map.get(candidate, :sequence) == move["sequence"])
+      (is_nil(sequence) or Map.get(candidate, :sequence) == sequence) and
+      (is_nil(die) or Map.get(candidate, :die) == die) and
+      (is_nil(dice_used) or
+         Map.get(candidate, :dice_used, [Map.get(candidate, :die)]) == dice_used)
+  end
+
+  defp move_value(move, key) do
+    Map.get(move, key, Map.get(move, String.to_atom(key)))
   end
 
   def move(runtime, variant, color, move) do
@@ -921,6 +932,9 @@ defmodule HermesTrictrac.Rules.RaceCore do
   defp route_for(%{orientation: :ascending}, :black), do: Enum.to_list(23..0//-1)
   defp route_for(%{orientation: :split_home}, :white), do: Enum.to_list(23..0//-1)
   defp route_for(%{orientation: :split_home}, :black), do: Enum.to_list(0..23)
+  defp route_for(%{orientation: :parallel}, _color), do: Enum.to_list(23..0//-1)
+  defp route_for(%{orientation: :parallel_toward_1}, _color), do: Enum.to_list(0..23)
+  defp route_for(%{orientation: :parallel_toward_24}, _color), do: Enum.to_list(23..0//-1)
   defp route_for(%{orientation: :jacquet_parallel}, :white), do: Enum.to_list(23..0//-1)
   defp route_for(%{orientation: :jacquet_parallel}, :black), do: [0 | Enum.to_list(23..1//-1)]
 

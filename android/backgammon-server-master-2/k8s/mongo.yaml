@@ -1,0 +1,72 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: game-move-pv
+  labels:
+    type: local
+    app: mongo
+spec:
+  capacity:
+    storage: 2Gi
+  accessModes:
+    - ReadWriteMany
+  hostPath:
+    path: /data/mongo
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: game-move-pvc
+  labels:
+    app: mongo
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 2Gi
+  storageClassName: ""
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongo
+  template:
+    metadata:
+      labels:
+        app: mongo
+    spec:
+      containers:
+        - name: mongodb
+          image: mongo
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 27017
+
+          volumeMounts:
+            - mountPath: /var/lib/mongo/data
+              name: mongodata
+      volumes:
+        - name: mongodata
+          persistentVolumeClaim:
+            claimName: game-move-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongo-service
+  labels:
+    app: mongo
+spec:
+  type: ClusterIP
+  ports:
+    - port: 27017
+  selector:
+    app: mongo

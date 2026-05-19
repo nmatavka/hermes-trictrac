@@ -49,22 +49,22 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Moves do
   end
 
   def destination_forbidden_by_jan_interdit?(board, variant, color, destination) do
-    if destination == State.own_coin(color) do
+    if destination == own_coin(variant, color) do
       false
     else
       opp = State.opposite(color)
-      opp_norm = State.norm_pos(destination, opp)
+      opp_norm = norm_pos(variant, destination, opp)
 
       cond do
         VariantRules.toccategli?(variant) and opp_norm in 12..17 and
-            can_opponent_still_fill_jan?(board, opp, 12) ->
+            can_opponent_still_fill_jan?(board, variant, opp, 12) ->
           false
 
         opp_norm in 18..23 ->
-          opponent_table_protected?(board, opp, :petit)
+          opponent_table_protected?(board, variant, opp, :petit)
 
         opp_norm in 12..17 ->
-          opponent_table_protected?(board, opp, :grand)
+          opponent_table_protected?(board, variant, opp, :grand)
 
         true ->
           false
@@ -101,24 +101,42 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Moves do
     end)
   end
 
+  def all_paired?(board, variant, color, from_norm, to_norm) do
+    Enum.all?(from_norm..to_norm, fn norm ->
+      pieces_at(board, State.denorm_pos(variant, norm, color), color) >= 2
+    end)
+  end
+
   def all_occupied?(board, color, from_norm, to_norm) do
     Enum.all?(from_norm..to_norm, fn norm ->
       pieces_at(board, State.denorm_pos(norm, color), color) >= 1
     end)
   end
 
-  def opponent_table_protected?(board, color, :petit) do
-    can_opponent_still_fill_jan?(board, color, 18) or table_full?(board, color, :petit)
+  def all_occupied?(board, variant, color, from_norm, to_norm) do
+    Enum.all?(from_norm..to_norm, fn norm ->
+      pieces_at(board, State.denorm_pos(variant, norm, color), color) >= 1
+    end)
   end
 
-  def opponent_table_protected?(board, color, :grand) do
-    can_opponent_still_fill_jan?(board, color, 12) or table_full?(board, color, :grand)
+  def opponent_table_protected?(board, variant, color, :petit) do
+    can_opponent_still_fill_jan?(board, variant, color, 18) or
+      table_full_for_movement?(board, variant, color, :petit)
+  end
+
+  def opponent_table_protected?(board, variant, color, :grand) do
+    can_opponent_still_fill_jan?(board, variant, color, 12) or
+      table_full_for_movement?(board, variant, color, :grand)
   end
 
   def can_opponent_still_fill_jan?(board, color, jan_start_norm) do
+    can_opponent_still_fill_jan?(board, %{}, color, jan_start_norm)
+  end
+
+  def can_opponent_still_fill_jan?(board, variant, color, jan_start_norm) do
     Enum.reduce(0..23, 0, fn pos, acc ->
       cnt = pieces_at(board, pos, color)
-      if cnt > 0 and State.norm_pos(pos, color) >= jan_start_norm, do: acc + cnt, else: acc
+      if cnt > 0 and norm_pos(variant, pos, color) >= jan_start_norm, do: acc + cnt, else: acc
     end) >= 12
   end
 
@@ -134,7 +152,7 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Moves do
   defp apply_step_hit(board, _color, _move), do: board
 
   defp single_trictrac_moves(board, variant, color, point, die) do
-    source_norm = State.norm_pos(point, color)
+    source_norm = norm_pos(variant, point, color)
     source_count = pieces_at(board, point, color)
     target_norm = source_norm - die
 
@@ -143,7 +161,7 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Moves do
         []
 
       target_norm >= 0 ->
-        raw_destination = State.denorm_pos(target_norm, color)
+        raw_destination = denorm_pos(variant, target_norm, color)
 
         with {:ok, destination, coin_mode} <-
                resolve_coin_destination(board, variant, color, raw_destination),
@@ -177,7 +195,7 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Moves do
   end
 
   defp combined_trictrac_move(board, variant, color, point, first, second) do
-    source_norm = State.norm_pos(point, color)
+    source_norm = norm_pos(variant, point, color)
     source_count = pieces_at(board, point, color)
     middle_norm = source_norm - first
     final_norm = source_norm - first - second
@@ -190,14 +208,14 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Moves do
         maybe_sortie_sum_move(board, variant, color, point, first, second)
 
       final_norm >= 0 ->
-        middle = State.denorm_pos(middle_norm, color)
-        raw_destination = State.denorm_pos(final_norm, color)
+        middle = denorm_pos(variant, middle_norm, color)
+        raw_destination = denorm_pos(variant, final_norm, color)
         opp = State.opposite(color)
         middle_opp = pieces_at(board, middle, opp)
         middle_empty = count_all_at(board, middle) == 0
         final_opp = pieces_at(board, raw_destination, opp)
         passing_retour? = source_norm >= 6 and final_norm < 6
-        opponent_still_petit? = opponent_table_protected?(board, opp, :petit)
+        opponent_still_petit? = opponent_table_protected?(board, variant, opp, :petit)
 
         cond do
           passing_retour? and opponent_still_petit? ->
@@ -215,7 +233,7 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Moves do
           true ->
             move_coin_mode =
               cond do
-                middle in [State.own_coin(color), State.opp_coin(color)] and middle_empty ->
+                middle in [own_coin(variant, color), opp_coin(variant, color)] and middle_empty ->
                   :intermediate_coin
 
                 true ->
@@ -260,11 +278,11 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Moves do
 
   defp maybe_sortie_moves(_board, %{id: "plein"}, _color, _point, _die, _dice_used), do: []
 
-  defp maybe_sortie_moves(board, _variant, color, point, die, dice_used) do
-    source_norm = State.norm_pos(point, color)
+  defp maybe_sortie_moves(board, variant, color, point, die, dice_used) do
+    source_norm = norm_pos(variant, point, color)
 
     cond do
-      not can_sortie?(board, color) ->
+      not can_sortie?(board, variant, color) ->
         []
 
       source_norm + 1 == die ->
@@ -279,7 +297,7 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Moves do
           }
         ]
 
-      die > source_norm + 1 and source_norm == furthest_sortie_norm(board, color) ->
+      die > source_norm + 1 and source_norm == furthest_sortie_norm(board, variant, color) ->
         [
           %{
             from: point,
@@ -298,12 +316,12 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Moves do
 
   defp maybe_sortie_sum_move(_board, %{id: "plein"}, _color, _point, _first, _second), do: []
 
-  defp maybe_sortie_sum_move(board, _variant, color, point, first, second) do
-    source_norm = State.norm_pos(point, color)
+  defp maybe_sortie_sum_move(board, variant, color, point, first, second) do
+    source_norm = norm_pos(variant, point, color)
     sum = first + second
 
     cond do
-      can_sortie?(board, color) and source_norm + 1 == sum and first < source_norm + 1 and
+      can_sortie?(board, variant, color) and source_norm + 1 == sum and first < source_norm + 1 and
           second < source_norm + 1 ->
         [
           %{
@@ -318,7 +336,8 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Moves do
           }
         ]
 
-      can_privilege_sortie?(board, color) and source_norm in 6..11 and source_norm + 1 == sum ->
+      can_privilege_sortie?(board, variant, color) and source_norm in 6..11 and
+          source_norm + 1 == sum ->
         [
           %{
             from: point,
@@ -337,34 +356,38 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Moves do
     end
   end
 
-  defp can_sortie?(board, color) do
+  defp can_sortie?(board, variant, color) do
     Enum.all?(6..23, fn norm ->
-      pieces_at(board, State.denorm_pos(norm, color), color) == 0
+      pieces_at(board, denorm_pos(variant, norm, color), color) == 0
     end)
   end
 
-  defp can_privilege_sortie?(board, color) do
+  defp can_privilege_sortie?(board, variant, color) do
     Enum.all?(12..23, fn norm ->
-      pieces_at(board, State.denorm_pos(norm, color), color) == 0
+      pieces_at(board, denorm_pos(variant, norm, color), color) == 0
     end)
   end
 
-  defp furthest_sortie_norm(board, color) do
+  defp furthest_sortie_norm(board, variant, color) do
     5..0//-1
-    |> Enum.find(fn norm -> pieces_at(board, State.denorm_pos(norm, color), color) > 0 end)
+    |> Enum.find(fn norm -> pieces_at(board, denorm_pos(variant, norm, color), color) > 0 end)
   end
 
-  defp resolve_coin_destination(board, %{id: "plein"}, color, destination) do
-    if destination == State.own_coin(color) do
-      {:ok, State.own_coin(color), :plein_coin}
+  defp resolve_coin_destination(board, %{id: "plein"} = variant, color, destination) do
+    if destination == own_coin(variant, color) do
+      {:ok, own_coin(variant, color), :plein_coin}
     else
-      resolve_coin_destination(board, %{}, color, destination)
+      resolve_standard_coin_destination(board, variant, color, destination)
     end
   end
 
-  defp resolve_coin_destination(board, _variant, color, destination) do
-    own_coin = State.own_coin(color)
-    opp_coin = State.opp_coin(color)
+  defp resolve_coin_destination(board, variant, color, destination) do
+    resolve_standard_coin_destination(board, variant, color, destination)
+  end
+
+  defp resolve_standard_coin_destination(board, variant, color, destination) do
+    own_coin = own_coin(variant, color)
+    opp_coin = opp_coin(variant, color)
 
     cond do
       destination == own_coin ->
@@ -393,7 +416,7 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Moves do
 
   defp landing_allowed(board, variant, color, _source, source_count, destination, coin_mode) do
     cond do
-      destination != State.own_coin(color) and
+      destination != own_coin(variant, color) and
           destination_forbidden_by_jan_interdit?(board, variant, color, destination) ->
         :error
 
@@ -524,16 +547,34 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Moves do
   end
 
   defp restricted_rest_points(board, variant, color) do
-    own_coin = State.own_coin(color)
+    own_coin = own_coin(variant, color)
     opp = State.opposite(color)
 
     extra_points =
-      if VariantRules.toccategli?(variant) and can_opponent_still_fill_jan?(board, opp, 12) do
-        Enum.map(12..17, &State.denorm_pos(&1, opp))
+      if VariantRules.toccategli?(variant) and
+           can_opponent_still_fill_jan?(board, variant, opp, 12) do
+        Enum.map(12..17, &denorm_pos(variant, &1, opp))
       else
         []
       end
 
     Enum.uniq([own_coin | extra_points])
   end
+
+  defp table_full_for_movement?(board, variant, color, key) do
+    case Constants.jan_table(State.normalize_table_key(key)) do
+      nil ->
+        false
+
+      table ->
+        Enum.all?(table.from..table.to, fn norm ->
+          pieces_at(board, denorm_pos(variant, norm, color), color) >= 2
+        end)
+    end
+  end
+
+  defp own_coin(variant, color), do: State.own_coin(variant, color)
+  defp opp_coin(variant, color), do: State.opp_coin(variant, color)
+  defp norm_pos(variant, position, color), do: State.norm_pos(variant, position, color)
+  defp denorm_pos(variant, position, color), do: State.denorm_pos(variant, position, color)
 end

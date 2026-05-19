@@ -1,0 +1,428 @@
+{
+  "board": {
+    "bar": {
+      "black": 0,
+      "white": 0
+    },
+    "outside": {
+      "black": 0,
+      "white": 0
+    },
+    "points": [
+      {
+        "index": 0,
+        "pieces": [
+          "black",
+          "black",
+          "black",
+          "black",
+          "black",
+          "black",
+          "black",
+          "black",
+          "black",
+          "black",
+          "black",
+          "black",
+          "black",
+          "black",
+          "black"
+        ]
+      },
+      {
+        "index": 1,
+        "pieces": []
+      },
+      {
+        "index": 2,
+        "pieces": []
+      },
+      {
+        "index": 3,
+        "pieces": []
+      },
+      {
+        "index": 4,
+        "pieces": []
+      },
+      {
+        "index": 5,
+        "pieces": []
+      },
+      {
+        "index": 6,
+        "pieces": []
+      },
+      {
+        "index": 7,
+        "pieces": []
+      },
+      {
+        "index": 8,
+        "pieces": []
+      },
+      {
+        "index": 9,
+        "pieces": []
+      },
+      {
+        "index": 10,
+        "pieces": []
+      },
+      {
+        "index": 11,
+        "pieces": []
+      },
+      {
+        "index": 12,
+        "pieces": []
+      },
+      {
+        "index": 13,
+        "pieces": []
+      },
+      {
+        "index": 14,
+        "pieces": []
+      },
+      {
+        "index": 15,
+        "pieces": []
+      },
+      {
+        "index": 16,
+        "pieces": []
+      },
+      {
+        "index": 17,
+        "pieces": []
+      },
+      {
+        "index": 18,
+        "pieces": []
+      },
+      {
+        "index": 19,
+        "pieces": []
+      },
+      {
+        "index": 20,
+        "pieces": []
+      },
+      {
+        "index": 21,
+        "pieces": []
+      },
+      {
+        "index": 22,
+        "pieces": []
+      },
+      {
+        "index": 23,
+        "pieces": [
+          "white",
+          "white",
+          "white",
+          "white",
+          "white",
+          "white",
+          "white",
+          "white",
+          "white",
+          "white",
+          "white",
+          "white",
+          "white",
+          "white",
+          "white"
+        ]
+      }
+    ]
+  },
+  "dice": null,
+  "last_move": null,
+  "last_moves": [],
+  "legal_moves": [],
+  "match": {
+    "is_over": false,
+    "length": 1,
+    "options": {},
+    "results": [],
+    "score": {
+      "black": 0,
+      "white": 0
+    },
+    "winner": null,
+    "winner_kind": null
+  },
+  "opening_roll": null,
+  "pending_match_options": {
+    "choiceLabels": {
+      "10": "10 marques",
+      "12": "12 marques",
+      "14": "14 marques",
+      "16": "16 marques",
+      "18": "18 marques",
+      "20": "20 marques",
+      "22": "22 marques",
+      "24": "24 marques",
+      "6": "6 marques",
+      "8": "8 marques"
+    },
+    "choices": [
+      "6",
+      "8",
+      "10",
+      "12",
+      "14",
+      "16",
+      "18",
+      "20",
+      "22",
+      "24"
+    ],
+    "kind": "trictrac_partie_length_consent",
+    "prompt": "Choose the marque target.",
+    "responses": {
+      "black": null,
+      "white": null
+    },
+    "rule": "RuleFrTrictracAEcrire"
+  },
+  "pending_turn_decision": null,
+  "players": {
+    "guest": {
+      "color": "black",
+      "id": 6210,
+      "name": "jane"
+    },
+    "host": {
+      "color": "white",
+      "id": 6146,
+      "name": "nick"
+    }
+  },
+  "status": "awaiting_match_options",
+  "trictrac": {
+    "coin_rest_start_count_by_type": {
+      "black": 0,
+      "white": 0
+    },
+    "opening": {
+      "coups_by_type": {
+        "black": 0,
+        "white": 0
+      },
+      "depart_done_by_type": {
+        "black": {
+          "meseas": false,
+          "six_tables": false,
+          "two_tables": false
+        },
+        "white": {
+          "meseas": false,
+          "six_tables": false,
+          "two_tables": false
+        }
+      },
+      "first_type": null,
+      "first_values": null,
+      "jan_rencontre_checked": false,
+      "releve_count": 0
+    },
+    "options": {
+      "margotEnabled": false
+    },
+    "pending_impuissance_by_type": {
+      "black": 0,
+      "white": 0
+    },
+    "pile_misere_pending_by_type": {
+      "black": false,
+      "white": false
+    },
+    "score": [
+      {
+        "bredouille": false,
+        "doubling_active": true,
+        "etendard": false,
+        "grande_bredouille": false,
+        "points": 0,
+        "trous": 0
+      },
+      {
+        "bredouille": false,
+        "doubling_active": true,
+        "etendard": false,
+        "grande_bredouille": false,
+        "points": 0,
+        "trous": 0
+      }
+    ],
+    "score_history": [],
+    "settlement_ledger": {
+      "black": {
+        "coup_count": 0,
+        "coups_lost": 0,
+        "coups_played": 0,
+        "coups_won": 0,
+        "fiches": 0,
+        "final_total": 0,
+        "gross_gain": 0,
+        "jetons": 0,
+        "marque_points": 0,
+        "marques": 0,
+        "paris": 0,
+        "points": 0,
+        "queue_jetons": 0,
+        "queue_paris": 0,
+        "rounded_gain": 0,
+        "trous": 0
+      },
+      "white": {
+        "coup_count": 0,
+        "coups_lost": 0,
+        "coups_played": 0,
+        "coups_won": 0,
+        "fiches": 0,
+        "final_total": 0,
+        "gross_gain": 0,
+        "jetons": 0,
+        "marque_points": 0,
+        "marques": 0,
+        "paris": 0,
+        "points": 0,
+        "queue_jetons": 0,
+        "queue_paris": 0,
+        "rounded_gain": 0,
+        "trous": 0
+      }
+    },
+    "sortie": {
+      "last_event": null
+    },
+    "track_aecrire": {
+      "coup_count": 0,
+      "coup_starter": null,
+      "coups_played": 0,
+      "current_coup": {
+        "ever_lifted_by": {
+          "black": false,
+          "white": false
+        },
+        "first_scorer": null,
+        "interrupted_run_by": {
+          "black": null,
+          "white": null
+        },
+        "last_scorer": null,
+        "legal_exit_by": {
+          "black": false,
+          "white": false
+        },
+        "obligation_reached_by": {
+          "black": false,
+          "white": false
+        },
+        "run_started_at_opp_trous": {
+          "black": 0,
+          "white": 0
+        },
+        "run_trous": {
+          "black": 0,
+          "white": 0
+        },
+        "sans_lever_by": {
+          "black": false,
+          "white": false
+        },
+        "trous": {
+          "black": 0,
+          "white": 0
+        }
+      },
+      "grande_bredouille": {
+        "black": false,
+        "white": false
+      },
+      "gross_gain": 0,
+      "last_marque_result": null,
+      "last_marques_by_type": {
+        "black": 0,
+        "white": 0
+      },
+      "last_points_by_type": {
+        "black": 0,
+        "white": 0
+      },
+      "marque_streak": {
+        "black": 0,
+        "white": 0
+      },
+      "marques": {
+        "black": 0,
+        "white": 0
+      },
+      "partie_length": 16,
+      "partie_over": false,
+      "petite_bredouille": {
+        "black": false,
+        "white": false
+      },
+      "points_total": {
+        "black": 0,
+        "white": 0
+      },
+      "refait_streak": 0,
+      "rounded_gain": 0,
+      "winner": null
+    },
+    "turn": {
+      "can_reprise": false,
+      "conservation_candidates": [],
+      "dice": null,
+      "events": [],
+      "obligations": {
+        "must_conserve": [],
+        "must_fill": [],
+        "piece_type": null
+      },
+      "piece_type": null,
+      "pile_misere_candidate": null,
+      "pile_misere_pending": false,
+      "reprise_color": null,
+      "score_by_type": {
+        "black": 0,
+        "white": 0
+      },
+      "start_board": null,
+      "trous_after": {
+        "black": 0,
+        "white": 0
+      },
+      "trous_before": {
+        "black": 0,
+        "white": 0
+      }
+    },
+    "turn_event_queue": []
+  },
+  "turn": null,
+  "ui_actions": {
+    "can_confirm": false,
+    "can_end_turn": false,
+    "can_reset": true,
+    "can_roll": false,
+    "can_submit_match_options": true,
+    "can_submit_turn_decision": false,
+    "can_undo": false,
+    "end_turn_points": 0,
+    "end_turn_reason": null
+  },
+  "variant": {
+    "active_leg": null,
+    "id": "trictrac_aecrire",
+    "rule_name": "Trictrac A Ecrire",
+    "title": "Trictrac A Ecrire"
+  }
+}

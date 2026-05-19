@@ -23,4 +23,7 @@ defmodule HermesTrictrac.GameSnapshot do
 
     Map.put(snapshot, "seat_reclaim", public_reclaim)
   end
+
+  def with_viewer(snapshot, nil) when is_map(snapshot), do: Map.put(snapshot, "viewer", nil)
+  def with_viewer(snapshot, viewer) when is_map(snapshot), do: Map.put(snapshot, "viewer", viewer)
 end

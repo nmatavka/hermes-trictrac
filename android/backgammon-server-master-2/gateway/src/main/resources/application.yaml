@@ -1,0 +1,39 @@
+server:
+  port: 80
+  address: 0.0.0.0
+
+spring:
+  application:
+    name: gateway
+
+  data:
+    jdbc:
+      dialect: postgresql
+
+
+route:
+  token:
+    name: 'token'
+  header:
+    auth-user:
+      name: 'auth-user'
+
+  config:
+    menu:
+      id: 'menu'
+      path: '/menu/**'
+#      uri: ${MENU_HOST:http://localhost:81}
+      uri: 'http://menu-service:81'
+
+    backgammon-game:
+      id: 'backgammon-game'
+      path: '/game/backgammon/**'
+#      uri: http://localhost:82
+      uri: 'http://game-service:82'
+
+    player-service:
+      id: 'player-service'
+      path: '/player/**'
+#      uri: 'http://localhost:84'
+      uri: 'http://player-service:84'
+debug: false

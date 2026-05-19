@@ -1,0 +1,64 @@
+spring:
+  application:
+    name: backgammon-game
+  data:
+    mongodb:
+      host: mongo-service
+      #      host: localhost
+      port: 27017
+      database: gammon-move
+    redis:
+      host: ${config.jedis.host}
+      port: ${config.jedis.port}
+  cache:
+    type: redis
+    redis:
+      time-to-live: 2m
+  cloud:
+    openfeign:
+      client:
+        config:
+          engine:
+            url: "http://game-engine:80"
+            read-timeout: 30_000
+          player-service:
+            url: "http://player-service:84"
+            read-timeout: 6_000
+          menu-service:
+            url: "http://menu-service:81"
+            read-timeout: 6_000
+  kafka:
+    bootstrap-servers: 176.108.249.125:9092
+    producer:
+      acks: all
+
+logging:
+  level:
+    org.apache.kafka: DEBUG
+    org.springframework.kafka: DEBUG
+
+kafka:
+  topic:
+    narde:
+      event:
+        game-end: narde.game-event.end
+server:
+  error:
+    include-message: always
+  port: 82
+  servlet:
+    context-path: /game
+
+config:
+  sse:
+    time-out: ${GAME_SSE_TIMEOUT:#{100000000}}
+  job:
+    time-out:
+      fixed-delay: 300s
+      initial-delay: 120s
+
+  jedis:
+    host: redis-service
+    port: 6379
+
+debug: false

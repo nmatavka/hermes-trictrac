@@ -4,6 +4,8 @@ defmodule HermesTrictrac.Rules.Registry do
       id: "backgammon",
       title: "Backgammon",
       family: :race,
+      movement_mode: :contrary,
+      uses_bar: true,
       orientation: :ascending,
       start_points: %{
         white: [{0, 2}, {11, 5}, {16, 3}, {18, 5}],
@@ -19,6 +21,8 @@ defmodule HermesTrictrac.Rules.Registry do
       id: "tapa",
       title: "Tapa / Plakoto",
       family: :race,
+      movement_mode: :parallel,
+      uses_bar: false,
       orientation: :split_home,
       start_points: %{
         white: [{23, 15}],
@@ -34,6 +38,8 @@ defmodule HermesTrictrac.Rules.Registry do
       id: "jacquet",
       title: "Jacquet / Pheuga",
       family: :race,
+      movement_mode: :parallel,
+      uses_bar: false,
       orientation: :jacquet_parallel,
       start_points: %{
         white: [{23, 15}],
@@ -50,6 +56,8 @@ defmodule HermesTrictrac.Rules.Registry do
       id: "garanguet",
       title: "Garanguet",
       family: :race,
+      movement_mode: :contrary,
+      uses_bar: false,
       orientation: :split_home,
       start_points: %{
         white: [{23, 15}],
@@ -68,6 +76,7 @@ defmodule HermesTrictrac.Rules.Registry do
       id: "tavli",
       title: "Tavli",
       family: :race,
+      uses_bar: true,
       orientation: :ascending,
       start_points: %{
         white: [{0, 2}, {11, 5}, {16, 3}, {18, 5}],
@@ -83,6 +92,7 @@ defmodule HermesTrictrac.Rules.Registry do
       id: "sbaraglio",
       title: "Sbaraglio",
       family: :race,
+      uses_bar: true,
       orientation: :ascending,
       start_points: %{
         white: [{11, 15}],
@@ -101,6 +111,7 @@ defmodule HermesTrictrac.Rules.Registry do
       id: "sbaraglino",
       title: "Sbaraglino",
       family: :race,
+      uses_bar: true,
       orientation: :ascending,
       start_points: %{
         white: [{11, 15}],
@@ -119,6 +130,8 @@ defmodule HermesTrictrac.Rules.Registry do
       id: "trictrac_classique",
       title: "Trictrac Classique",
       family: :trictrac,
+      movement_mode: :contrary,
+      uses_bar: false,
       orientation: :split_home,
       start_points: %{
         white: [{23, 15}],
@@ -135,6 +148,8 @@ defmodule HermesTrictrac.Rules.Registry do
       id: "trictrac_aecrire",
       title: "Trictrac A Ecrire",
       family: :trictrac,
+      movement_mode: :contrary,
+      uses_bar: false,
       orientation: :split_home,
       start_points: %{
         white: [{23, 15}],
@@ -151,6 +166,8 @@ defmodule HermesTrictrac.Rules.Registry do
       id: "trictrac_combine",
       title: "Trictrac Combine",
       family: :trictrac,
+      movement_mode: :contrary,
+      uses_bar: false,
       orientation: :split_home,
       start_points: %{
         white: [{23, 15}],
@@ -167,6 +184,209 @@ defmodule HermesTrictrac.Rules.Registry do
       id: "toccategli",
       title: "Toccategli",
       family: :trictrac,
+      movement_mode: :contrary,
+      uses_bar: false,
+      orientation: :split_home,
+      start_points: %{
+        white: [{23, 15}],
+        black: [{0, 15}]
+      },
+      total_pieces: 15,
+      can_hit: true,
+      can_bear_off: true,
+      doubles_mode: :two_dice,
+      score_mode: :single_game,
+      trictrac_variant: "toccategli"
+    },
+    "trictrac_en_poule" => %{
+      id: "trictrac_en_poule",
+      title: "Trictrac en poule",
+      family: :trictrac,
+      session_mode: :poule,
+      session_style: :growing_pot,
+      base_variant_id: "trictrac_classique",
+      hole_target: 6,
+      movement_mode: :contrary,
+      uses_bar: false,
+      orientation: :split_home,
+      start_points: %{
+        white: [{23, 15}],
+        black: [{0, 15}]
+      },
+      total_pieces: 15,
+      can_hit: true,
+      can_bear_off: true,
+      doubles_mode: :two_dice,
+      score_mode: :single_game,
+      trictrac_variant: "classique"
+    },
+    "toccategli_en_poule" => %{
+      id: "toccategli_en_poule",
+      title: "Toccategli en poule",
+      family: :trictrac,
+      session_mode: :poule,
+      session_style: :growing_pot,
+      base_variant_id: "toccategli",
+      hole_target: 6,
+      movement_mode: :contrary,
+      uses_bar: false,
+      orientation: :split_home,
+      start_points: %{
+        white: [{23, 15}],
+        black: [{0, 15}]
+      },
+      total_pieces: 15,
+      can_hit: true,
+      can_bear_off: true,
+      doubles_mode: :two_dice,
+      score_mode: :single_game,
+      trictrac_variant: "toccategli"
+    },
+    "trictrac_en_poule_plumee" => %{
+      id: "trictrac_en_poule_plumee",
+      title: "Trictrac en poule (plumee)",
+      family: :trictrac,
+      session_mode: :poule,
+      session_style: :plucked_pot,
+      base_variant_id: "trictrac_classique",
+      movement_mode: :contrary,
+      uses_bar: false,
+      orientation: :split_home,
+      start_points: %{
+        white: [{23, 15}],
+        black: [{0, 15}]
+      },
+      total_pieces: 15,
+      can_hit: true,
+      can_bear_off: true,
+      doubles_mode: :two_dice,
+      score_mode: :single_game,
+      trictrac_variant: "classique"
+    },
+    "trictrac_aecrire_a_tourner" => %{
+      id: "trictrac_aecrire_a_tourner",
+      title: "Trictrac a ecrire a tourner",
+      family: :trictrac,
+      session_mode: :multiplayer,
+      session_family: :aecrire,
+      session_style: :a_tourner,
+      competitor_target: 3,
+      base_variant_id: "trictrac_aecrire",
+      movement_mode: :contrary,
+      uses_bar: false,
+      orientation: :split_home,
+      start_points: %{
+        white: [{23, 15}],
+        black: [{0, 15}]
+      },
+      total_pieces: 15,
+      can_hit: true,
+      can_bear_off: true,
+      doubles_mode: :two_dice,
+      score_mode: :single_game,
+      trictrac_variant: "a_ecrire"
+    },
+    "trictrac_aecrire_chouette" => %{
+      id: "trictrac_aecrire_chouette",
+      title: "Trictrac a ecrire chouette",
+      family: :trictrac,
+      session_mode: :multiplayer,
+      session_family: :aecrire,
+      session_style: :chouette,
+      competitor_target: 3,
+      base_variant_id: "trictrac_aecrire",
+      movement_mode: :contrary,
+      uses_bar: false,
+      orientation: :split_home,
+      start_points: %{
+        white: [{23, 15}],
+        black: [{0, 15}]
+      },
+      total_pieces: 15,
+      can_hit: true,
+      can_bear_off: true,
+      doubles_mode: :two_dice,
+      score_mode: :single_game,
+      trictrac_variant: "a_ecrire"
+    },
+    "trictrac_aecrire_deux_contre_deux" => %{
+      id: "trictrac_aecrire_deux_contre_deux",
+      title: "Trictrac a ecrire deux contre deux",
+      family: :trictrac,
+      session_mode: :multiplayer,
+      session_family: :aecrire,
+      session_style: :deux_contre_deux,
+      competitor_target: 4,
+      base_variant_id: "trictrac_aecrire",
+      movement_mode: :contrary,
+      uses_bar: false,
+      orientation: :split_home,
+      start_points: %{
+        white: [{23, 15}],
+        black: [{0, 15}]
+      },
+      total_pieces: 15,
+      can_hit: true,
+      can_bear_off: true,
+      doubles_mode: :two_dice,
+      score_mode: :single_game,
+      trictrac_variant: "a_ecrire"
+    },
+    "trictrac_combine_chouette" => %{
+      id: "trictrac_combine_chouette",
+      title: "Trictrac combine chouette",
+      family: :trictrac,
+      session_mode: :multiplayer,
+      session_family: :combine,
+      session_style: :chouette,
+      competitor_target: 3,
+      base_variant_id: "trictrac_combine",
+      movement_mode: :contrary,
+      uses_bar: false,
+      orientation: :split_home,
+      start_points: %{
+        white: [{23, 15}],
+        black: [{0, 15}]
+      },
+      total_pieces: 15,
+      can_hit: true,
+      can_bear_off: true,
+      doubles_mode: :two_dice,
+      score_mode: :single_game,
+      trictrac_variant: "combine"
+    },
+    "trictrac_combine_deux_contre_deux" => %{
+      id: "trictrac_combine_deux_contre_deux",
+      title: "Trictrac combine deux contre deux",
+      family: :trictrac,
+      session_mode: :multiplayer,
+      session_family: :combine,
+      session_style: :deux_contre_deux,
+      competitor_target: 4,
+      base_variant_id: "trictrac_combine",
+      movement_mode: :contrary,
+      uses_bar: false,
+      orientation: :split_home,
+      start_points: %{
+        white: [{23, 15}],
+        black: [{0, 15}]
+      },
+      total_pieces: 15,
+      can_hit: true,
+      can_bear_off: true,
+      doubles_mode: :two_dice,
+      score_mode: :single_game,
+      trictrac_variant: "combine"
+    },
+    "toccategli_en_poule_plumee" => %{
+      id: "toccategli_en_poule_plumee",
+      title: "Toccategli en poule (plumee)",
+      family: :trictrac,
+      session_mode: :poule,
+      session_style: :plucked_pot,
+      base_variant_id: "toccategli",
+      movement_mode: :contrary,
+      uses_bar: false,
       orientation: :split_home,
       start_points: %{
         white: [{23, 15}],
@@ -193,6 +413,8 @@ defmodule HermesTrictrac.Rules.Registry do
       id: "plein",
       title: "Jeu du Plein",
       family: :trictrac,
+      movement_mode: :contrary,
+      uses_bar: false,
       orientation: :split_home,
       start_points: %{
         white: [{23, 15}],
@@ -208,6 +430,8 @@ defmodule HermesTrictrac.Rules.Registry do
       id: "toc",
       title: "Jeu du Toc",
       family: :trictrac,
+      movement_mode: :contrary,
+      uses_bar: false,
       orientation: :split_home,
       start_points: %{
         white: [{23, 15}],
@@ -223,6 +447,8 @@ defmodule HermesTrictrac.Rules.Registry do
       id: "brade",
       title: "Brade Suedois",
       family: :race,
+      movement_mode: :parallel,
+      uses_bar: true,
       orientation: :split_home,
       start_points: %{
         white: [{23, 15}],
@@ -243,4 +469,8 @@ defmodule HermesTrictrac.Rules.Registry do
   def fetch!(id), do: Map.fetch!(@variants, id)
   def get(id), do: Map.get(@variants, id, fetch!(@default_variant))
   def default_id, do: @default_variant
+  def session_mode(id), do: Map.get(get(id), :session_mode)
+  def session_variant?(id), do: not is_nil(session_mode(id))
+  def poule_variant?(id), do: Map.get(get(id), :session_mode) == :poule
+  def multiplayer_variant?(id), do: Map.get(get(id), :session_mode) == :multiplayer
 end

@@ -59,21 +59,60 @@ defmodule HermesTrictrac.Rules.Engine do
 
   def snapshot(engine), do: Snapshot.build(engine)
 
-  def join(engine, user, client_id) do
+  def seed_match_options(engine, options) when is_map(options) do
+    updated =
+      case engine.variant.family do
+        :race ->
+          runtime = RaceCore.submit_options(runtime_view(engine), engine.variant, options)
+          apply_runtime(engine, runtime)
+
+        :trictrac ->
+          runtime = TrictracCore.submit_options(runtime_view(engine), engine.variant, options)
+          apply_runtime(engine, runtime)
+
+        :tourne_case ->
+          runtime = TourneCase.submit_options(runtime_view(engine), options)
+          apply_runtime(engine, runtime)
+
+        :rabattues ->
+          engine
+      end
+
+    updated
+    |> update_in([:match, :options], &Map.merge(&1 || %{}, stringify_option_keys(options)))
+    |> put_in([:match, :length], runtime_length(updated, options))
+    |> Map.put(:pending_match_options, nil)
+  end
+
+  def join(engine, user, client_id, auth_id \\ nil) do
     cond do
+      auth_id && engine.players.host && same_auth?(engine.players.host, auth_id) ->
+        host = %{engine.players.host | name: user, client_id: client_id, auth_id: auth_id}
+        updated = put_in(engine, [:players, :host], host)
+        {:ok, updated, player_map(host)}
+
+      auth_id && engine.players.guest && same_auth?(engine.players.guest, auth_id) ->
+        guest = %{engine.players.guest | name: user, client_id: client_id, auth_id: auth_id}
+        updated = put_in(engine, [:players, :guest], guest)
+        {:ok, updated, player_map(guest)}
+
       engine.players.host && same_client?(engine.players.host, client_id) ->
-        {:ok, engine, player_map(engine.players.host)}
+        host = %{engine.players.host | name: user}
+        updated = put_in(engine, [:players, :host], host)
+        {:ok, updated, player_map(host)}
 
       engine.players.guest && same_client?(engine.players.guest, client_id) ->
-        {:ok, engine, player_map(engine.players.guest)}
+        guest = %{engine.players.guest | name: user}
+        updated = put_in(engine, [:players, :guest], guest)
+        {:ok, updated, player_map(guest)}
 
       is_nil(engine.players.host) ->
-        host = player(user, :white, client_id)
+        host = player(user, :white, client_id, auth_id)
         updated = %{engine | players: %{engine.players | host: host}}
         {:ok, updated, player_map(host)}
 
       is_nil(engine.players.guest) ->
-        guest = player(user, :black, client_id)
+        guest = player(user, :black, client_id, auth_id)
         updated = %{engine | players: %{engine.players | guest: guest}} |> maybe_start_match()
         {:ok, updated, player_map(guest)}
 
@@ -106,6 +145,49 @@ defmodule HermesTrictrac.Rules.Engine do
 
     players = engine.players
     maybe_start_match(%{fresh | players: players})
+  end
+
+  def force_start_turn(engine, color) when color in [:white, :black] do
+    runtime =
+      engine.runtime
+      |> Map.put(:turn_color, color)
+      |> Map.put(:turn_number, 1)
+      |> Map.put(:dice, nil)
+      |> Map.put(:legal_moves, [])
+      |> Map.put(:history, [])
+      |> Map.put(:pending_turn_decision, nil)
+      |> clear_opening_rolls(engine.variant)
+
+    %{
+      engine
+      | runtime: runtime,
+        board: runtime.board,
+        trictrac: Map.get(runtime, :trictrac),
+        status: :playing,
+        turn_color: color,
+        turn_number: 1,
+        dice: nil,
+        legal_moves: [],
+        history: [],
+        pending_match_options: nil,
+        pending_turn_decision: nil
+    }
+  end
+
+  def force_coup_starter(engine, color) when color in [:white, :black] do
+    runtime =
+      engine.runtime
+      |> Map.put(:turn_color, color)
+      |> maybe_force_aecrire_coup_starter(engine.variant, color)
+
+    %{
+      engine
+      | runtime: runtime,
+        board: runtime.board,
+        trictrac: Map.get(runtime, :trictrac),
+        status: :playing,
+        turn_color: color
+    }
   end
 
   defp with_actor(engine, user, client_id, requirement, fun) do
@@ -459,6 +541,13 @@ defmodule HermesTrictrac.Rules.Engine do
     }
   end
 
+  defp maybe_force_aecrire_coup_starter(runtime, %{id: id}, color)
+       when id in ["trictrac_aecrire", "trictrac_combine"] do
+    put_in(runtime, [:trictrac, :track_aecrire, :coup_starter], color)
+  end
+
+  defp maybe_force_aecrire_coup_starter(runtime, _variant, _color), do: runtime
+
   defp actor(engine, user, client_id) do
     Enum.find([engine.players.host, engine.players.guest], fn player ->
       player &&
@@ -466,12 +555,13 @@ defmodule HermesTrictrac.Rules.Engine do
     end)
   end
 
-  defp player(name, color, client_id) do
+  defp player(name, color, client_id, auth_id) do
     %{
       id: System.unique_integer([:positive]),
       name: name,
       color: color,
-      client_id: client_id
+      client_id: client_id,
+      auth_id: auth_id
     }
   end
 
@@ -480,6 +570,9 @@ defmodule HermesTrictrac.Rules.Engine do
 
   defp same_client?(player, client_id),
     do: player.client_id == client_id and not is_nil(client_id)
+
+  defp same_auth?(player, auth_id),
+    do: Map.get(player, :auth_id) == auth_id and not is_nil(auth_id)
 
   defp decision_actor_color(engine) do
     case current_pending_turn_decision(engine) || %{} do

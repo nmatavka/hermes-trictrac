@@ -1,0 +1,182 @@
+[
+  {
+    "name": "Liam",
+    "surname": "Smith",
+    "email": "liam.smith@example.com",
+    "password": "password123"
+  },
+  {
+    "name": "Olivia",
+    "surname": "Johnson",
+    "email": "olivia.johnson@example.com",
+    "password": "password123"
+  },
+  {
+    "name": "Noah",
+    "surname": "Williams",
+    "email": "noah.williams@example.com",
+    "password": "password123"
+  },
+  {
+    "name": "Emma",
+    "surname": "Brown",
+    "email": "emma.brown@example.com",
+    "password": "password123"
+  },
+  {
+    "name": "Oliver",
+    "surname": "Jones",
+    "email": "oliver.jones@example.com",
+    "password": "password123"
+  },
+  {
+    "name": "Ava",
+    "surname": "Garcia",
+    "email": "ava.garcia@example.com",
+    "password": "password123"
+  },
+  {
+    "name": "Elijah",
+    "surname": "Miller",
+    "email": "elijah.miller@example.com",
+    "password": "password123"
+  },
+  {
+    "name": "Charlotte",
+    "surname": "Davis",
+    "email": "charlotte.davis@example.com",
+    "password": "password123"
+  },
+  {
+    "name": "James",
+    "surname": "Rodriguez",
+    "email": "james.rodriguez@example.com",
+    "password": "password123"
+  },
+  {
+    "name": "Amelia",
+    "surname": "Martinez",
+    "email": "amelia.martinez@example.com",
+    "password": "password123"
+  },
+  {
+    "name": "Benjamin",
+    "surname": "Hernandez",
+    "email": "benjamin.hernandez@example.com",
+    "password": "password123"
+  },
+  {
+    "name": "Mia",
+    "surname": "Lopez",
+    "email": "mia.lopez@example.com",
+    "password": "password123"
+  },
+  {
+    "name": "Lucas",
+    "surname": "Gonzalez",
+    "email": "lucas.gonzalez@example.com",
+    "password": "password123"
+  },
+  {
+    "name": "Harper",
+    "surname": "Wilson",
+    "email": "harper.wilson@example.com",
+    "password": "password123"
+  },
+  {
+    "name": "Henry",
+    "surname": "Anderson",
+    "email": "henry.anderson@example.com",
+    "password": "password123"
+  },
+  {
+    "name": "Evelyn",
+    "surname": "Thomas",
+    "email": "evelyn.thomas@example.com",
+    "password": "password123"
+  },
+  {
+    "name": "Alexander",
+    "surname": "Taylor",
+    "email": "alexander.taylor@example.com",
+    "password": "password123"
+  },
+  {
+    "name": "Abigail",
+    "surname": "Moore",
+    "email": "abigail.moore@example.com",
+    "password": "password123"
+  },
+  {
+    "name": "Daniel",
+    "surname": "Jackson",
+    "email": "daniel.jackson@example.com",
+    "password": "password123"
+  },
+  {
+    "name": "Ella",
+    "surname": "Martin",
+    "email": "ella.martin@example.com",
+    "password": "password123"
+  },
+  {
+    "name": "Matthew",
+    "surname": "Lee",
+    "email": "matthew.lee@example.com",
+    "password": "password123"
+  },
+  {
+    "name": "Scarlett",
+    "surname": "Perez",
+    "email": "scarlett.perez@example.com",
+    "password": "password123"
+  },
+  {
+    "name": "Jackson",
+    "surname": "Thompson",
+    "email": "jackson.thompson@example.com",
+    "password": "password123"
+  },
+  {
+    "name": "Luna",
+    "surname": "White",
+    "email": "luna.white@example.com",
+    "password": "password123"
+  },
+  {
+    "name": "Sebastian",
+    "surname": "Harris",
+    "email": "sebastian.harris@example.com",
+    "password": "password123"
+  },
+  {
+    "name": "Grace",
+    "surname": "Sanchez",
+    "email": "grace.sanchez@example.com",
+    "password": "password123"
+  },
+  {
+    "name": "David",
+    "surname": "Clark",
+    "email": "david.clark@example.com",
+    "password": "password123"
+  },
+  {
+    "name": "Chloe",
+    "surname": "Ramirez",
+    "email": "chloe.ramirez@example.com",
+    "password": "password123"
+  },
+  {
+    "name": "Joseph",
+    "surname": "Lewis",
+    "email": "joseph.lewis@example.com",
+    "password": "password123"
+  },
+  {
+    "name": "Zoey",
+    "surname": "Robinson",
+    "email": "zoey.robinson@example.com",
+    "password": "password123"
+  }
+]

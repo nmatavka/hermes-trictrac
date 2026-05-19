@@ -97,13 +97,21 @@ const BOARD_LAYOUTS = {
   }
 };
 
-function normalizeMessage(message, playerColor) {
+function normalizeMessage(message, viewer) {
   const text = message?.data?.text ?? message?.text ?? "";
-  const rawAuthor = message?.author ?? message?.player;
+  const authorId = message?.author_id ?? message?.authorId ?? null;
+  const authorName = message?.author_name ?? message?.author ?? message?.player ?? "";
+  const isSelf =
+    authorId != null
+      ? authorId === viewer?.id
+      : authorName && viewer?.name
+        ? authorName === viewer.name
+        : false;
 
   return {
     ...message,
-    author: rawAuthor === playerColor ? "me" : "them",
+    author: isSelf ? "me" : "them",
+    authorName,
     data: { text }
   };
 }
@@ -130,20 +138,58 @@ function uiMarqueCopy(text) {
     .replace(/\bmarque\b/g, "marqué");
 }
 
+function formatCashMinor(amount, scale = 100) {
+  const normalizedAmount = Number(amount);
+  const normalizedScale = Number(scale) || 100;
+
+  if (!Number.isFinite(normalizedAmount)) {
+    return null;
+  }
+
+  return (normalizedAmount / normalizedScale).toFixed(2);
+}
+
 function scoreEventSignature(event) {
   return JSON.stringify(event || null);
 }
 
-function scoreEventDetail(event) {
-  if (event?.label) {
-    return event.label;
+function scoreEventTranslationKey(event) {
+  if (event?.rule) {
+    return String(event.rule).toLowerCase();
   }
 
   if (event?.source) {
-    return humanizeToken(String(event.source).toLowerCase());
+    return String(event.source).toLowerCase();
   }
 
-  return t("score.event");
+  const normalizedLabel = String(event?.label || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+  switch (normalizedLabel) {
+    case "jan_de_recompense":
+      return "jan_recompense";
+    case "jan_qui_ne_peut":
+      return "jan_qui_ne_peut";
+    default:
+      return normalizedLabel;
+  }
+}
+
+function scoreEventDetail(event) {
+  const fallback =
+    event?.label ||
+    (event?.source ? humanizeToken(String(event.source).toLowerCase()) : t("score.event"));
+  const key = scoreEventTranslationKey(event);
+
+  if (key) {
+    return tx(`scoreEvents.${key}`, fallback);
+  }
+
+  return fallback;
 }
 
 function buildTrictracToast(event) {
@@ -215,7 +261,7 @@ function decisionSignature(game) {
 
 function chatMessageSignature(message) {
   return stableSignature({
-    author: message?.author ?? message?.player ?? "",
+    author: message?.author_id ?? message?.authorId ?? message?.author ?? message?.player ?? "",
     text: message?.data?.text ?? message?.text ?? ""
   });
 }
@@ -263,7 +309,7 @@ function latestAction(lastActionRef) {
   return action.event;
 }
 
-function newIncomingChat(previousGame, nextGame, playerColor) {
+function newIncomingChat(previousGame, nextGame, viewerId) {
   const previousChat = Array.isArray(previousGame?.chat) ? previousGame.chat : [];
   const nextChat = Array.isArray(nextGame?.chat) ? nextGame.chat : [];
 
@@ -272,8 +318,8 @@ function newIncomingChat(previousGame, nextGame, playerColor) {
   }
 
   return nextChat.slice(previousChat.length).some((message) => {
-    const author = message?.author ?? message?.player;
-    return author !== playerColor;
+    const authorId = message?.author_id ?? message?.authorId;
+    return authorId == null || authorId !== viewerId;
   });
 }
 
@@ -352,7 +398,7 @@ function detectSoundCues(previousGame, nextGame, options) {
     cues.push("score");
   }
 
-  if (newIncomingChat(previousGame, nextGame, options.playerColor)) {
+  if (newIncomingChat(previousGame, nextGame, options.viewerId)) {
     cues.push("chat");
   }
 
@@ -390,7 +436,32 @@ function colorSubjectLabel(color) {
   return tx(`colorSubject.${color || "unknown"}`, colorLabel(color));
 }
 
-function boardSpaceLabel(space) {
+function colorVictoryLabel(color) {
+  return tx(`colorVictory.${color || "unknown"}`, colorSubjectLabel(color));
+}
+
+function localizedToken(namespace, value) {
+  const key = String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+  return tx(`${namespace}.${key}`, humanizeToken(value || ""));
+}
+
+function winnerKindLabel(kind) {
+  return localizedToken("winnerKinds", kind);
+}
+
+function pointDisplayNumber(index, playerColor) {
+  if (typeof index !== "number") {
+    return "";
+  }
+
+  return playerColor === "black" ? index + 1 : 24 - index;
+}
+
+function boardSpaceLabel(space, playerColor) {
   if (space === "bar") {
     return t("game.bar");
   }
@@ -399,10 +470,10 @@ function boardSpaceLabel(space) {
     return t("game.bearOff");
   }
 
-  return typeof space === "number" ? String(space + 1) : String(space ?? "");
+  return typeof space === "number" ? String(pointDisplayNumber(space, playerColor)) : String(space ?? "");
 }
 
-function lastMoveText(game) {
+function lastMoveText(game, playerColor) {
   const moves = Array.isArray(game?.last_moves) && game.last_moves.length > 0
     ? game.last_moves
     : game?.last_move
@@ -415,8 +486,8 @@ function lastMoveText(game) {
 
   const segments = moves.map((move) =>
     t("game.moveSegment", {
-      from: boardSpaceLabel(move.from),
-      to: boardSpaceLabel(move.to)
+      from: boardSpaceLabel(move.from, playerColor),
+      to: boardSpaceLabel(move.to, playerColor)
     })
   );
   const movesText = formatLocalizedList(segments);
@@ -470,16 +541,16 @@ function oppositeColor(color) {
 }
 
 function trictracVariantId(game) {
-  return game?.variant?.id || "";
+  return game?.variant?.active_variant_id || game?.variant?.id || "";
 }
 
 function effectiveVariantId(game) {
-  return game?.variant?.active_leg?.id || game?.variant?.id || "";
+  return game?.variant?.active_leg?.id || game?.variant?.active_variant_id || game?.variant?.id || "";
 }
 
 function effectiveVariantTitle(game) {
-  const id = game?.variant?.active_leg?.id || game?.variant?.id || "";
-  return variantTitle(id, game?.variant?.active_leg?.title || game?.variant?.title || "");
+  const id = game?.variant?.active_leg?.id || game?.variant?.active_variant_id || game?.variant?.id || "";
+  return variantTitle(id, game?.variant?.active_leg?.title || game?.variant?.active_variant_title || game?.variant?.title || "");
 }
 
 function trictracScoreEntry(trictrac, color) {
@@ -509,12 +580,13 @@ function formatCompactClasses(classes) {
 
 function aecrirePartieLength(game) {
   const rawValue =
+    game?.multiplayer?.partie_length ??
     game?.trictrac?.track_aecrire?.partie_length ??
     game?.match?.options?.aEcrirePartieLength ??
     16;
   const parsed = Number(rawValue);
 
-  return [6, 8, 10, 12, 14, 16, 18, 20, 22, 24].includes(parsed) ? parsed : 16;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 16;
 }
 
 function aecrireRoundedGain(game) {
@@ -620,7 +692,7 @@ function aecrireResultLines(game) {
   }
 
   return [
-    winner ? t("game.wonByPoints", { winner: colorSubjectLabel(winner), points: aecrireRoundedGain(game) }) : t("game.drawnSettlement"),
+    winner ? t("game.wonByPoints", { winner: colorVictoryLabel(winner), points: aecrireRoundedGain(game) }) : t("game.drawnSettlement"),
     t("detail.gainExact", { value: aecrireGrossGain(game) }),
     t("detail.gainArrondi", { value: aecrireRoundedGain(game) })
   ];
@@ -723,7 +795,7 @@ function aecrireMatchResultText(game) {
     return null;
   }
 
-  return t("game.wonByPoints", { winner: colorSubjectLabel(winner), points: aecrireRoundedGain(game) });
+  return t("game.wonByPoints", { winner: colorVictoryLabel(winner), points: aecrireRoundedGain(game) });
 }
 
 function matchResultSummary(result, index) {
@@ -739,7 +811,7 @@ function matchResultSummary(result, index) {
   if (!result?.winner) {
     return t("matchResult.gameDraw", {
       number: index + 1,
-      kind: `${legLabel}${humanizeToken(result?.kind || "draw")}`,
+      kind: `${legLabel}${winnerKindLabel(result?.kind || "draw")}`,
       award: awardText
     });
   }
@@ -747,9 +819,9 @@ function matchResultSummary(result, index) {
   return t("matchResult.gameWin", {
     number: index + 1,
     leg: legLabel,
-    winner: colorSubjectLabel(result.winner),
+    winner: colorVictoryLabel(result.winner),
     award: awardText,
-    kind: humanizeToken(result.kind)
+    kind: winnerKindLabel(result.kind)
   });
 }
 
@@ -1017,6 +1089,8 @@ function pendingChoiceLabel(payload, answer) {
   const labeledChoice =
     payload?.kind === "trictrac_partie_length_consent"
       ? t("units.marque", { count: answer })
+      : payload?.kind === "multiplayer_partie_length_consent"
+        ? payload?.choiceLabels?.[answer] || `${answer} ${tx("game.coups", "Coups")}`
       : payload?.kind === "tavli_target_consent"
         ? t("units.point", { count: answer })
         : payload?.choiceLabels?.[answer];
@@ -1043,6 +1117,8 @@ function pendingPrompt(payload) {
       return t("options.margotPrompt");
     case "trictrac_partie_length_consent":
       return t("options.partieLengthPrompt");
+    case "multiplayer_partie_length_consent":
+      return tx("options.multiplayerPartieLengthPrompt", "Choose the coup length.");
     default:
       return uiMarqueCopy(payload?.prompt || t("game.choosePregame"));
   }
@@ -1082,6 +1158,7 @@ export default function gameInit(root, channel, options = {}) {
         <HermesTrictracApp
           lobbyName={root.dataset.game}
           player={resp.player}
+          viewer={resp.viewer || resp.game?.viewer || null}
           playerName={root.dataset.user}
           channel={channel}
           initialGame={resp.game}
@@ -1099,8 +1176,7 @@ export default function gameInit(root, channel, options = {}) {
     });
 }
 
-function HermesTrictracApp({ channel, initialGame, player, playerName, lobbyName, requestedBotMargot }) {
-  const playerColor = player?.color ?? "white";
+function HermesTrictracApp({ channel, initialGame, player, viewer: initialViewer, playerName, lobbyName, requestedBotMargot }) {
   const soundControllerRef = useRef(null);
 
   if (!soundControllerRef.current) {
@@ -1132,6 +1208,9 @@ function HermesTrictracApp({ channel, initialGame, player, playerName, lobbyName
   const scoreHistoryCursorRef = useRef(initialScoreHistory.length);
   const lastSeenScoreEventRef = useRef(scoreEventSignature(initialScoreHistory[initialScoreHistory.length - 1]));
   const [pendingAction, setPendingAction] = useState(null);
+  const viewer = game.viewer || initialViewer || null;
+  const viewerSeatColor = viewer?.seat_color ?? null;
+  const playerColor = viewerSeatColor || player?.color || "white";
 
   const dismissToast = (toastId) => {
     const timerId = toastTimersRef.current.get(toastId);
@@ -1236,7 +1315,8 @@ function HermesTrictracApp({ channel, initialGame, player, playerName, lobbyName
 
       if (!isDuplicateUpdate) {
         const cues = detectSoundCues(previousGame, resp.game, {
-          playerColor,
+          playerColor: viewerSeatColor,
+          viewerId: viewer?.id ?? null,
           lastAction: latestAction(lastActionRef),
           scoreEventsCount: scoreEvents.length
         });
@@ -1258,7 +1338,7 @@ function HermesTrictracApp({ channel, initialGame, player, playerName, lobbyName
     return () => {
       channel.off("update", updateRef);
     };
-  }, [channel, playerColor]);
+  }, [channel, viewer?.id, viewerSeatColor]);
 
   useEffect(() => {
     return () => {
@@ -1304,15 +1384,21 @@ function HermesTrictracApp({ channel, initialGame, player, playerName, lobbyName
 
   const isHost = game.players?.host?.name === playerName;
   const activeTurnColor = game.turn?.color;
-  const isTurnPlayer = game.turn?.player_name === playerName || activeTurnColor === playerColor;
-  const isSeatedPlayer =
-    game.players?.host?.name === playerName || game.players?.guest?.name === playerName;
+  const isActiveViewer = viewer?.role === "active";
+  const isCompetitorViewer = viewer?.role === "active" || viewer?.role === "bench";
+  const isTurnPlayer =
+    isActiveViewer && (game.turn?.player_name === viewer?.name || activeTurnColor === viewerSeatColor);
+  const isSeatedPlayer = isActiveViewer;
   const pendingMatchOptions = game.pending_match_options;
   const isConsensusChoice =
     Array.isArray(pendingMatchOptions?.choices) && !!pendingMatchOptions?.responses;
+  const canRespondToPendingMatchOptions =
+    pendingMatchOptions?.kind === "multiplayer_partie_length_consent"
+      ? isCompetitorViewer
+      : isSeatedPlayer;
   const pendingDecisionActorColor = game.pending_turn_decision?.actorColor || activeTurnColor;
   const canResolveTurnDecision =
-    !!game.pending_turn_decision && isSeatedPlayer && pendingDecisionActorColor === playerColor;
+    !!game.pending_turn_decision && isSeatedPlayer && pendingDecisionActorColor === viewerSeatColor;
   const openingRoll = game.opening_roll;
   const isOpeningRollPending = !!openingRoll?.pending;
   const legalMoves = game.legal_moves || [];
@@ -1330,11 +1416,15 @@ function HermesTrictracApp({ channel, initialGame, player, playerName, lobbyName
 
   const selectedMoves = selectedFrom == null ? [] : fromTargets[String(selectedFrom)] || [];
   const highlightedTargets = new Set(selectedMoves.map((move) => String(move.to)));
+  const boardHasActions = activeLegalMoves.length > 0;
   const boardPoints = new Map((game.board?.points || []).map((point) => [point.index, point]));
   const layout = BOARD_LAYOUTS[playerColor] || BOARD_LAYOUTS.white;
   const topColor = playerColor === "white" ? "black" : "white";
   const activeVariantId = effectiveVariantId(game);
-  const showBarColumn = !BAR_GRAPHICS_HIDDEN_VARIANTS.has(activeVariantId);
+  const showBarColumn =
+    game.variant?.uses_bar == null
+      ? !BAR_GRAPHICS_HIDDEN_VARIANTS.has(activeVariantId)
+      : game.variant.uses_bar !== false;
   const displayedDice = game.opening_roll?.pending ? null : game.dice || lastVisibleDice?.dice || null;
   const displayedDiceColor = game.dice
     ? game.turn?.color || playerColor
@@ -1342,8 +1432,8 @@ function HermesTrictracApp({ channel, initialGame, player, playerName, lobbyName
   const displayedDiceIsCurrent = !!game.dice;
 
   const messageList = useMemo(
-    () => (game.chat || []).map((message) => normalizeMessage(message, playerColor)),
-    [game.chat, playerColor]
+    () => (game.chat || []).map((message) => normalizeMessage(message, viewer)),
+    [game.chat, viewer]
   );
 
   const clearSelection = () => setSelectedFrom(null);
@@ -1421,7 +1511,6 @@ function HermesTrictracApp({ channel, initialGame, player, playerName, lobbyName
   const onMessageWasSent = (text) => {
     pushWithError("chat", {
       chat: {
-        author: playerColor,
         type: "text",
         data: { text }
       }
@@ -1431,11 +1520,25 @@ function HermesTrictracApp({ channel, initialGame, player, playerName, lobbyName
     pushWithError("remain_seated");
   };
 
+  const isPouleTable = !!game.poule;
+  const isMultiplayerTable = !!game.multiplayer;
   const diceTheme = game.turn?.color || playerColor;
   const botDisplayName = trictracBotDisplayName(game) || game.bot?.name || t("lobby.computer");
-  const heroCopy = game.bot?.enabled
-    ? t("game.againstBot", { color: colorLabel(playerColor), bot: botDisplayName })
-    : t("game.againstHuman", { color: colorLabel(playerColor) });
+  const heroCopy = isPouleTable
+    ? viewer?.role === "active"
+      ? tx("game.pouleOnBoard", "You are on the board right now.")
+      : viewer?.role === "queued"
+        ? tx("game.pouleQueued", "You are in the queue for the next rotation.")
+        : tx("game.pouleSpectating", "You are watching this poule table.")
+    : isMultiplayerTable
+      ? viewer?.role === "active"
+        ? tx("game.multiplayerOnBoard", "You are one of the active players on the board.")
+        : viewer?.role === "bench"
+          ? tx("game.multiplayerBench", "You are in the competitor rotation and waiting for your turn.")
+          : tx("game.multiplayerSpectating", "You are watching this multi-seat table.")
+      : game.bot?.enabled
+        ? t("game.againstBot", { color: colorLabel(playerColor), bot: botDisplayName })
+        : t("game.againstHuman", { color: colorLabel(playerColor) });
   const toggleSound = () => {
     soundControllerRef.current.setEnabled(!soundState.enabled);
   };
@@ -1467,12 +1570,13 @@ function HermesTrictracApp({ channel, initialGame, player, playerName, lobbyName
 
       <div className="game-layout">
         <aside className="action-rail">
-          <StatusCard game={game} playerColor={playerColor} playerName={playerName} />
-          <SeatReclaimCard payload={game.seat_reclaim} playerColor={playerColor} onRemainSeated={onRemainSeated} />
+          <StatusCard game={game} playerColor={playerColor} playerName={playerName} viewer={viewer} />
+          <SeatReclaimCard payload={game.seat_reclaim} playerColor={viewerSeatColor || playerColor} onRemainSeated={onRemainSeated} />
           <DiceCard color={displayedDiceColor} dice={displayedDice} isCurrentRoll={displayedDiceIsCurrent} />
           {isOpeningRollPending ? <OpeningRollCard payload={openingRoll} playerColor={playerColor} /> : null}
           <ActionCard
             game={game}
+            viewer={viewer}
             isSeatedPlayer={isSeatedPlayer}
             isTurnPlayer={isTurnPlayer}
             playerColor={playerColor}
@@ -1498,13 +1602,29 @@ function HermesTrictracApp({ channel, initialGame, player, playerName, lobbyName
               clearSelection();
             }}
           />
-          {isConsensusChoice && isSeatedPlayer ? (
+          {isPouleTable ? (
+            <PouleCard
+              payload={game.poule}
+              viewer={viewer}
+              onClaimQueueSpot={() => pushWithError("claim_queue_spot")}
+            />
+          ) : null}
+          {isMultiplayerTable ? (
+            <MultiplayerCard
+              payload={game.multiplayer}
+              viewer={viewer}
+              onClaimRosterSlot={() => pushWithError("claim_roster_slot")}
+            />
+          ) : null}
+          {isConsensusChoice && canRespondToPendingMatchOptions ? (
             <PregameChoiceCard
               payload={pendingMatchOptions}
+              viewer={viewer}
               playerColor={playerColor}
               onChoose={(decision) => {
                 const optionKey =
-                  pendingMatchOptions.kind === "trictrac_partie_length_consent"
+                  pendingMatchOptions.kind === "trictrac_partie_length_consent" ||
+                  pendingMatchOptions.kind === "multiplayer_partie_length_consent"
                     ? "aEcrirePartieLengthConsent"
                     : "margotConsent";
 
@@ -1533,7 +1653,7 @@ function HermesTrictracApp({ channel, initialGame, player, playerName, lobbyName
 
         <main className="table-stage">
           <div
-            className={`board-shell player-${playerColor}`}
+            className={`board-shell player-${playerColor} ${boardHasActions ? "board-interactive" : ""}`}
             style={{ backgroundImage: `url(${BoardWood})` }}
           >
             <div className="board-sheen" />
@@ -1542,6 +1662,7 @@ function HermesTrictracApp({ channel, initialGame, player, playerName, lobbyName
                 points={layout.top}
                 pointsMap={boardPoints}
                 isTop={true}
+                playerColor={playerColor}
                 selectedFrom={selectedFrom}
                 highlightedTargets={highlightedTargets}
                 sourceMoves={fromTargets}
@@ -1571,6 +1692,7 @@ function HermesTrictracApp({ channel, initialGame, player, playerName, lobbyName
                 points={layout.bottom}
                 pointsMap={boardPoints}
                 isTop={false}
+                playerColor={playerColor}
                 selectedFrom={selectedFrom}
                 highlightedTargets={highlightedTargets}
                 sourceMoves={fromTargets}
@@ -1661,10 +1783,10 @@ function LanguageSelect({ language, onChange }) {
   );
 }
 
-function StatusCard({ game, playerColor, playerName }) {
+function StatusCard({ game, playerColor, playerName, viewer }) {
   const summaryItems = trictracStatusLineItems(game);
-  const winnerLabel = colorSubjectLabel(game.match?.winner);
-  const lastMove = lastMoveText(game);
+  const winnerLabel = colorVictoryLabel(game.match?.winner);
+  const lastMove = lastMoveText(game, playerColor);
   const activeLegTitle = game?.variant?.id === "tavli" ? effectiveVariantTitle(game) : null;
   const pendingDecisionActorColor = game.pending_turn_decision?.actorColor || game.turn?.color;
   const pendingDecisionActorName = playerNameForColor(game, pendingDecisionActorColor);
@@ -1673,29 +1795,61 @@ function StatusCard({ game, playerColor, playerName }) {
       ? aecrireMatchResultText(game)
       : null;
   const whoseTurn =
-    game.match?.is_over
-      ? aecrireResultText || t("game.wonBy", { winner: winnerLabel, kind: humanizeToken(game.match?.winner_kind || "") })
+    game.poule?.phase === "waiting_for_competitors"
+      ? tx("game.waitingCompetitors", "Waiting for enough competitors to fill the table.")
+      : game.poule?.phase === "waiting_for_queue_refill"
+        ? tx("game.waitingQueueRefill", "Waiting for a spectator to claim the open queue slot.")
+        : game.poule?.phase === "finished"
+          ? tx("game.pouleFinished", "The poule session is finished.")
+      : game.multiplayer?.phase === "waiting_for_players"
+        ? tx("game.waitingPlayers", "Waiting for enough players to fill the table.")
+        : game.multiplayer?.phase === "awaiting_order_draw"
+          ? tx("game.waitingOrderDraw", "Waiting for the opening draw.")
+        : game.multiplayer?.phase === "awaiting_match_options"
+          ? tx("game.waitingLengthAgreement", "Waiting for the competitors to agree on the coup length.")
+        : game.multiplayer?.phase === "waiting_for_roster_refill"
+          ? tx("game.waitingRosterRefill", "Waiting for a spectator to claim the open roster slot.")
+          : game.multiplayer?.phase === "continuing_honneurs_after_coup"
+            ? tx("game.continuingHonneurs", "The coup is settled and the honneurs side is still continuing.")
+            : game.multiplayer?.phase === "finished"
+              ? tx("game.multiplayerFinished", "The multiplayer session is finished.")
+      : game.match?.is_over
+      ? aecrireResultText || t("game.wonBy", { winner: winnerLabel, kind: winnerKindLabel(game.match?.winner_kind || "") })
       : game.status === "waiting_for_opponent"
-      ? t("game.waitingOpponent")
-      : game.opening_roll?.pending
-        ? t("game.rollToStart")
-      : game.pending_match_options?.kind === "tavli_target_consent"
-        ? t("game.tavliAgreement")
-      : game.pending_match_options?.kind === "trictrac_margot_consent"
-        ? t("game.margotAgreement")
-        : game.pending_match_options
-          ? t("game.optionsAgreement")
-        : game.pending_turn_decision
-          ? t("game.decisionRequired", { player: pendingDecisionActorName })
-          : game.turn?.player_name
-            ? t("game.toMove", { player: playerNameForColor(game, game.turn?.color) })
-            : t("game.settingUp");
+        ? t("game.waitingOpponent")
+        : game.opening_roll?.pending
+          ? t("game.rollToStart")
+          : game.pending_match_options?.kind === "tavli_target_consent"
+            ? t("game.tavliAgreement")
+            : game.pending_match_options?.kind === "trictrac_margot_consent"
+              ? t("game.margotAgreement")
+              : game.pending_match_options
+                ? t("game.optionsAgreement")
+                : game.pending_turn_decision
+                  ? t("game.decisionRequired", { player: pendingDecisionActorName })
+                  : game.turn?.player_name
+                    ? t("game.toMove", { player: playerNameForColor(game, game.turn?.color) })
+                    : t("game.settingUp");
+
+  const seatTag = game.poule
+    ? viewer?.role === "active"
+      ? tx("game.viewerActive", `You are ${colorLabel(playerColor)} on the board.`)
+      : viewer?.role === "queued"
+        ? tx("game.viewerQueued", "You are currently in the queue.")
+        : tx("game.viewerSpectator", "You are watching as a spectator.")
+    : game.multiplayer
+      ? viewer?.role === "active"
+        ? tx("game.viewerActive", `You are ${colorLabel(playerColor)} on the board.`)
+        : viewer?.role === "bench"
+          ? tx("game.viewerBench", "You are currently waiting in the competitor rotation.")
+          : tx("game.viewerSpectator", "You are watching as a spectator.")
+    : t("game.youAre", { color: colorLabel(playerColor) });
 
   return (
     <section className="rail-card">
       <p className="rail-label">{t("game.seat")}</p>
       <h2>{playerName}</h2>
-      <p className="seat-tag">{t("game.youAre", { color: colorLabel(playerColor) })}</p>
+      <p className="seat-tag">{seatTag}</p>
       <p className="status-line">{whoseTurn}</p>
       {lastMove ? <p className="muted-copy">{lastMove}</p> : null}
       {activeLegTitle ? <p className="muted-copy">{t("game.currentLeg", { leg: activeLegTitle })}</p> : null}
@@ -1783,9 +1937,12 @@ function OpeningRollCard({ payload, playerColor }) {
   );
 }
 
-function ActionCard({ game, isSeatedPlayer, isTurnPlayer, playerColor, openingRoll, pendingAction, onRoll, onUndo, onConfirm, onResign, onNewMatch }) {
+function ActionCard({ game, viewer, isSeatedPlayer, isTurnPlayer, playerColor, openingRoll, pendingAction, onRoll, onUndo, onConfirm, onResign, onNewMatch }) {
   const actionPending = !!pendingAction;
   const openingRollPending = !!openingRoll?.pending;
+  const isPouleFinished = game.poule?.phase === "finished";
+  const isMultiplayerFinished = game.multiplayer?.phase === "finished";
+  const isPluckedPoule = game.poule?.style === "plucked_pot";
   const endTurnPoints = Number(game.ui_actions?.end_turn_points || 0);
   const isImpuissanceEndTurn = game.ui_actions?.end_turn_reason === "impuissance";
   const canOpeningRoll =
@@ -1802,7 +1959,13 @@ function ActionCard({ game, isSeatedPlayer, isTurnPlayer, playerColor, openingRo
     !game.match?.is_over &&
     !game.pending_match_options &&
     !game.pending_turn_decision;
-  const canRoll = !actionPending && (canOpeningRoll || (canPlay && !game.dice && !game.pending_match_options && !game.pending_turn_decision));
+  const canRollForOrder =
+    !actionPending &&
+    !!game.ui_actions?.can_roll_for_order &&
+    game.multiplayer?.order_draw?.current_roller?.id === viewer?.id;
+  const canRoll =
+    canRollForOrder ||
+    (!actionPending && (canOpeningRoll || (canPlay && !game.dice && !game.pending_match_options && !game.pending_turn_decision)));
   const canUndo = !actionPending && canPlay && !!game.dice && (game.dice.moves_played || []).length > 0 && !game.pending_turn_decision;
   const canEndTurn =
     canPlay &&
@@ -1823,11 +1986,11 @@ function ActionCard({ game, isSeatedPlayer, isTurnPlayer, playerColor, openingRo
     !actionPending &&
     canPlay &&
     !!game.dice &&
-    !hasMovesLeft &&
-    !!game.ui_actions?.can_confirm &&
+    !hasLegalMoves &&
     !game.pending_turn_decision &&
     !canEndTurn;
-  const showNewMatch = !!game.match?.is_over;
+  const showNewMatch = isPouleFinished || isMultiplayerFinished || (!game.poule && !game.multiplayer && !!game.match?.is_over);
+  const showSecondaryAction = showNewMatch || canEndTurn || !isPluckedPoule;
   const secondaryActionLabel = showNewMatch ? t("game.newMatch") : canEndTurn ? t("game.endTurn") : t("game.resign");
   const secondaryAction = showNewMatch ? onNewMatch : canEndTurn ? onConfirm : onResign;
   const secondaryDisabled = showNewMatch ? actionPending : canEndTurn ? !canEndTurn || actionPending : !isSeatedPlayer || actionPending;
@@ -1848,13 +2011,15 @@ function ActionCard({ game, isSeatedPlayer, isTurnPlayer, playerColor, openingRo
         <button type="button" onClick={onConfirm} disabled={!canConfirm}>
           {t("game.confirm")}
         </button>
-        <button
-          type="button"
-          onClick={secondaryAction}
-          disabled={secondaryDisabled}
-        >
-          {secondaryActionLabel}
-        </button>
+        {showSecondaryAction ? (
+          <button
+            type="button"
+            onClick={secondaryAction}
+            disabled={secondaryDisabled}
+          >
+            {secondaryActionLabel}
+          </button>
+        ) : null}
       </div>
       {canEndTurn ? (
         <p className="muted-copy">
@@ -1865,6 +2030,250 @@ function ActionCard({ game, isSeatedPlayer, isTurnPlayer, playerColor, openingRo
         <p className="muted-copy">
           {t("game.passDiceHint")}
         </p>
+      ) : null}
+    </section>
+  );
+}
+
+function PouleCard({ payload, viewer, onClaimQueueSpot }) {
+  if (!payload) {
+    return null;
+  }
+
+  const isPluckedPoule = payload.style === "plucked_pot";
+  const queueEntries = payload.queue || [];
+  const spectators = payload.spectators || [];
+  const ledger = payload.ledger || [];
+  const drawOrder = payload.draw_order || [];
+  const latestRound = payload.history?.[payload.history.length - 1] || null;
+  const activeHost = payload.active?.host?.name || t("waiting");
+  const activeGuest = payload.active?.guest?.name || t("waiting");
+  const drawOrderText = drawOrder.length > 0
+    ? drawOrder.map((entry) => entry.kind === "open_slot" ? tx("game.openQueueSlot", "Open queue slot") : entry.name).join(", ")
+    : tx("game.noDrawOrderYet", "Draw order will appear when the table fills.");
+  const queueText = queueEntries.length > 0
+    ? queueEntries.map((entry) => entry.kind === "open_slot" ? tx("game.openQueueSlot", "Open queue slot") : entry.name).join(", ")
+    : tx("game.emptyQueue", "No one is waiting in the queue.");
+  const spectatorsText = spectators.length > 0
+    ? spectators.map((spectator) => spectator.name).join(", ")
+    : tx("game.noSpectators", "No spectators are watching right now.");
+  const championText =
+    payload.champion?.name && payload.streak > 0
+      ? tx("game.currentStreak", "{name} is on a streak of {count}.", {
+          name: payload.champion.name,
+          count: payload.streak
+        })
+      : tx("game.noChampion", "No streak is running yet.");
+  const latestSettlementText =
+    latestRound?.winner?.name && Number.isFinite(latestRound?.settlement_trous)
+      ? tx("game.latestSettlement", "{name} took {amount} on a {trous}-trou lead.", {
+          name: latestRound.winner.name,
+          amount: latestRound.payout_amount ?? 0,
+          trous: latestRound.settlement_trous ?? 0
+        })
+      : tx("game.noSettlementYet", "No payout has been taken from the common fund yet.");
+
+  return (
+    <section className="rail-card">
+      <p className="rail-label">{tx("game.poule", "Poule")}</p>
+      <h2>{tx(`game.poulePhase.${payload.phase}`, capitalizeFirst(humanizeToken(payload.phase || "session")))}</h2>
+      <p className="status-line">
+        {isPluckedPoule ? latestSettlementText : championText}
+      </p>
+      <div className="score-row">
+        <span>
+          {tx(isPluckedPoule ? "game.remainingFund" : "game.pool", isPluckedPoule ? "Remaining fund" : "Pool")}: {payload.pool ?? 0}
+        </span>
+        {isPluckedPoule ? (
+          <>
+            <span>{tx("game.stake", "Stake")}: {payload.config?.stake ?? 0}</span>
+            <span>{tx("game.holeValue", "Hole value")}: {payload.config?.hole_value ?? 0}</span>
+          </>
+        ) : (
+          <>
+            <span>{tx("game.ante", "Ante")}: {payload.config?.ante ?? 0}</span>
+            <span>{tx("game.winTarget", "Target")}: {payload.config?.win_target ?? 0}</span>
+          </>
+        )}
+      </div>
+      {isPluckedPoule ? (
+        <p className="muted-copy">
+          {tx("game.fixedRing", "Fixed ring")}: {tx("game.fixedRingNote", "the second player stays on, and the first rotates to the tail.")}
+        </p>
+      ) : null}
+      <p className="muted-copy">
+        {tx("game.drawOrder", "Draw order")}: {drawOrderText}
+      </p>
+      <p className="muted-copy">
+        {tx("game.activeSeats", "Active seats")}: {activeHost} / {activeGuest}
+      </p>
+      <p className="muted-copy">
+        {tx("game.queueOrder", "Queue")}: {queueText}
+      </p>
+      <p className="muted-copy">
+        {tx("game.spectators", "Spectators")}: {spectatorsText}
+      </p>
+      {ledger.length > 0 ? (
+        <div className="poule-ledger">
+          {ledger.map((entry) => (
+            <div key={entry.id} className="poule-ledger-row">
+              <strong>{entry.name}</strong>
+              <span>{tx("game.paid", "paid")} {entry.contributed}</span>
+              <span>{tx("game.won", "won")} {entry.payout}</span>
+              <span>{tx("game.net", "net")} {entry.net}</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {viewer?.can_claim_queue_spot ? (
+        <div className="button-grid">
+          <button type="button" onClick={onClaimQueueSpot}>
+            {tx("game.claimQueueSpot", "Claim queue spot")}
+          </button>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function MultiplayerCard({ payload, viewer, onClaimRosterSlot }) {
+  if (!payload) {
+    return null;
+  }
+
+  const participants = payload.participants || [];
+  const activeHost = payload.active_pair?.host?.name || t("waiting");
+  const activeGuest = payload.active_pair?.guest?.name || t("waiting");
+  const waitingSlots = Number(payload.waiting_slots || 0);
+  const phaseLabel = tx(`game.multiplayerPhase.${payload.phase}`, capitalizeFirst(humanizeToken(payload.phase || "session")));
+  const modeLabel = tx(`game.multiplayerMode.${payload.mode}`, capitalizeFirst(humanizeToken(payload.mode || "multiplayer")));
+  const accounting = payload.accounting || {};
+  const cashMinorScale = Number(accounting.cash_minor_scale || 100);
+  const cashPerJetonText = formatCashMinor(accounting.cash_per_jeton_minor, cashMinorScale);
+  const cashPerFicheText = formatCashMinor(accounting.cash_per_fiche_minor, cashMinorScale);
+  const participantText = participants.length > 0
+    ? participants.map((entry) => entry.kind === "open_slot" ? tx("game.openRosterSlot", "Open roster slot") : entry.name).join(", ")
+    : tx("game.noCompetitors", "No competitors have joined yet.");
+  const orderDraw = payload.order_draw || null;
+  const orderRolls = orderDraw?.rolls || [];
+  const orderRollText = orderRolls.length > 0
+    ? orderRolls.map((entry) => `${entry.member?.name || t("waiting")}: ${entry.value}`).join(", ")
+    : tx("game.noOrderRollsYet", "No draw rolls have been recorded yet.");
+  const rerollText = (orderDraw?.reroll_participants || []).map((entry) => entry?.name).filter(Boolean).join(", ");
+  const resolvedOpening = orderDraw?.resolved_opening || null;
+  const resolvedOpeningText = resolvedOpening?.host?.name && resolvedOpening?.guest?.name
+    ? tx(
+        "game.orderDrawResolved",
+        "{host} opens against {guest}{resting}. {dieHolder} holds the die for {side}.",
+        {
+          host: resolvedOpening.host.name,
+          guest: resolvedOpening.guest.name,
+          resting: resolvedOpening.resting?.name ? `, ${tx("game.restingPlayer", "resting player")}: ${resolvedOpening.resting.name}` : "",
+          dieHolder: resolvedOpening.die_holder?.name || t("waiting"),
+          side: resolvedOpening.starting_side ? colorLabel(resolvedOpening.starting_side) : tx("game.none", "none")
+        }
+      )
+    : null;
+  const restingName = payload.rotation_state?.resting?.name;
+  const associateOrder = payload.rotation_state?.associate_order || [];
+  const ledgerPlayers = payload.ledger?.players || [];
+  const ledgerSides = payload.ledger?.sides || [];
+  const combinePoule = payload.ledger?.combine_poule || null;
+
+  return (
+    <section className="rail-card">
+      <p className="rail-label">{tx("game.multiplayer", "Multiplayer")}</p>
+      <h2>{modeLabel}</h2>
+      <p className="status-line">{phaseLabel}</p>
+      <div className="score-row">
+        <span>{tx("game.competitors", "Competitors")}: {payload.competitor_target ?? 0}</span>
+        <span>{tx("game.coups", "Coups")}: {payload.partie_length ?? 0}</span>
+        <span>{tx("game.openSlots", "Open slots")}: {waitingSlots}</span>
+      </div>
+      {cashPerJetonText && cashPerFicheText ? (
+        <p className="muted-copy">
+          {tx("game.cashPerJeton", "Cash per jeton")}: {cashPerJetonText}
+          {" · "}
+          {tx("game.cashPerFiche", "Cash per fiche")}: {cashPerFicheText}
+        </p>
+      ) : null}
+      <p className="muted-copy">
+        {tx("game.activeSeats", "Active seats")}: {activeHost} / {activeGuest}
+      </p>
+      <p className="muted-copy">
+        {tx("game.participants", "Participants")}: {participantText}
+      </p>
+      {orderDraw ? (
+        <div className="poule-ledger">
+          <div className="poule-ledger-row">
+            <strong>{tx("game.orderDraw", "Opening draw")}</strong>
+            <span>{tx("game.orderDrawStep", "step")} {capitalizeFirst(humanizeToken(orderDraw.step || "draw"))}</span>
+            <span>{tx("game.currentRoller", "current roller")} {orderDraw.current_roller?.name || t("waiting")}</span>
+            <span>{tx("game.orderRolls", "rolls")} {orderRollText}</span>
+            {orderDraw.rerolling && rerollText ? (
+              <span>{tx("game.orderDrawReroll", "rerolling")} {rerollText}</span>
+            ) : null}
+            {resolvedOpeningText ? <span>{resolvedOpeningText}</span> : null}
+          </div>
+        </div>
+      ) : null}
+      {restingName ? (
+        <p className="muted-copy">
+          {tx("game.restingPlayer", "Resting player")}: {restingName}
+        </p>
+      ) : null}
+      {associateOrder.length > 0 ? (
+        <p className="muted-copy">
+          {tx("game.associateOrder", "Associate order")}: {associateOrder.map((entry) => entry?.name).filter(Boolean).join(", ")}
+        </p>
+      ) : null}
+      {ledgerPlayers.length > 0 ? (
+        <div className="poule-ledger">
+          {ledgerPlayers.map((entry) => (
+            <div key={entry.id} className="poule-ledger-row">
+              <strong>{entry.name}</strong>
+              <span>{tx("game.coupsLost", "coups lost")} {entry.coups_lost}</span>
+              <span>{tx("game.jetons", "jetons")} {entry.jetons}</span>
+              <span>{tx("game.cash", "cash")} {formatCashMinor(entry.final_total_cash_minor, cashMinorScale) ?? "0.00"}</span>
+              <span>{tx("game.finalTotal", "final")} {entry.final_total}</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {ledgerSides.length > 0 ? (
+        <div className="poule-ledger">
+          {ledgerSides.map((entry) => (
+            <div key={entry.side} className="poule-ledger-row">
+              <strong>{colorLabel(entry.side)}</strong>
+              <span>{tx("game.marques", "marques")} {entry.marques}</span>
+              <span>{tx("game.jetons", "jetons")} {entry.jetons}</span>
+              <span>{tx("game.cash", "cash")} {formatCashMinor(entry.jetons_cash_minor, cashMinorScale) ?? "0.00"}</span>
+              <span>{tx("game.honneurs", "honneurs")} {entry.honneurs}</span>
+              {(entry.combine_paid || entry.combine_received || entry.basket_won) ? (
+                <>
+                  <span>{tx("game.combinePaid", "combine paid")} {entry.combine_paid}</span>
+                  <span>{tx("game.combineReceived", "combine won")} {entry.combine_received}</span>
+                  <span>{tx("game.basketWon", "basket won")} {entry.basket_won}</span>
+                </>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {combinePoule ? (
+        <p className="muted-copy">
+          {tx("game.combineBasket", "Basket")}: {combinePoule.basket ?? 0}
+          {" ("}{formatCashMinor(combinePoule.basket_cash_minor, cashMinorScale) ?? "0.00"}{")"}
+          {" · "}
+          {tx("game.contractSide", "Contract")}: {combinePoule.contract_side ? colorLabel(combinePoule.contract_side) : tx("game.none", "none")}
+        </p>
+      ) : null}
+      {viewer?.can_claim_roster_slot ? (
+        <div className="button-grid">
+          <button type="button" onClick={onClaimRosterSlot}>
+            {tx("game.claimRosterSlot", "Claim roster slot")}
+          </button>
+        </div>
       ) : null}
     </section>
   );
@@ -1903,26 +2312,39 @@ function OptionsCard({ payload, values, onChange, onSubmit }) {
   );
 }
 
-function PregameChoiceCard({ payload, playerColor, onChoose }) {
+function PregameChoiceCard({ payload, playerColor, viewer, onChoose }) {
   const responses = payload?.responses || {};
+  const multiplayerConsent = payload?.kind === "multiplayer_partie_length_consent";
   const opponent = oppositeColor(playerColor);
+  const responseKey = multiplayerConsent ? String(viewer?.id ?? "") : playerColor;
+  const responseRows = multiplayerConsent
+    ? (payload?.participants || []).map((participant) => ({
+        label: participant?.name || t("waiting"),
+        answer: responses[String(participant?.id)]
+      }))
+    : [
+        { label: t("game.yourChoice"), answer: responses[playerColor] },
+        {
+          label: t("game.colorChoice", { color: colorLabel(opponent) }),
+          answer: responses[opponent]
+        }
+      ];
 
   return (
     <section className="rail-card">
       <p className="rail-label">{t("game.pregame")}</p>
       <h2>{pendingPrompt(payload)}</h2>
-      <div className="trictrac-grid">
-        <div>
-          <strong>{t("game.yourChoice")}</strong>
-          <span>{pendingChoiceLabel(payload, responses[playerColor])}</span>
-        </div>
-        <div>
-          <strong>{t("game.colorChoice", { color: colorLabel(opponent) })}</strong>
-          <span>{pendingChoiceLabel(payload, responses[opponent])}</span>
-        </div>
+      <div className={multiplayerConsent ? "poule-ledger" : "trictrac-grid"}>
+        {responseRows.map((row) => (
+          <div key={row.label} className={multiplayerConsent ? "poule-ledger-row" : undefined}>
+            <strong>{row.label}</strong>
+            <span>{pendingChoiceLabel(payload, row.answer)}</span>
+          </div>
+        ))}
       </div>
-      {payload?.kind === "trictrac_partie_length_consent" ? (
-        <PartieLengthConsentSlider payload={payload} playerColor={playerColor} onChoose={onChoose} />
+      {payload?.kind === "trictrac_partie_length_consent" ||
+      payload?.kind === "multiplayer_partie_length_consent" ? (
+        <PartieLengthConsentSlider payload={payload} responseKey={responseKey} onChoose={onChoose} />
       ) : (
         <div className="button-grid">
           {(payload?.choices || []).map((choice) => (
@@ -1936,11 +2358,12 @@ function PregameChoiceCard({ payload, playerColor, onChoose }) {
   );
 }
 
-function PartieLengthConsentSlider({ payload, playerColor, onChoose }) {
+function PartieLengthConsentSlider({ payload, responseKey, onChoose }) {
   const choices = payload?.choices || [];
   const responses = payload?.responses || {};
-  const currentChoice = responses[playerColor];
-  const fallbackChoice = currentChoice && choices.includes(currentChoice) ? currentChoice : choices[0] || "16";
+  const currentChoice = responses[responseKey];
+  const defaultChoice = payload?.defaultChoice || choices[0] || "16";
+  const fallbackChoice = currentChoice && choices.includes(currentChoice) ? currentChoice : defaultChoice;
   const [selectedChoice, setSelectedChoice] = useState(fallbackChoice);
   const selectedIndex = Math.max(0, choices.indexOf(selectedChoice));
 
@@ -1986,7 +2409,6 @@ function TurnDecisionCard({ payload, onChoose }) {
     <section className="rail-card">
       <p className="rail-label">{t("game.decision")}</p>
       <h2>{decisionPrompt(payload)}</h2>
-      {payload?.key ? <p className="muted-copy">{t("game.decisionKey", { key: humanizeToken(payload.key) })}</p> : null}
       <div className="button-grid">
         {(payload.choices || []).map((choice) => (
           <button key={choice} type="button" onClick={() => onChoose(choice)}>
@@ -2111,6 +2533,7 @@ function BoardRow({
   points,
   pointsMap,
   isTop,
+  playerColor,
   selectedFrom,
   highlightedTargets,
   sourceMoves,
@@ -2128,6 +2551,7 @@ function BoardRow({
             key={index}
             point={pointsMap.get(index)}
             isTop={isTop}
+            playerColor={playerColor}
             isSelected={selectedFrom === index}
             isSource={(sourceMoves[String(index)] || []).length > 0}
             isTarget={highlightedTargets.has(String(index))}
@@ -2142,6 +2566,7 @@ function BoardRow({
             key={index}
             point={pointsMap.get(index)}
             isTop={isTop}
+            playerColor={playerColor}
             isSelected={selectedFrom === index}
             isSource={(sourceMoves[String(index)] || []).length > 0}
             isTarget={highlightedTargets.has(String(index))}
@@ -2154,27 +2579,52 @@ function BoardRow({
   );
 }
 
-function PointSlot({ point, isTop, isSelected, isSource, isTarget, onSourceClick, onTargetClick }) {
+function boardActionProps(isInteractive, onActivate) {
+  if (!isInteractive) {
+    return {};
+  }
+
+  return {
+    role: "button",
+    tabIndex: 0,
+    onClick: onActivate,
+    onKeyDown: (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        onActivate();
+      }
+    }
+  };
+}
+
+function PointSlot({ point, isTop, playerColor, isSelected, isSource, isTarget, onSourceClick, onTargetClick }) {
   const pieces = point?.pieces || [];
-  const pointNumber = typeof point?.index === "number" ? point.index + 1 : "";
+  const pointNumber = pointDisplayNumber(point?.index, playerColor);
+  const isInteractive = isSource || isTarget;
   const classes = [
     "point-slot",
     isTop ? "top" : "bottom",
     isSelected ? "selected" : "",
     isSource ? "source" : "",
-    isTarget ? "target" : ""
+    isTarget ? "target" : "",
+    isInteractive ? "actionable" : ""
   ]
     .filter(Boolean)
     .join(" ");
 
   const clickHandler = isTarget ? onTargetClick : onSourceClick;
-
-  return (
-    <button type="button" className={classes} onClick={clickHandler}>
+  const content = (
+    <>
       <span className="point-triangle" />
       <span className={`point-number ${isTop ? "top" : "bottom"}`}>{pointNumber}</span>
       <StackedCheckers pieces={pieces} isTop={isTop} />
-    </button>
+    </>
+  );
+
+  return (
+    <div className={classes} {...boardActionProps(isInteractive, clickHandler)}>
+      {content}
+    </div>
   );
 }
 
@@ -2207,16 +2657,19 @@ function BarColumn({ variantId, topColor, bottomColor, board, selectedFrom, sour
 }
 
 function BarPocket({ color, count, isTop, isSelected, isSource, onSelect, showLabel }) {
-  return (
-    <button
-      type="button"
-      className={`bar-pocket ${isTop ? "top" : "bottom"} ${isSelected ? "selected" : ""} ${isSource ? "source" : ""}`}
-      onClick={onSelect}
-    >
+  const classes = `bar-pocket ${isTop ? "top" : "bottom"} ${isSelected ? "selected" : ""} ${isSource ? "source" : ""} ${isSource ? "actionable" : ""}`;
+  const content = (
+    <>
       {showLabel ? <p>{isTop ? t("game.opponentBar") : t("game.yourBar")}</p> : null}
       <StackedCheckers pieces={Array.from({ length: count }, () => color)} isTop={isTop} />
       <strong>{count}</strong>
-    </button>
+    </>
+  );
+
+  return (
+    <div className={classes} {...boardActionProps(isSource, onSelect)}>
+      {content}
+    </div>
   );
 }
 
@@ -2236,20 +2689,24 @@ function HomeColumn({ topColor, bottomColor, board, highlightedTargets, onMoveTo
 }
 
 function HomePocket({ color, count, isTop, onMoveTo, isTarget }) {
-  return (
-    <button
-      type="button"
-      className={`home-pocket ${isTop ? "top" : "bottom"} ${isTarget ? "target" : ""}`}
-      onClick={() => {
-        if (isTarget) {
-          onMoveTo("home");
-        }
-      }}
-    >
+  const classes = `home-pocket ${isTop ? "top" : "bottom"} ${isTarget ? "target" : ""} ${isTarget ? "actionable" : ""}`;
+  const content = (
+    <>
       <p>{t("game.bearOff")}</p>
       <StackedCheckers pieces={Array.from({ length: count }, () => color)} isTop={isTop} />
       <strong>{count}</strong>
-    </button>
+    </>
+  );
+
+  return (
+    <div
+      className={classes}
+      {...boardActionProps(isTarget, () => {
+        onMoveTo("home");
+      })}
+    >
+      {content}
+    </div>
   );
 }
 

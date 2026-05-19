@@ -1,0 +1,19 @@
+import kotlin.time.Instant;
+
+CREATE TABLE users (
+    id TEXT NOT NULL PRIMARY KEY,
+    hashed_password TEXT NOT NULL
+);
+
+CREATE TABLE games (
+    id TEXT NOT NULL PRIMARY KEY,
+    playerOneId TEXT,
+    playerTwoId TEXT,
+    matchLength INTEGER,
+    history TEXT,
+    created_at TEXT AS Instant NOT NULL,
+    last_move_at TEXT AS Instant,
+    player_one_score INTEGER,
+    player_two_score INTEGER,
+    winner TEXT
+);

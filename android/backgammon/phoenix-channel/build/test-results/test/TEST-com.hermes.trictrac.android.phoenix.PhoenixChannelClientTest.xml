@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.hermes.trictrac.android.phoenix.PhoenixChannelClientTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-04-29T06:43:39" hostname="pandora.local" time="0.264">
+  <properties/>
+  <testcase name="joinCorrelatesRepliesByRef" classname="com.hermes.trictrac.android.phoenix.PhoenixChannelClientTest" time="0.248"/>
+  <testcase name="emitsHeartbeatFramesWhileConnected" classname="com.hermes.trictrac.android.phoenix.PhoenixChannelClientTest" time="0.004"/>
+  <testcase name="routesUpdateEventsToSubscribers" classname="com.hermes.trictrac.android.phoenix.PhoenixChannelClientTest" time="0.004"/>
+  <testcase name="reconnectsAndRejoinsTrackedTopics" classname="com.hermes.trictrac.android.phoenix.PhoenixChannelClientTest" time="0.007"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

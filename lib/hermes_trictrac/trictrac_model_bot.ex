@@ -8,6 +8,18 @@ defmodule HermesTrictrac.TrictracModelBot do
   @default_model_name "TricTracZero"
   @default_preset "classique"
   @session_layout_version "sparse-v4-arena96x16"
+  @preset_order [
+    "classique",
+    "classique-margot",
+    "aecrire",
+    "aecrire-margot",
+    "combine",
+    "combine-margot",
+    "toc",
+    "toc-margot",
+    "toccategli",
+    "toccategli-margot"
+  ]
   @preset_configs %{
     "classique" => %{
       variant_id: "trictrac_classique",
@@ -77,6 +89,21 @@ defmodule HermesTrictrac.TrictracModelBot do
   end
 
   def model_name, do: model_name(@default_preset)
+
+  def presets do
+    Enum.map(@preset_order, fn preset ->
+      config = Map.fetch!(@preset_configs, preset)
+
+      %{
+        id: preset,
+        label: config.label,
+        variant_id: config.variant_id,
+        margot_enabled: config.margot_enabled,
+        model_name: model_name(preset),
+        available: File.dir?(session_dir(preset))
+      }
+    end)
+  end
 
   def model_name(preset) do
     base_name =

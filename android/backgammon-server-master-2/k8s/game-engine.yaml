@@ -1,0 +1,35 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: game-engine
+  labels:
+    app: game-engine
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: game-engine
+  template:
+    metadata:
+      labels:
+        app: game-engine
+    spec:
+      containers:
+        - name: engine
+          image:  176.108.249.125:5000/game-engine:latest
+          ports:
+            - containerPort: 80
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: game-engine
+spec:
+  ports:
+    - port: 80
+      targetPort: 5000
+  selector:
+    app: game-engine
+  type: ClusterIP

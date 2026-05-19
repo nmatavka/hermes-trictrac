@@ -1,0 +1,1433 @@
+{
+  "defaultPackId": "sharechess-classic",
+  "packs": [
+    {
+      "id": "sharechess-classic",
+      "label": "Hydrogenium",
+      "cues": {
+        "roll": [
+          {
+            "src": "../static/sounds/packs/sharechess-classic/snap.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/sharechess-classic/swap.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "openingRoll": [
+          {
+            "src": "../static/sounds/packs/sharechess-classic/swap.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/sharechess-classic/snap.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "move": [
+          {
+            "src": "../static/sounds/packs/sharechess-classic/move.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "botMove": [
+          {
+            "src": "../static/sounds/packs/sharechess-classic/take.mp3",
+            "gain": 0.75,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/sharechess-classic/move.mp3",
+            "gain": 0.65,
+            "playbackRate": 1
+          }
+        ],
+        "opponentMove": [
+          {
+            "src": "../static/sounds/packs/sharechess-classic/take.mp3",
+            "gain": 0.75,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/sharechess-classic/move.mp3",
+            "gain": 0.65,
+            "playbackRate": 1
+          }
+        ],
+        "undo": [
+          {
+            "src": "../static/sounds/packs/sharechess-classic/rewind.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "confirm": [
+          {
+            "src": "../static/sounds/packs/sharechess-classic/snap.mp3",
+            "gain": 0.8,
+            "playbackRate": 1
+          }
+        ],
+        "score": [
+          {
+            "src": "../static/sounds/packs/sharechess-classic/swap.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/sharechess-classic/take.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "decision": [
+          {
+            "src": "../static/sounds/packs/sharechess-classic/snap.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/sharechess-classic/swap.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "turnStart": [
+          {
+            "src": "../static/sounds/packs/sharechess-classic/swap.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "chat": [
+          {
+            "src": "../static/sounds/packs/sharechess-classic/snap.mp3",
+            "gain": 0.55,
+            "playbackRate": 1
+          }
+        ],
+        "error": [
+          {
+            "src": "../static/sounds/packs/sharechess-classic/rewind.mp3",
+            "gain": 0.75,
+            "playbackRate": 0.85
+          }
+        ],
+        "matchWin": [
+          {
+            "src": "../static/sounds/packs/sharechess-classic/swap.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/sharechess-classic/take.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "sharechess-anarchy",
+      "label": "Lithium",
+      "cues": {
+        "roll": [
+          {
+            "src": "../static/sounds/packs/sharechess-anarchy/hit.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/sharechess-anarchy/pipi-move.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/sharechess-anarchy/cone-move.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "openingRoll": [
+          {
+            "src": "../static/sounds/packs/sharechess-anarchy/toy-move.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/sharechess-anarchy/brick-castle.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "move": [
+          {
+            "src": "../static/sounds/packs/sharechess-anarchy/brick-move.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/sharechess-anarchy/cone-move.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/sharechess-anarchy/horsy-move.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/sharechess-anarchy/pipi-move.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/sharechess-anarchy/toy-move.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "botMove": [
+          {
+            "src": "../static/sounds/packs/sharechess-anarchy/brick-take.mp3",
+            "gain": 0.75,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/sharechess-anarchy/cone-take.mp3",
+            "gain": 0.75,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/sharechess-anarchy/death-take.mp3",
+            "gain": 0.65,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/sharechess-anarchy/horsy-take.mp3",
+            "gain": 0.7,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/sharechess-anarchy/pipi-take.mp3",
+            "gain": 0.75,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/sharechess-anarchy/toy-take.mp3",
+            "gain": 0.75,
+            "playbackRate": 1
+          }
+        ],
+        "opponentMove": [
+          {
+            "src": "../static/sounds/packs/sharechess-anarchy/brick-take.mp3",
+            "gain": 0.75,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/sharechess-anarchy/cone-take.mp3",
+            "gain": 0.75,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/sharechess-anarchy/death-take.mp3",
+            "gain": 0.65,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/sharechess-anarchy/horsy-take.mp3",
+            "gain": 0.7,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/sharechess-anarchy/pipi-take.mp3",
+            "gain": 0.75,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/sharechess-anarchy/toy-take.mp3",
+            "gain": 0.75,
+            "playbackRate": 1
+          }
+        ],
+        "undo": [
+          {
+            "src": "../static/sounds/packs/sharechess-anarchy/en-passant.mp3",
+            "gain": 0.65,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/sharechess-anarchy/death-move.mp3",
+            "gain": 0.65,
+            "playbackRate": 1
+          }
+        ],
+        "confirm": [
+          {
+            "src": "../static/sounds/packs/sharechess-anarchy/hit.mp3",
+            "gain": 0.75,
+            "playbackRate": 1
+          }
+        ],
+        "score": [
+          {
+            "src": "../static/sounds/packs/sharechess-anarchy/toy-take.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/sharechess-anarchy/brick-take.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/sharechess-anarchy/horsy-take.mp3",
+            "gain": 0.85,
+            "playbackRate": 1
+          }
+        ],
+        "decision": [
+          {
+            "src": "../static/sounds/packs/sharechess-anarchy/hit.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/sharechess-anarchy/toy-move.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/sharechess-anarchy/brick-castle.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "turnStart": [
+          {
+            "src": "../static/sounds/packs/sharechess-anarchy/toy-move.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/sharechess-anarchy/cone-move.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "chat": [
+          {
+            "src": "../static/sounds/packs/sharechess-anarchy/hit.mp3",
+            "gain": 0.6,
+            "playbackRate": 1
+          }
+        ],
+        "error": [
+          {
+            "src": "../static/sounds/packs/sharechess-anarchy/death-take.mp3",
+            "gain": 0.6,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/sharechess-anarchy/en-passant.mp3",
+            "gain": 0.55,
+            "playbackRate": 1
+          }
+        ],
+        "matchWin": [
+          {
+            "src": "../static/sounds/packs/sharechess-anarchy/checkmate.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "pixelchess",
+      "label": "Natrium",
+      "cues": {
+        "roll": [
+          {
+            "src": "../static/sounds/packs/pixelchess/move.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/pixelchess/castle.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "openingRoll": [
+          {
+            "src": "../static/sounds/packs/pixelchess/game-start.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "move": [
+          {
+            "src": "../static/sounds/packs/pixelchess/move.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "botMove": [
+          {
+            "src": "../static/sounds/packs/pixelchess/capture.mp3",
+            "gain": 0.8,
+            "playbackRate": 1
+          }
+        ],
+        "opponentMove": [
+          {
+            "src": "../static/sounds/packs/pixelchess/capture.mp3",
+            "gain": 0.8,
+            "playbackRate": 1
+          }
+        ],
+        "undo": [
+          {
+            "src": "../static/sounds/packs/pixelchess/castle.mp3",
+            "gain": 0.75,
+            "playbackRate": 0.9
+          }
+        ],
+        "confirm": [
+          {
+            "src": "../static/sounds/packs/pixelchess/promote.mp3",
+            "gain": 0.8,
+            "playbackRate": 1
+          }
+        ],
+        "score": [
+          {
+            "src": "../static/sounds/packs/pixelchess/check.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/pixelchess/promote.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "decision": [
+          {
+            "src": "../static/sounds/packs/pixelchess/check.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/pixelchess/game-start.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "turnStart": [
+          {
+            "src": "../static/sounds/packs/pixelchess/game-start.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "chat": [
+          {
+            "src": "../static/sounds/packs/pixelchess/check.mp3",
+            "gain": 0.55,
+            "playbackRate": 1
+          }
+        ],
+        "error": [
+          {
+            "src": "../static/sounds/packs/pixelchess/illegal.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "matchWin": [
+          {
+            "src": "../static/sounds/packs/pixelchess/game-end.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/pixelchess/promote.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "chess-main",
+      "label": "Kalium",
+      "cues": {
+        "roll": [
+          {
+            "src": "../static/sounds/packs/chess-main/move.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/chess-main/castle.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "openingRoll": [
+          {
+            "src": "../static/sounds/packs/chess-main/start.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "move": [
+          {
+            "src": "../static/sounds/packs/chess-main/move.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "botMove": [
+          {
+            "src": "../static/sounds/packs/chess-main/capture.mp3",
+            "gain": 0.8,
+            "playbackRate": 1
+          }
+        ],
+        "opponentMove": [
+          {
+            "src": "../static/sounds/packs/chess-main/capture.mp3",
+            "gain": 0.8,
+            "playbackRate": 1
+          }
+        ],
+        "undo": [
+          {
+            "src": "../static/sounds/packs/chess-main/castle.mp3",
+            "gain": 0.7,
+            "playbackRate": 0.9
+          }
+        ],
+        "confirm": [
+          {
+            "src": "../static/sounds/packs/chess-main/castle.mp3",
+            "gain": 0.85,
+            "playbackRate": 1
+          }
+        ],
+        "score": [
+          {
+            "src": "../static/sounds/packs/chess-main/check.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/chess-main/capture.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "decision": [
+          {
+            "src": "../static/sounds/packs/chess-main/check.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/chess-main/stalemate.mp3",
+            "gain": 0.8,
+            "playbackRate": 1
+          }
+        ],
+        "turnStart": [
+          {
+            "src": "../static/sounds/packs/chess-main/start.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "chat": [
+          {
+            "src": "../static/sounds/packs/chess-main/check.mp3",
+            "gain": 0.55,
+            "playbackRate": 1
+          }
+        ],
+        "error": [
+          {
+            "src": "../static/sounds/packs/chess-main/stalemate.mp3",
+            "gain": 0.75,
+            "playbackRate": 1
+          }
+        ],
+        "matchWin": [
+          {
+            "src": "../static/sounds/packs/chess-main/checkmate.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/chess-main/gameover.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "chess-pro",
+      "label": "Rubidium",
+      "cues": {
+        "roll": [
+          {
+            "src": "../static/sounds/packs/chess-pro/move-self.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/chess-pro/castle.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "openingRoll": [
+          {
+            "src": "../static/sounds/packs/chess-pro/notify.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/chess-pro/castle.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "move": [
+          {
+            "src": "../static/sounds/packs/chess-pro/move-self.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "botMove": [
+          {
+            "src": "../static/sounds/packs/chess-pro/capture.mp3",
+            "gain": 0.8,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/chess-pro/move-check.mp3",
+            "gain": 0.75,
+            "playbackRate": 1
+          }
+        ],
+        "opponentMove": [
+          {
+            "src": "../static/sounds/packs/chess-pro/capture.mp3",
+            "gain": 0.8,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/chess-pro/move-check.mp3",
+            "gain": 0.75,
+            "playbackRate": 1
+          }
+        ],
+        "undo": [
+          {
+            "src": "../static/sounds/packs/chess-pro/castle.mp3",
+            "gain": 0.75,
+            "playbackRate": 0.9
+          }
+        ],
+        "confirm": [
+          {
+            "src": "../static/sounds/packs/chess-pro/promote.mp3",
+            "gain": 0.75,
+            "playbackRate": 1
+          }
+        ],
+        "score": [
+          {
+            "src": "../static/sounds/packs/chess-pro/move-check.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/chess-pro/promote.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "decision": [
+          {
+            "src": "../static/sounds/packs/chess-pro/notify.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/chess-pro/move-check.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "turnStart": [
+          {
+            "src": "../static/sounds/packs/chess-pro/notify.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "chat": [
+          {
+            "src": "../static/sounds/packs/chess-pro/notify.mp3",
+            "gain": 0.55,
+            "playbackRate": 1
+          }
+        ],
+        "error": [
+          {
+            "src": "../static/sounds/packs/chess-pro/move-check.mp3",
+            "gain": 0.7,
+            "playbackRate": 0.85
+          }
+        ],
+        "matchWin": [
+          {
+            "src": "../static/sounds/packs/chess-pro/checkmate.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "chess-in-pygame",
+      "label": "Caesium",
+      "cues": {
+        "roll": [
+          {
+            "src": "../static/sounds/packs/chess-in-pygame/move.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/chess-in-pygame/castle.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "openingRoll": [
+          {
+            "src": "../static/sounds/packs/chess-in-pygame/start.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "move": [
+          {
+            "src": "../static/sounds/packs/chess-in-pygame/move.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "botMove": [
+          {
+            "src": "../static/sounds/packs/chess-in-pygame/capture.mp3",
+            "gain": 0.8,
+            "playbackRate": 1
+          }
+        ],
+        "opponentMove": [
+          {
+            "src": "../static/sounds/packs/chess-in-pygame/capture.mp3",
+            "gain": 0.8,
+            "playbackRate": 1
+          }
+        ],
+        "undo": [
+          {
+            "src": "../static/sounds/packs/chess-in-pygame/castle.mp3",
+            "gain": 0.75,
+            "playbackRate": 0.9
+          }
+        ],
+        "confirm": [
+          {
+            "src": "../static/sounds/packs/chess-in-pygame/castle.mp3",
+            "gain": 0.8,
+            "playbackRate": 1
+          }
+        ],
+        "score": [
+          {
+            "src": "../static/sounds/packs/chess-in-pygame/check.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/chess-in-pygame/capture.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "decision": [
+          {
+            "src": "../static/sounds/packs/chess-in-pygame/check.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/chess-in-pygame/draw.mp3",
+            "gain": 0.8,
+            "playbackRate": 1
+          }
+        ],
+        "turnStart": [
+          {
+            "src": "../static/sounds/packs/chess-in-pygame/start.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "chat": [
+          {
+            "src": "../static/sounds/packs/chess-in-pygame/check.mp3",
+            "gain": 0.55,
+            "playbackRate": 1
+          }
+        ],
+        "error": [
+          {
+            "src": "../static/sounds/packs/chess-in-pygame/draw.mp3",
+            "gain": 0.7,
+            "playbackRate": 1
+          }
+        ],
+        "matchWin": [
+          {
+            "src": "../static/sounds/packs/chess-in-pygame/checkmate.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/chess-in-pygame/game_over.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "chess-game",
+      "label": "Francium",
+      "cues": {
+        "roll": [
+          {
+            "src": "../static/sounds/packs/chess-game/click.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/chess-game/move.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "openingRoll": [
+          {
+            "src": "../static/sounds/packs/chess-game/game-start.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "move": [
+          {
+            "src": "../static/sounds/packs/chess-game/move.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "botMove": [
+          {
+            "src": "../static/sounds/packs/chess-game/kill.mp3",
+            "gain": 0.7,
+            "playbackRate": 1
+          }
+        ],
+        "opponentMove": [
+          {
+            "src": "../static/sounds/packs/chess-game/kill.mp3",
+            "gain": 0.7,
+            "playbackRate": 1
+          }
+        ],
+        "undo": [
+          {
+            "src": "../static/sounds/packs/chess-game/click.mp3",
+            "gain": 0.7,
+            "playbackRate": 0.85
+          }
+        ],
+        "confirm": [
+          {
+            "src": "../static/sounds/packs/chess-game/click.mp3",
+            "gain": 0.75,
+            "playbackRate": 1
+          }
+        ],
+        "score": [
+          {
+            "src": "../static/sounds/packs/chess-game/kill.mp3",
+            "gain": 0.75,
+            "playbackRate": 1
+          }
+        ],
+        "decision": [
+          {
+            "src": "../static/sounds/packs/chess-game/click.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/chess-game/game-start.mp3",
+            "gain": 0.55,
+            "playbackRate": 1
+          }
+        ],
+        "turnStart": [
+          {
+            "src": "../static/sounds/packs/chess-game/game-start.mp3",
+            "gain": 0.6,
+            "playbackRate": 1
+          }
+        ],
+        "chat": [
+          {
+            "src": "../static/sounds/packs/chess-game/click.mp3",
+            "gain": 0.45,
+            "playbackRate": 1
+          }
+        ],
+        "error": [
+          {
+            "src": "../static/sounds/packs/chess-game/kill.mp3",
+            "gain": 0.55,
+            "playbackRate": 0.8
+          }
+        ],
+        "matchWin": [
+          {
+            "src": "../static/sounds/packs/chess-game/checkmate.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/chess-game/gameOver.mp3",
+            "gain": 0.65,
+            "playbackRate": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "chess-engine",
+      "label": "Magnesium",
+      "cues": {
+        "roll": [
+          {
+            "src": "../static/sounds/packs/chess-engine/move-self.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/chess-engine/in-check.mp3",
+            "gain": 0.7,
+            "playbackRate": 1
+          }
+        ],
+        "openingRoll": [
+          {
+            "src": "../static/sounds/packs/chess-engine/game-end.mp3",
+            "gain": 0.7,
+            "playbackRate": 1
+          }
+        ],
+        "move": [
+          {
+            "src": "../static/sounds/packs/chess-engine/move-self.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "botMove": [
+          {
+            "src": "../static/sounds/packs/chess-engine/capture.mp3",
+            "gain": 0.8,
+            "playbackRate": 1
+          }
+        ],
+        "opponentMove": [
+          {
+            "src": "../static/sounds/packs/chess-engine/capture.mp3",
+            "gain": 0.8,
+            "playbackRate": 1
+          }
+        ],
+        "undo": [
+          {
+            "src": "../static/sounds/packs/chess-engine/move-self.mp3",
+            "gain": 0.7,
+            "playbackRate": 0.85
+          }
+        ],
+        "confirm": [
+          {
+            "src": "../static/sounds/packs/chess-engine/game-end.mp3",
+            "gain": 0.65,
+            "playbackRate": 1
+          }
+        ],
+        "score": [
+          {
+            "src": "../static/sounds/packs/chess-engine/in-check.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/chess-engine/capture.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "decision": [
+          {
+            "src": "../static/sounds/packs/chess-engine/in-check.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "turnStart": [
+          {
+            "src": "../static/sounds/packs/chess-engine/move-self.mp3",
+            "gain": 0.7,
+            "playbackRate": 1
+          }
+        ],
+        "chat": [
+          {
+            "src": "../static/sounds/packs/chess-engine/in-check.mp3",
+            "gain": 0.5,
+            "playbackRate": 1
+          }
+        ],
+        "error": [
+          {
+            "src": "../static/sounds/packs/chess-engine/in-check.mp3",
+            "gain": 0.75,
+            "playbackRate": 0.8
+          }
+        ],
+        "matchWin": [
+          {
+            "src": "../static/sounds/packs/chess-engine/game-end.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "chess-master",
+      "label": "Calcium",
+      "cues": {
+        "roll": [
+          {
+            "src": "../static/sounds/packs/chess-master/move.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/chess-master/castle.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "openingRoll": [
+          {
+            "src": "../static/sounds/packs/chess-master/start.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "move": [
+          {
+            "src": "../static/sounds/packs/chess-master/move.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "botMove": [
+          {
+            "src": "../static/sounds/packs/chess-master/capture.mp3",
+            "gain": 0.8,
+            "playbackRate": 1
+          }
+        ],
+        "opponentMove": [
+          {
+            "src": "../static/sounds/packs/chess-master/capture.mp3",
+            "gain": 0.8,
+            "playbackRate": 1
+          }
+        ],
+        "undo": [
+          {
+            "src": "../static/sounds/packs/chess-master/castle.mp3",
+            "gain": 0.75,
+            "playbackRate": 0.9
+          }
+        ],
+        "confirm": [
+          {
+            "src": "../static/sounds/packs/chess-master/castle.mp3",
+            "gain": 0.8,
+            "playbackRate": 1
+          }
+        ],
+        "score": [
+          {
+            "src": "../static/sounds/packs/chess-master/check.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/chess-master/capture.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "decision": [
+          {
+            "src": "../static/sounds/packs/chess-master/check.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "turnStart": [
+          {
+            "src": "../static/sounds/packs/chess-master/start.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "chat": [
+          {
+            "src": "../static/sounds/packs/chess-master/check.mp3",
+            "gain": 0.55,
+            "playbackRate": 1
+          }
+        ],
+        "error": [
+          {
+            "src": "../static/sounds/packs/chess-master/check.mp3",
+            "gain": 0.7,
+            "playbackRate": 0.85
+          }
+        ],
+        "matchWin": [
+          {
+            "src": "../static/sounds/packs/chess-master/end.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "szachy-motorola",
+      "label": "Strontium",
+      "cues": {
+        "roll": [
+          {
+            "src": "../static/sounds/packs/szachy-motorola/sound_button_click.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/szachy-motorola/sound_move1.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/szachy-motorola/sound_move2.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "openingRoll": [
+          {
+            "src": "../static/sounds/packs/szachy-motorola/sound_special.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "move": [
+          {
+            "src": "../static/sounds/packs/szachy-motorola/sound_move1.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/szachy-motorola/sound_move2.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "botMove": [
+          {
+            "src": "../static/sounds/packs/szachy-motorola/sound_capture.mp3",
+            "gain": 0.85,
+            "playbackRate": 1
+          }
+        ],
+        "opponentMove": [
+          {
+            "src": "../static/sounds/packs/szachy-motorola/sound_capture.mp3",
+            "gain": 0.85,
+            "playbackRate": 1
+          }
+        ],
+        "undo": [
+          {
+            "src": "../static/sounds/packs/szachy-motorola/sound_button_click.mp3",
+            "gain": 0.65,
+            "playbackRate": 0.85
+          }
+        ],
+        "confirm": [
+          {
+            "src": "../static/sounds/packs/szachy-motorola/sound_button_click.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/szachy-motorola/sound_special.mp3",
+            "gain": 0.7,
+            "playbackRate": 1
+          }
+        ],
+        "score": [
+          {
+            "src": "../static/sounds/packs/szachy-motorola/sound_check.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/szachy-motorola/sound_special.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "decision": [
+          {
+            "src": "../static/sounds/packs/szachy-motorola/sound_check.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/szachy-motorola/sound_special.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "turnStart": [
+          {
+            "src": "../static/sounds/packs/szachy-motorola/sound_special.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "chat": [
+          {
+            "src": "../static/sounds/packs/szachy-motorola/sound_button_click.mp3",
+            "gain": 0.55,
+            "playbackRate": 1
+          }
+        ],
+        "error": [
+          {
+            "src": "../static/sounds/packs/szachy-motorola/sound_check.mp3",
+            "gain": 0.75,
+            "playbackRate": 0.8
+          }
+        ],
+        "matchWin": [
+          {
+            "src": "../static/sounds/packs/szachy-motorola/sound_checkmate.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "hermes",
+      "label": "Barium",
+      "cues": {
+        "roll": [
+          {
+            "src": "../static/sounds/packs/hermes/submit.mp3",
+            "gain": 0.65,
+            "playbackRate": 1
+          }
+        ],
+        "openingRoll": [
+          {
+            "src": "../static/sounds/packs/hermes/notification.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "move": [
+          {
+            "src": "../static/sounds/packs/hermes/submit.mp3",
+            "gain": 0.55,
+            "playbackRate": 1
+          }
+        ],
+        "botMove": [
+          {
+            "src": "../static/sounds/packs/hermes/delivered.mp3",
+            "gain": 0.55,
+            "playbackRate": 1
+          }
+        ],
+        "opponentMove": [
+          {
+            "src": "../static/sounds/packs/hermes/delivered.mp3",
+            "gain": 0.55,
+            "playbackRate": 1
+          }
+        ],
+        "undo": [
+          {
+            "src": "../static/sounds/packs/hermes/submit.mp3",
+            "gain": 0.45,
+            "playbackRate": 0.85
+          }
+        ],
+        "confirm": [
+          {
+            "src": "../static/sounds/packs/hermes/submit.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "score": [
+          {
+            "src": "../static/sounds/packs/hermes/delivered.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "decision": [
+          {
+            "src": "../static/sounds/packs/hermes/notification.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ],
+        "turnStart": [
+          {
+            "src": "../static/sounds/packs/hermes/notification.mp3",
+            "gain": 0.75,
+            "playbackRate": 1
+          }
+        ],
+        "chat": [
+          {
+            "src": "../static/sounds/packs/hermes/notification.mp3",
+            "gain": 0.55,
+            "playbackRate": 1
+          }
+        ],
+        "error": [
+          {
+            "src": "../static/sounds/packs/hermes/notification.mp3",
+            "gain": 0.6,
+            "playbackRate": 0.8
+          }
+        ],
+        "matchWin": [
+          {
+            "src": "../static/sounds/packs/hermes/delivered.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          },
+          {
+            "src": "../static/sounds/packs/hermes/notification.mp3",
+            "gain": 1,
+            "playbackRate": 1
+          }
+        ]
+      }
+    }
+  ],
+  "options": [
+    {
+      "id": "sharechess-classic",
+      "label": "Hydrogenium"
+    },
+    {
+      "id": "sharechess-anarchy",
+      "label": "Lithium"
+    },
+    {
+      "id": "pixelchess",
+      "label": "Natrium"
+    },
+    {
+      "id": "chess-main",
+      "label": "Kalium"
+    },
+    {
+      "id": "chess-pro",
+      "label": "Rubidium"
+    },
+    {
+      "id": "chess-in-pygame",
+      "label": "Caesium"
+    },
+    {
+      "id": "chess-game",
+      "label": "Francium"
+    },
+    {
+      "id": "chess-engine",
+      "label": "Magnesium"
+    },
+    {
+      "id": "chess-master",
+      "label": "Calcium"
+    },
+    {
+      "id": "szachy-motorola",
+      "label": "Strontium"
+    },
+    {
+      "id": "hermes",
+      "label": "Barium"
+    }
+  ]
+}

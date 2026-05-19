@@ -21,11 +21,11 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Validation do
     must_fill =
       scoring_tables_for_variant(variant)
       |> Enum.filter(fn table ->
-        !Moves.all_paired?(start_board, color, table.from, table.to) and
-          Moves.all_paired?(end_board, color, table.from, table.to) and
+        !Moves.all_paired?(start_board, variant, color, table.from, table.to) and
+          Moves.all_paired?(end_board, variant, color, table.from, table.to) and
           Enum.any?(
             branches(branches_info),
-            &Moves.all_paired?(&1, color, table.from, table.to)
+            &Moves.all_paired?(&1, variant, color, table.from, table.to)
           )
       end)
       |> Enum.map(& &1.key)
@@ -45,13 +45,17 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Validation do
   end
 
   def obligations_satisfied?(board, color, obligations) do
+    obligations_satisfied?(board, nil, color, obligations)
+  end
+
+  def obligations_satisfied?(board, variant, color, obligations) do
     obligations = State.normalize_obligation(obligations)
 
     must_fill_ok? =
       Enum.all?(obligations.must_fill || [], fn key ->
         case Constants.jan_table(key) do
           nil -> true
-          table -> Moves.all_paired?(board, color, table.from, table.to)
+          table -> all_paired?(board, variant, color, table)
         end
       end)
 
@@ -62,7 +66,7 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Validation do
             true
 
           table ->
-            Moves.all_paired?(board, color, table.from, table.to) or
+            all_paired?(board, variant, color, table) or
               (requirement.allow_sortie and
                  State.outside_count(board, color) > (requirement.outside_before || 0))
         end
@@ -73,15 +77,17 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Validation do
 
   def coin_rest_satisfied?(_board, %{id: "plein"}, _color), do: true
 
-  def coin_rest_satisfied?(board, _variant, color) do
-    Moves.pieces_at(board, State.own_coin(color), color) != 1
+  def coin_rest_satisfied?(board, variant, color) do
+    Moves.pieces_at(board, State.own_coin(variant, color), color) != 1
   end
 
   def build_conservation_candidates(start_board, variant, color, dice, branches_info) do
     scoring_tables_for_variant(variant)
-    |> Enum.filter(fn table -> Moves.all_paired?(start_board, color, table.from, table.to) end)
+    |> Enum.filter(fn table ->
+      Moves.all_paired?(start_board, variant, color, table.from, table.to)
+    end)
     |> Enum.flat_map(fn table ->
-      conserve = can_remain_plein_after_turn(start_board, color, table, branches_info)
+      conserve = can_remain_plein_after_turn(start_board, variant, color, table, branches_info)
 
       if conserve.can_conserve or (table.key == :retour and conserve.can_privilege_conserve) do
         [
@@ -99,11 +105,15 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Validation do
   end
 
   def can_remain_plein_after_turn(board, color, table, branches_info) do
+    can_remain_plein_after_turn(board, nil, color, table, branches_info)
+  end
+
+  def can_remain_plein_after_turn(board, variant, color, table, branches_info) do
     outside_before = State.outside_count(board, color)
     branches = branches(branches_info)
 
     can_conserve =
-      Enum.any?(branches, &Moves.all_paired?(&1, color, table.from, table.to))
+      Enum.any?(branches, &all_paired?(&1, variant, color, table))
 
     can_privilege_conserve =
       table.key == :retour and
@@ -125,4 +135,10 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Validation do
 
   defp branches(%{branches: branches}) when is_list(branches), do: branches
   defp branches(_branches_info), do: []
+
+  defp all_paired?(board, nil, color, table),
+    do: Moves.all_paired?(board, color, table.from, table.to)
+
+  defp all_paired?(board, variant, color, table),
+    do: Moves.all_paired?(board, variant, color, table.from, table.to)
 end

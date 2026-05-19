@@ -25,11 +25,11 @@ function ChatPanel({ messages, onSendMessage, t }) {
         ) : (
           messages.map((message, index) => (
             <div
-              key={`${message.author}-${index}`}
+              key={`${message.authorName || message.author}-${index}`}
               className={`chat-message ${message.author === "me" ? "chat-me" : "chat-them"}`}
             >
               <span className="chat-message-author">
-                {message.author === "me" ? t("chat.you") : t("chat.opponent")}
+                {message.author === "me" ? t("chat.you") : message.authorName || t("chat.opponent")}
               </span>
               <p>{message.data?.text ?? ""}</p>
             </div>

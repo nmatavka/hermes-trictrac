@@ -1,0 +1,12 @@
+body {
+    background-color: burlywood !important;
+}
+
+.main-content {
+    display: flex;
+    justify-content: center;
+}
+
+.root {
+    box-sizing: content-box;
+}

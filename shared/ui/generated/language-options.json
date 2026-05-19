@@ -1,0 +1,22 @@
+[
+  {
+    "id": "en",
+    "label": "English"
+  },
+  {
+    "id": "de",
+    "label": "Deutsch"
+  },
+  {
+    "id": "fr",
+    "label": "Français"
+  },
+  {
+    "id": "sv",
+    "label": "Svenska"
+  },
+  {
+    "id": "da",
+    "label": "Dansk"
+  }
+]

@@ -1,0 +1,46 @@
+GNU Backgammon 1.08.003 20250203
+
+Copyright (C) 1999-2004 Gary Wong.
+Copyright (C) 2004-2024 the AUTHORS; for details type `show version'.
+
+This program comes with ABSOLUTELY NO WARRANTY; for details type `show warranty'.
+This is free software, and you are welcome to redistribute it under certain conditions; type `show copying' for details.
+
+ GNU Backgammon  Position ID: R7ZtAEC77Q4AAA
+                 Match ID   : UQmgAAAAAAAE
+ +13-14-15-16-17-18------19-20-21-22-23-24-+     O: gnubg
+ |       O  O  O  O | O | O     O        O |     0 points
+ |       O  O  O  O |   | O              O |
+ |                  |   |                O |
+ |                  |   |                  |
+ |                  |   |                  |
+v|                  |BAR|                  |     5 points match
+ |                  |   |                  |
+ |                  |   |                  |
+ |                  |   | X  X        X    |
+ |                  |   | X  X  X  X  X  X |     On roll
+ |                  |   | X  X  X  X  X  X |     0 points
+ +12-11-10--9--8--7-------6--5--4--3--2--1-+     X: kyle (Cube: 2)
+
+ GNU Backgammon  Position ID: R7ZtAEC77Q4AAA
+                 Match ID   : UQm7AAAAAAAE
+ +13-14-15-16-17-18------19-20-21-22-23-24-+     O: gnubg
+ |       O  O  O  O | O | O     O        O |     0 points
+ |       O  O  O  O |   | O              O |
+ |                  |   |                O |
+ |                  |   |                  |
+ |                  |   |                  |
+v|                  |BAR|                  |     5 points match
+ |                  |   |                  |
+ |                  |   |                  |
+ |                  |   | X  X        X    |
+ |                  |   | X  X  X  X  X  X |     Rolled 66
+ |                  |   | X  X  X  X  X  X |     0 points
+ +12-11-10--9--8--7-------6--5--4--3--2--1-+     X: kyle (Cube: 2)
+
+    1. Cubeful 0-ply    6/off(3) 5/off               Eq.: +1.986
+       0.989 0.767 0.003 - 0.011 0.000 0.000
+        0-ply cubeful prune [expert]
+    2. Cubeful 0-ply    6/off 5/off                  Eq.: +1.986
+       0.989 0.767 0.003 - 0.011 0.000 0.000
+        0-ply cubeful prune [expert]

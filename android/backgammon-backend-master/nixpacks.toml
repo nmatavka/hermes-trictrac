@@ -1,0 +1,16 @@
+[phases.setup]
+# 1. Define the environment packages you need.
+# Nixpacks will fetch specific versions of Java, Typst, and GnuBg for you.
+nixPkgs = ["openjdk-headless", "gnubg"]
+
+[phases.build]
+# OVERRIDE: Do not run Gradle.
+# Just make sure your start script is executable.
+# Note: The 'bin' folder comes from your zip upload.
+cmds = ["chmod +x ./bin/kotlin-backend"]
+
+[start]
+# 3. Run your command.
+# Adjust the path below to match your actual script location.
+# If using Ktor's installDist, it's usually: ./build/install/YOUR_APP_NAME/bin/YOUR_APP_NAME
+cmd = "bash ./bin/kotlin-backend"

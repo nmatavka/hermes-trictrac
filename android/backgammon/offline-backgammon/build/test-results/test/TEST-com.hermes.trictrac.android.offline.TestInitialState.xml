@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.hermes.trictrac.android.offline.TestInitialState" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-04-29T06:16:49" hostname="pandora.local" time="0.018">
+  <properties/>
+  <testcase name="testBadMovesPlayer1" classname="com.hermes.trictrac.android.offline.TestInitialState" time="0.004"/>
+  <testcase name="testBadMovesPlayer2" classname="com.hermes.trictrac.android.offline.TestInitialState" time="0.002"/>
+  <testcase name="testPossibleMovesFrom" classname="com.hermes.trictrac.android.offline.TestInitialState" time="0.001"/>
+  <testcase name="testMoveableFields" classname="com.hermes.trictrac.android.offline.TestInitialState" time="0.001"/>
+  <testcase name="testPossibleMoveSequences" classname="com.hermes.trictrac.android.offline.TestInitialState" time="0.0"/>
+  <testcase name="testMakeMoves" classname="com.hermes.trictrac.android.offline.TestInitialState" time="0.006"/>
+  <testcase name="testGoodMovesPlayer1" classname="com.hermes.trictrac.android.offline.TestInitialState" time="0.001"/>
+  <testcase name="testGoodMovesPlayer2" classname="com.hermes.trictrac.android.offline.TestInitialState" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

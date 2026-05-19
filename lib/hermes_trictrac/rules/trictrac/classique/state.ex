@@ -82,6 +82,8 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.State do
   def own_coin(:black), do: 11
   def opp_coin(:white), do: 11
   def opp_coin(:black), do: 12
+  def own_coin(variant, color), do: denorm_pos(variant, Constants.coin_norm_pos(), color)
+  def opp_coin(variant, color), do: denorm_pos(variant, Constants.coin_norm_pos() - 1, color)
 
   def score_index(:white), do: 0
   def score_index(:black), do: 1
@@ -92,6 +94,27 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.State do
   def norm_pos(position, :black), do: 23 - position
   def denorm_pos(position, :white), do: position
   def denorm_pos(position, :black), do: 23 - position
+
+  def norm_pos(variant, position, color) do
+    case movement_direction(variant, color) do
+      :toward_24 -> position
+      :toward_1 -> 23 - position
+    end
+  end
+
+  def denorm_pos(variant, position, color) do
+    case movement_direction(variant, color) do
+      :toward_24 -> position
+      :toward_1 -> 23 - position
+    end
+  end
+
+  def movement_direction(%{orientation: :ascending}, :white), do: :toward_1
+  def movement_direction(%{orientation: :ascending}, :black), do: :toward_24
+  def movement_direction(%{orientation: :parallel_toward_1}, _color), do: :toward_1
+  def movement_direction(%{orientation: :parallel_toward_24}, _color), do: :toward_24
+  def movement_direction(_variant, :white), do: :toward_24
+  def movement_direction(_variant, :black), do: :toward_1
 
   def dice_values(dice), do: Dice.values(dice)
   def normalized_throw(dice), do: Dice.normalized_throw(dice)
