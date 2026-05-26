@@ -1,0 +1,77 @@
+  <svg version="1.1" baseProfile="full" width="455" height="489" xmlns="http://www.w3.org/2000/svg">
+
+  <!-- legend -->
+  <text text-anchor="middle" x="50%" y="35" font-size="21" fill="black">figure 2</text>'
+  <text text-anchor="middle" x="17" y="52" font-size="21" fill="black">m</text>
+<text text-anchor="middle" x="52" y="52" font-size="21" fill="black">n</text>
+<text text-anchor="middle" x="87" y="52" font-size="21" fill="black">o</text>
+<text text-anchor="middle" x="122" y="52" font-size="21" fill="black">p</text>
+<text text-anchor="middle" x="157" y="52" font-size="21" fill="black">q</text>
+<text text-anchor="middle" x="192" y="52" font-size="21" fill="black">r</text>
+<text text-anchor="middle" x="227" y="52" font-size="21" fill="black"> </text>
+<text text-anchor="middle" x="262" y="52" font-size="21" fill="black">s</text>
+<text text-anchor="middle" x="297" y="52" font-size="21" fill="black">t</text>
+<text text-anchor="middle" x="332" y="52" font-size="21" fill="black">u</text>
+<text text-anchor="middle" x="367" y="52" font-size="21" fill="black">v</text>
+<text text-anchor="middle" x="402" y="52" font-size="21" fill="black">x</text>
+<text text-anchor="middle" x="437" y="52" font-size="21" fill="black">y</text>
+
+  <!-- bordures exterieures -->
+  <rect x="0" y="62" width="100%" height="401" fill="white" stroke="white"></rect>
+
+  <svg  x="8" y="60" width="439" viewBox="0 0 455 490">
+    <rect x="0" y="0" width="100%" height="383" fill="white" ></rect>
+    <!-- left board -->
+    <svg x="0" y="0" width="210" height="383" viewBox="0 0 210 385">
+      <rect x="0" y="0" width="100%" height="100%" fill="white" stroke="gray"></rect>
+<polygon points="1,0 34,0 17,175" fill="white" stroke="gray" />
+<polygon points="1,385 34,385 17,210" fill="gray" stroke="gray" />
+<polygon points="36,0 69,0 52,175" fill="gray" stroke="gray" />
+<polygon points="36,385 69,385 52,210" fill="white" stroke="gray" />
+<polygon points="71,0 104,0 87,175" fill="white" stroke="gray" />
+<polygon points="71,385 104,385 87,210" fill="gray" stroke="gray" />
+<polygon points="106,0 139,0 122,175" fill="gray" stroke="gray" />
+<polygon points="106,385 139,385 122,210" fill="white" stroke="gray" />
+<polygon points="141,0 174,0 157,175" fill="white" stroke="gray" />
+<polygon points="141,385 174,385 157,210" fill="gray" stroke="gray" />
+<polygon points="176,0 209,0 192,175" fill="gray" stroke="gray" />
+<polygon points="176,385 209,385 192,210" fill="white" stroke="gray" />
+    </svg>
+
+    <!--  middle bar -->
+    <rect x="210" y="0" width="35" height="383" fill="white" stroke="white"></rect>
+
+    <!--  right board -->
+    <svg x="245" y="0" width="210" height="383" viewBox="0 0 210 385">
+      <rect x="0" y="0" width="100%" height="100%" fill="white" stroke="gray"></rect>
+<polygon points="1,0 34,0 17,175" fill="white" stroke="gray" />
+<polygon points="1,385 34,385 17,210" fill="gray" stroke="gray" />
+<polygon points="36,0 69,0 52,175" fill="gray" stroke="gray" />
+<polygon points="36,385 69,385 52,210" fill="white" stroke="gray" />
+<polygon points="71,0 104,0 87,175" fill="white" stroke="gray" />
+<polygon points="71,385 104,385 87,210" fill="gray" stroke="gray" />
+<polygon points="106,0 139,0 122,175" fill="gray" stroke="gray" />
+<polygon points="106,385 139,385 122,210" fill="white" stroke="gray" />
+<polygon points="141,0 174,0 157,175" fill="white" stroke="gray" />
+<polygon points="141,385 174,385 157,210" fill="gray" stroke="gray" />
+<polygon points="176,0 209,0 192,175" fill="gray" stroke="gray" />
+<polygon points="176,385 209,385 192,210" fill="white" stroke="gray" />
+    </svg>
+
+    <circle cx="438" cy="367" r="17" stroke="black" fill="white" /><circle cx="438" cy="332" r="17" stroke="black" fill="white" /><circle cx="403" cy="367" r="17" stroke="black" fill="white" /><circle cx="403" cy="332" r="17" stroke="black" fill="white" /><circle cx="368" cy="367" r="17" stroke="black" fill="white" /><circle cx="368" cy="332" r="17" stroke="black" fill="white" /><circle cx="368" cy="297" r="17" stroke="black" fill="white" /><circle cx="333" cy="367" r="17" stroke="black" fill="white" /><circle cx="333" cy="332" r="17" stroke="black" fill="white" /><circle cx="333" cy="297" r="17" stroke="black" fill="white" /><circle cx="298" cy="367" r="17" stroke="black" fill="white" /><circle cx="298" cy="332" r="17" stroke="black" fill="white" /><circle cx="263" cy="367" r="17" stroke="black" fill="white" /><circle cx="263" cy="332" r="17" stroke="black" fill="white" /><circle cx="193" cy="367" r="17" stroke="black" fill="white" /><circle cx="438" cy="17" r="17" stroke="black" fill="gray" /><circle cx="438" cy="52" r="17" stroke="black" fill="gray" /><circle cx="438" cy="87" r="17" stroke="black" fill="gray" /><circle cx="403" cy="17" r="17" stroke="black" fill="gray" /><circle cx="403" cy="52" r="17" stroke="black" fill="gray" /><circle cx="403" cy="87" r="17" stroke="black" fill="gray" /><circle cx="368" cy="17" r="17" stroke="black" fill="gray" /><circle cx="368" cy="52" r="17" stroke="black" fill="gray" /><circle cx="368" cy="87" r="17" stroke="black" fill="gray" /><circle cx="193" cy="17" r="17" stroke="black" fill="gray" /><circle cx="193" cy="52" r="17" stroke="black" fill="gray" /><circle cx="123" cy="17" r="17" stroke="black" fill="gray" /><circle cx="123" cy="52" r="17" stroke="black" fill="gray" />
+  </svg>
+  <text text-anchor="middle" x="17" y="467" font-size="21" fill="black">l</text>
+<text text-anchor="middle" x="52" y="467" font-size="21" fill="black">k</text>
+<text text-anchor="middle" x="87" y="467" font-size="21" fill="black">j</text>
+<text text-anchor="middle" x="122" y="467" font-size="21" fill="black">i</text>
+<text text-anchor="middle" x="157" y="467" font-size="21" fill="black">h</text>
+<text text-anchor="middle" x="192" y="467" font-size="21" fill="black">g</text>
+<text text-anchor="middle" x="227" y="467" font-size="21" fill="black"> </text>
+<text text-anchor="middle" x="262" y="467" font-size="21" fill="black">f</text>
+<text text-anchor="middle" x="297" y="467" font-size="21" fill="black">e</text>
+<text text-anchor="middle" x="332" y="467" font-size="21" fill="black">d</text>
+<text text-anchor="middle" x="367" y="467" font-size="21" fill="black">c</text>
+<text text-anchor="middle" x="402" y="467" font-size="21" fill="black">b</text>
+<text text-anchor="middle" x="437" y="467" font-size="21" fill="black">a</text>
+
+</svg>
