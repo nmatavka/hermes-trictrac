@@ -1,0 +1,51 @@
+  <svg version="1.1" baseProfile="full" width="455" height="437" xmlns="http://www.w3.org/2000/svg">
+
+  <!-- legend -->
+  <text text-anchor="middle" x="50%" y="35" font-size="21" fill="black">figure37</text>'
+
+  <!-- bordures exterieures -->
+  <rect x="0" y="52" width="100%" height="401" fill="white" stroke="white"></rect>
+
+  <svg  x="8" y="60" width="439" viewBox="0 0 455 455">
+    <rect x="0" y="0" width="100%" height="383" fill="white" ></rect>
+    <!-- left board -->
+    <svg x="0" y="0" width="210" height="383" viewBox="0 0 210 385">
+      <rect x="0" y="0" width="100%" height="100%" fill="white" stroke="gray"></rect>
+<polygon points="1,0 34,0 17,175" fill="white" stroke="gray" />
+<polygon points="1,385 34,385 17,210" fill="gray" stroke="gray" />
+<polygon points="36,0 69,0 52,175" fill="gray" stroke="gray" />
+<polygon points="36,385 69,385 52,210" fill="white" stroke="gray" />
+<polygon points="71,0 104,0 87,175" fill="white" stroke="gray" />
+<polygon points="71,385 104,385 87,210" fill="gray" stroke="gray" />
+<polygon points="106,0 139,0 122,175" fill="gray" stroke="gray" />
+<polygon points="106,385 139,385 122,210" fill="white" stroke="gray" />
+<polygon points="141,0 174,0 157,175" fill="white" stroke="gray" />
+<polygon points="141,385 174,385 157,210" fill="gray" stroke="gray" />
+<polygon points="176,0 209,0 192,175" fill="gray" stroke="gray" />
+<polygon points="176,385 209,385 192,210" fill="white" stroke="gray" />
+    </svg>
+
+    <!--  middle bar -->
+    <rect x="210" y="0" width="35" height="383" fill="white" stroke="white"></rect>
+
+    <!--  right board -->
+    <svg x="245" y="0" width="210" height="383" viewBox="0 0 210 385">
+      <rect x="0" y="0" width="100%" height="100%" fill="white" stroke="gray"></rect>
+<polygon points="1,0 34,0 17,175" fill="white" stroke="gray" />
+<polygon points="1,385 34,385 17,210" fill="gray" stroke="gray" />
+<polygon points="36,0 69,0 52,175" fill="gray" stroke="gray" />
+<polygon points="36,385 69,385 52,210" fill="white" stroke="gray" />
+<polygon points="71,0 104,0 87,175" fill="white" stroke="gray" />
+<polygon points="71,385 104,385 87,210" fill="gray" stroke="gray" />
+<polygon points="106,0 139,0 122,175" fill="gray" stroke="gray" />
+<polygon points="106,385 139,385 122,210" fill="white" stroke="gray" />
+<polygon points="141,0 174,0 157,175" fill="white" stroke="gray" />
+<polygon points="141,385 174,385 157,210" fill="gray" stroke="gray" />
+<polygon points="176,0 209,0 192,175" fill="gray" stroke="gray" />
+<polygon points="176,385 209,385 192,210" fill="white" stroke="gray" />
+    </svg>
+
+    <circle cx="53" cy="367" r="17" stroke="black" fill="white" /><circle cx="53" cy="332" r="17" stroke="black" fill="white" /><circle cx="123" cy="367" r="17" stroke="black" fill="white" /><circle cx="193" cy="367" r="17" stroke="black" fill="white" /><circle cx="263" cy="367" r="17" stroke="black" fill="white" /><circle cx="263" cy="332" r="17" stroke="black" fill="white" /><circle cx="298" cy="367" r="17" stroke="black" fill="white" /><circle cx="298" cy="332" r="17" stroke="black" fill="white" /><circle cx="333" cy="367" r="17" stroke="black" fill="white" /><circle cx="368" cy="367" r="17" stroke="black" fill="white" /><circle cx="368" cy="332" r="17" stroke="black" fill="white" /><circle cx="403" cy="367" r="17" stroke="black" fill="white" /><circle cx="403" cy="332" r="17" stroke="black" fill="white" /><circle cx="438" cy="367" r="17" stroke="black" fill="white" /><circle cx="438" cy="332" r="17" stroke="black" fill="white" />
+  </svg>
+
+</svg>
