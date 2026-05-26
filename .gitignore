@@ -1,0 +1,5 @@
+.direnv
+.devenv*
+devenv.local.nix
+rawsources
+html
