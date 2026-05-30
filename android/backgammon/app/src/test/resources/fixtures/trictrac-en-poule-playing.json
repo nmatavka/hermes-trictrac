@@ -1,0 +1,145 @@
+{
+  "variant": {
+    "id": "trictrac_en_poule",
+    "title": "Trictrac en poule",
+    "active_variant_id": "trictrac_classique"
+  },
+  "status": "playing",
+  "players": {
+    "host": {
+      "id": "host",
+      "name": "nick",
+      "color": "white"
+    },
+    "guest": {
+      "id": "guest",
+      "name": "jane",
+      "color": "black"
+    }
+  },
+  "board": {
+    "points": [],
+    "bar": {},
+    "outside": {}
+  },
+  "turn": {
+    "number": 1,
+    "color": "white",
+    "player_name": "nick"
+  },
+  "match": {
+    "is_over": false,
+    "score": {
+      "white": 0,
+      "black": 0
+    },
+    "options": {},
+    "results": []
+  },
+  "ui_actions": {
+    "can_roll": true,
+    "can_undo": false,
+    "can_confirm": false,
+    "can_reset": false
+  },
+  "chat": [],
+  "viewer": {
+    "id": 101,
+    "name": "nick",
+    "role": "active",
+    "seat": "host",
+    "seat_color": "white",
+    "can_claim_queue_spot": false
+  },
+  "poule": {
+    "style": "growing_pot",
+    "phase": "playing",
+    "config": {
+      "queue_size": 1,
+      "competitor_target": 3,
+      "ante": 7,
+      "win_target": 3,
+      "margot_enabled": true
+    },
+    "active": {
+      "host": {
+        "id": 101,
+        "name": "nick",
+        "color": "white"
+      },
+      "guest": {
+        "id": 102,
+        "name": "jane",
+        "color": "black"
+      }
+    },
+    "draw_order": [
+      {
+        "kind": "member",
+        "id": 101,
+        "name": "nick",
+        "connected": true,
+        "role": "active"
+      },
+      {
+        "kind": "member",
+        "id": 102,
+        "name": "jane",
+        "connected": true,
+        "role": "active"
+      },
+      {
+        "kind": "member",
+        "id": 103,
+        "name": "bob",
+        "connected": true,
+        "role": "queued"
+      }
+    ],
+    "queue": [
+      {
+        "kind": "member",
+        "id": 103,
+        "name": "bob",
+        "connected": true,
+        "role": "queued"
+      }
+    ],
+    "open_queue_slots": 0,
+    "spectators": [],
+    "ledger": [
+      {
+        "id": 101,
+        "name": "nick",
+        "contributed": 7,
+        "payout": 14,
+        "net": 7
+      },
+      {
+        "id": 102,
+        "name": "jane",
+        "contributed": 7,
+        "payout": 0,
+        "net": -7
+      }
+    ],
+    "history": [
+      {
+        "winner": {
+          "id": 101,
+          "name": "nick",
+          "connected": true
+        },
+        "payout_amount": 14,
+        "settlement_trous": 2
+      }
+    ],
+    "pool": 21,
+    "champion": {
+      "id": 101,
+      "name": "nick",
+      "connected": true
+    },
+    "streak": 1
+  }
+}

@@ -1119,6 +1119,34 @@ defmodule HermesTrictrac.MultiplayerSession do
             }
           end
 
+        final_coup and previous_side in [:white, :black] and previous_side != winner_side and
+            rem(current.basket, 2) == 1 ->
+          simple_enjeu = session.competitor_target * @combine_basket_buy_in
+          started_remainder = current.basket - simple_enjeu
+          [winner_share, started_share] = split_integer(simple_enjeu, 2)
+
+          side_stats =
+            current.side_stats
+            |> put_in(
+              [winner_side, :basket_won],
+              get_in(current, [:side_stats, winner_side, :basket_won]) + winner_share
+            )
+            |> put_in(
+              [previous_side, :basket_won],
+              get_in(current, [:side_stats, previous_side, :basket_won]) +
+                started_remainder + started_share
+            )
+
+          %{
+            current
+            | contract_side: nil,
+              first_winner_side: nil,
+              last_capture_side: nil,
+              last_capture_amount: current.basket,
+              basket: 0,
+              side_stats: side_stats
+          }
+
         final_coup and previous_side in [:white, :black] and previous_side != winner_side ->
           [winner_share, previous_share] = split_integer(current.basket, 2)
 

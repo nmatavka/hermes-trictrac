@@ -1,0 +1,54 @@
+<.shell return_context={@return_context} query={@query} title="Trictrac Rules Library" subtitle="Three full historical rulebooks, browsable inside the game flow.">
+  <section class="rules-section">
+    <div class="rules-books-grid">
+      <%= for book <- @books do %>
+        <article class="rules-book-card">
+          <p class="rules-book-eyebrow"><%= book.site_name %></p>
+          <h2>
+            <a href={RulesLibrary.book_path(book.slug, @nav_context)}><%= book.title %></a>
+          </h2>
+          <p class="rules-book-meta">
+            <%= book.author || book.site_author || "Anonymous" %>
+            · <%= length(book.chapters) %> chapters
+          </p>
+          <p class="rules-book-actions">
+            <a href={RulesLibrary.book_path(book.slug, @nav_context)}>Browse book</a>
+            <%= if book.first_chapter_path do %>
+              <span>·</span>
+              <a href={RulesLibrary.chapter_path(book.slug, book.first_chapter_path, @nav_context)}>Open first chapter</a>
+            <% end %>
+          </p>
+        </article>
+      <% end %>
+    </div>
+  </section>
+
+  <%= if @query != "" do %>
+    <section class="rules-section">
+      <div class="rules-section-heading">
+        <h2>Search results</h2>
+        <p><%= length(@results) %> matches for “<%= @query %>”</p>
+      </div>
+
+      <%= if @results == [] do %>
+        <div class="rules-empty-state">
+          <p>No matches were found in the imported rules books.</p>
+        </div>
+      <% else %>
+        <div class="rules-results-list">
+          <%= for result <- @results do %>
+            <article class="rules-result-card">
+              <p class="rules-result-meta"><%= result.book_title %></p>
+              <h3>
+                <a href={RulesLibrary.chapter_path(result.book_slug, result.route_path, @return_context)}>
+                  <%= result.title %>
+                </a>
+              </h3>
+              <p><%= result.snippet %></p>
+            </article>
+          <% end %>
+        </div>
+      <% end %>
+    </section>
+  <% end %>
+</.shell>

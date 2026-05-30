@@ -2,7 +2,7 @@ defmodule HermesTrictrac.MultiplayerSessionTest do
   use ExUnit.Case, async: true
 
   alias HermesTrictrac.MultiplayerSession
-  alias HermesTrictrac.Rules.Registry
+  alias HermesTrictrac.Rules.{Engine, Registry}
 
   test "a tourner fills the roster, runs the opening draw, then rotates loser-stays" do
     session = new_session("trictrac_aecrire_a_tourner", %{})
@@ -167,6 +167,22 @@ defmodule HermesTrictrac.MultiplayerSessionTest do
     assert session.a_tourner_ledger[2].final_total == 40
   end
 
+  test "a tourner keeps the winner's consolation inside points_awarded and only adds the resting share" do
+    session =
+      started_session("trictrac_aecrire_a_tourner", ["nick", "jane", "bob"], %{partie_length: "9"})
+
+    {:ok, session, {:start_round, 2, 3}} =
+      MultiplayerSession.advance(
+        session,
+        aecrire_coup_engine(1, "white", points_awarded: 8, consolation: 2, multiplier: 1)
+      )
+
+    assert session.a_tourner_ledger[1].jetons == 8
+    assert session.a_tourner_ledger[2].jetons == -10
+    assert session.a_tourner_ledger[3].jetons == 2
+    assert session.a_tourner_ledger[3].resting_consolation == 2
+  end
+
   test "a tourner splits queue des jetons across tied raw leaders" do
     session =
       started_session("trictrac_aecrire_a_tourner", ["nick", "jane", "bob"], %{partie_length: "9"})
@@ -317,6 +333,27 @@ defmodule HermesTrictrac.MultiplayerSessionTest do
     assert session.rotation_state.start_color == :white
   end
 
+  test "chouette rotation actions apply the live die ownership across three coups" do
+    session = assembled_session("trictrac_aecrire_chouette", ["nick", "jane", "bob"])
+    session = resolve_order_draw!(session, default_order_draw_rolls("trictrac_aecrire_chouette"))
+    {session, start_action} = consent_session_with_action!(session, "12")
+    engine = apply_session_action(engine_for(session), session, start_action)
+
+    assert engine.turn_color == :white
+
+    {:ok, session, action} = MultiplayerSession.advance(session, aecrire_coup_engine(1, "white"))
+    engine = apply_session_action(engine, session, action)
+
+    assert engine.turn_color == :black
+    assert get_in(engine, [:trictrac, :track_aecrire, :coup_starter]) == :black
+
+    {:ok, session, action} = MultiplayerSession.advance(session, aecrire_coup_engine(2, "black"))
+    engine = apply_session_action(engine, session, action)
+
+    assert engine.turn_color == :white
+    assert get_in(engine, [:trictrac, :track_aecrire, :coup_starter]) == :white
+  end
+
   test "deux contre deux opening draw chooses side leaders and the opening side" do
     session =
       assembled_session(
@@ -359,6 +396,34 @@ defmodule HermesTrictrac.MultiplayerSessionTest do
 
     assert session.active == %{host: 2, guest: 4}
     assert session.rotation_state.start_color == :white
+  end
+
+  test "deux contre deux rotation actions apply the staying player's die to the live engine" do
+    session =
+      assembled_session(
+        "trictrac_aecrire_deux_contre_deux",
+        ["amelie", "benoit", "claire", "didier"]
+      )
+
+    session =
+      resolve_order_draw!(session, default_order_draw_rolls("trictrac_aecrire_deux_contre_deux"))
+
+    {session, start_action} = consent_session_with_action!(session, "12")
+    engine = apply_session_action(engine_for(session), session, start_action)
+
+    assert engine.turn_color == :white
+
+    {:ok, session, action} = MultiplayerSession.advance(session, aecrire_coup_engine(1, "white"))
+    engine = apply_session_action(engine, session, action)
+
+    assert engine.turn_color == :black
+    assert get_in(engine, [:trictrac, :track_aecrire, :coup_starter]) == :black
+
+    {:ok, session, action} = MultiplayerSession.advance(session, aecrire_coup_engine(2, "black"))
+    engine = apply_session_action(engine, session, action)
+
+    assert engine.turn_color == :white
+    assert get_in(engine, [:trictrac, :track_aecrire, :coup_starter]) == :white
   end
 
   test "spectators can claim an open roster slot and the table reruns preplay" do
@@ -422,7 +487,7 @@ defmodule HermesTrictrac.MultiplayerSessionTest do
     assert session.combine_poule.side_stats.white.basket_won == 12
   end
 
-  test "combine final-coup basket split gives the larger half to the final partie winner" do
+  test "combine final-coup odd basket split preserves the started basket rights" do
     session = started_session("trictrac_combine_chouette", ["nick", "jane", "bob"])
 
     {:ok, session, nil} =
@@ -434,10 +499,28 @@ defmodule HermesTrictrac.MultiplayerSessionTest do
       MultiplayerSession.advance(session, combine_partie_engine(2, "black", 4))
 
     assert session.combine_poule.basket == 0
-    assert session.combine_poule.side_stats.white.basket_won == 6
-    assert session.combine_poule.side_stats.black.basket_won == 7
+    assert session.combine_poule.side_stats.white.basket_won == 10
+    assert session.combine_poule.side_stats.black.basket_won == 3
     assert session.combine_poule.last_capture_side == nil
     assert session.combine_poule.last_capture_amount == 13
+  end
+
+  test "combine final-coup even basket split still divides the whole basket" do
+    session = started_session("trictrac_combine_chouette", ["nick", "jane", "bob"])
+
+    {:ok, session, nil} =
+      MultiplayerSession.advance(session, combine_partie_engine(1, "white", 2))
+
+    session = %{session | history: Enum.map(1..11, &%{coup: &1})}
+
+    {:ok, session, nil} =
+      MultiplayerSession.advance(session, combine_partie_engine(2, "black", 4))
+
+    assert session.combine_poule.basket == 0
+    assert session.combine_poule.side_stats.white.basket_won == 6
+    assert session.combine_poule.side_stats.black.basket_won == 6
+    assert session.combine_poule.last_capture_side == nil
+    assert session.combine_poule.last_capture_amount == 12
   end
 
   test "combine delays seat handoff until honneurs continuation ends" do
@@ -476,6 +559,43 @@ defmodule HermesTrictrac.MultiplayerSessionTest do
     assert session.active == %{host: 1, guest: 3}
     assert session.pending_rotation == nil
     assert session.rotation_state.start_color == :black
+  end
+
+  test "combine delayed handoff applies the continuing player's live die to the resumed pair" do
+    session = assembled_session("trictrac_combine_chouette", ["nick", "jane", "bob"])
+    session = resolve_order_draw!(session, default_order_draw_rolls("trictrac_combine_chouette"))
+    {session, start_action} = consent_session_with_action!(session, "12")
+    engine = apply_session_action(engine_for(session), session, start_action)
+
+    assert engine.turn_color == :white
+
+    {:ok, session, action} =
+      MultiplayerSession.advance(session, combine_coup_engine(1, resume_pending: false))
+
+    engine = apply_session_action(engine, session, action)
+    assert engine.turn_color == :black
+
+    {:ok, session, nil} =
+      MultiplayerSession.advance(
+        session,
+        combine_coup_engine(2, winner: "white", resume_pending: true, suspended_track: "a_ecrire")
+      )
+
+    {:ok, session, action} =
+      MultiplayerSession.advance(
+        session,
+        combine_coup_engine(2,
+          winner: "white",
+          resume_pending: false,
+          suspended_track: "a_ecrire",
+          turn_color: :black
+        )
+      )
+
+    engine = apply_session_action(engine, session, action)
+
+    assert engine.turn_color == :black
+    assert get_in(engine, [:trictrac, :track_aecrire, :coup_starter]) == :black
   end
 
   test "multiplayer longueur disagreement falls back to 12 coups after the draw resolves" do
@@ -561,6 +681,24 @@ defmodule HermesTrictrac.MultiplayerSessionTest do
     end)
   end
 
+  defp consent_session_with_action!(session, partie_length) do
+    competitor_client_ids =
+      session.competitors
+      |> Enum.filter(&is_integer/1)
+      |> Enum.map(fn member_id -> "c#{member_id}" end)
+
+    Enum.reduce(competitor_client_ids, {session, nil}, fn client_id, {session_acc, _action_acc} ->
+      {:ok, next_session, next_action} =
+        MultiplayerSession.submit_match_options(
+          session_acc,
+          %{"aEcrirePartieLengthConsent" => partie_length},
+          client_id
+        )
+
+      {next_session, next_action}
+    end)
+  end
+
   defp resolve_order_draw!(session, rolls) do
     Enum.reduce(rolls, session, fn {client_id, value}, session_acc ->
       {:ok, next_session, _action} =
@@ -585,6 +723,20 @@ defmodule HermesTrictrac.MultiplayerSessionTest do
 
   defp drop_partie_length_opt(opts) do
     Map.drop(opts, [:partie_length, "partie_length"])
+  end
+
+  defp engine_for(session), do: Engine.new("multiplayer-session-test", session.base_variant_id)
+
+  defp apply_session_action(engine, session, {:start_round, _host_id, _guest_id}) do
+    Engine.force_start_turn(engine, MultiplayerSession.round_start_color(session))
+  end
+
+  defp apply_session_action(engine, _session, {:seat_pair, _host_id, _guest_id, metadata}) do
+    Engine.force_coup_starter(engine, Map.fetch!(metadata, :start_color))
+  end
+
+  defp apply_session_action(engine, _session, {:seat_pair, _host_id, _guest_id}) do
+    engine
   end
 
   defp aecrire_coup_engine(coups_played, winner, opts \\ []) do

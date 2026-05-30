@@ -9,6 +9,7 @@ defmodule HermesTrictrac.Application do
     children = [
       {Phoenix.PubSub, name: HermesTrictrac.PubSub},
       {Registry, keys: :unique, name: HermesTrictrac.GameReg},
+      HermesTrictrac.RulesLibrary,
       HermesTrictracWeb.Endpoint,
       HermesTrictrac.BackupAgent,
       HermesTrictrac.TrictracModelBot,

@@ -1160,6 +1160,7 @@ export default function gameInit(root, channel, options = {}) {
           player={resp.player}
           viewer={resp.viewer || resp.game?.viewer || null}
           playerName={root.dataset.user}
+          rulesUrl={root.dataset.rulesUrl || ""}
           channel={channel}
           initialGame={resp.game}
           requestedBotMargot={botMargotPreference}
@@ -1176,7 +1177,7 @@ export default function gameInit(root, channel, options = {}) {
     });
 }
 
-function HermesTrictracApp({ channel, initialGame, player, viewer: initialViewer, playerName, lobbyName, requestedBotMargot }) {
+function HermesTrictracApp({ channel, initialGame, player, viewer: initialViewer, playerName, lobbyName, requestedBotMargot, rulesUrl }) {
   const soundControllerRef = useRef(null);
 
   if (!soundControllerRef.current) {
@@ -1524,6 +1525,7 @@ function HermesTrictracApp({ channel, initialGame, player, viewer: initialViewer
   const isMultiplayerTable = !!game.multiplayer;
   const diceTheme = game.turn?.color || playerColor;
   const botDisplayName = trictracBotDisplayName(game) || game.bot?.name || t("lobby.computer");
+  const trimmedRulesUrl = typeof rulesUrl === "string" ? rulesUrl.trim() : "";
   const heroCopy = isPouleTable
     ? viewer?.role === "active"
       ? tx("game.pouleOnBoard", "You are on the board right now.")
@@ -1562,6 +1564,11 @@ function HermesTrictracApp({ channel, initialGame, player, viewer: initialViewer
           <span>{t("game.host")}: {seatName(game, "host") || t("waiting")}</span>
           <span>{t("game.guest")}: {seatName(game, "guest") || t("waiting")}</span>
           <span>{t("game.turn", { number: game.turn?.number || 0 })}</span>
+          {trimmedRulesUrl ? (
+            <a className="sound-toggle rules-link" href={trimmedRulesUrl}>
+              {tx("game.rules", "Rules")}
+            </a>
+          ) : null}
           <SoundToggle state={soundState} onToggle={toggleSound} />
           <SoundPackSelect state={soundState} onChange={selectSoundPack} />
           <LanguageSelect language={language} onChange={selectLanguage} />

@@ -112,6 +112,27 @@ private val COMPUTER_BOTS = mapOf(
     "toc" to "trictrac_zero",
     "toccategli" to "trictrac_zero",
 )
+private val POULE_VARIANT_IDS = setOf(
+    "trictrac_en_poule",
+    "toccategli_en_poule",
+    "trictrac_en_poule_plumee",
+    "toccategli_en_poule_plumee",
+)
+private val GROWING_POT_VARIANT_IDS = setOf(
+    "trictrac_en_poule",
+    "toccategli_en_poule",
+)
+private val PLUCKED_POT_VARIANT_IDS = setOf(
+    "trictrac_en_poule_plumee",
+    "toccategli_en_poule_plumee",
+)
+private val MULTIPLAYER_VARIANT_IDS = setOf(
+    "trictrac_aecrire_a_tourner",
+    "trictrac_aecrire_chouette",
+    "trictrac_aecrire_deux_contre_deux",
+    "trictrac_combine_chouette",
+    "trictrac_combine_deux_contre_deux",
+)
 
 @Composable
 fun HermesTrictracApp() {
@@ -254,6 +275,8 @@ fun HermesTrictracApp() {
                         onReset = { onlineSession?.reset() },
                         onResign = { onlineSession?.resign() },
                         onRemainSeated = { onlineSession?.remainSeated() },
+                        onClaimQueueSpot = { onlineSession?.claimQueueSpot() },
+                        onClaimRosterSlot = { onlineSession?.claimRosterSlot() },
                         onSendChat = { message -> onlineSession?.sendChat(message) },
                         onSubmitOptions = { values -> onlineSession?.submitMatchOptions(values) },
                         onSubmitDecision = { decision -> onlineSession?.submitTurnDecision(decision) },
@@ -301,9 +324,16 @@ private data class LobbyDraft(
     val userName: String,
     val variantId: String,
     val opponentChoice: OpponentChoice,
+    val queueSize: String,
+    val ante: String,
+    val stake: String,
+    val holeValue: String,
+    val margotEnabled: Boolean,
+    val cashPerJeton: String,
 ) {
     fun toJoinRequest(): JoinRequest {
-        val botKind = when (opponentChoice) {
+        val effectiveOpponentChoice = if (isSessionVariant(variantId)) OpponentChoice.HUMAN else opponentChoice
+        val botKind = when (effectiveOpponentChoice) {
             OpponentChoice.HUMAN -> null
             OpponentChoice.COMPUTER -> COMPUTER_BOTS[variantId]
             OpponentChoice.MARGOT -> COMPUTER_BOTS[variantId]
@@ -314,7 +344,17 @@ private data class LobbyDraft(
             userName = userName.trim().ifEmpty { "Android Player" },
             variantId = variantId,
             bot = botKind,
-            botMargot = if (opponentChoice == OpponentChoice.MARGOT && botKind != null) "yes" else null,
+            botMargot = if (effectiveOpponentChoice == OpponentChoice.MARGOT && botKind != null) "yes" else null,
+            queueSize = queueSize.trim().ifEmpty { "1" }.takeIf { isPouleVariant(variantId) },
+            ante = ante.trim().ifEmpty { "1" }.takeIf { isGrowingPotVariant(variantId) },
+            stake = stake.trim().ifEmpty { "50" }.takeIf { isPluckedPouleVariant(variantId) },
+            holeValue = holeValue.trim().ifEmpty { "5" }.takeIf { isPluckedPouleVariant(variantId) },
+            margotEnabled = if (isPouleVariant(variantId)) {
+                if (margotEnabled) "true" else "false"
+            } else {
+                null
+            },
+            cashPerJetonMinor = normalizeCashPerJetonMinor(cashPerJeton).takeIf { isMultiplayerVariant(variantId) },
         )
     }
 
@@ -326,14 +366,27 @@ private data class LobbyDraft(
                     it.userName,
                     it.variantId,
                     it.opponentChoice.name,
+                    it.queueSize,
+                    it.ante,
+                    it.stake,
+                    it.holeValue,
+                    it.margotEnabled.toString(),
+                    it.cashPerJeton,
                 )
             },
             restore = {
                 LobbyDraft(
-                    lobbyName = it[0],
-                    userName = it[1],
-                    variantId = it[2],
-                    opponentChoice = OpponentChoice.valueOf(it[3]),
+                    lobbyName = it.getOrElse(0) { "mobile-table" },
+                    userName = it.getOrElse(1) { "Android Player" },
+                    variantId = it.getOrElse(2) { "backgammon" },
+                    opponentChoice = runCatching { OpponentChoice.valueOf(it.getOrElse(3) { OpponentChoice.HUMAN.name }) }
+                        .getOrElse { OpponentChoice.HUMAN },
+                    queueSize = it.getOrElse(4) { "1" },
+                    ante = it.getOrElse(5) { "1" },
+                    stake = it.getOrElse(6) { "50" },
+                    holeValue = it.getOrElse(7) { "5" },
+                    margotEnabled = it.getOrElse(8) { "false" }.toBooleanStrictOrNull() ?: false,
+                    cashPerJeton = it.getOrElse(9) { "1.00" },
                 )
             },
         )
@@ -346,6 +399,12 @@ private data class JoinRequest(
     val variantId: String,
     val bot: String? = null,
     val botMargot: String? = null,
+    val queueSize: String? = null,
+    val ante: String? = null,
+    val stake: String? = null,
+    val holeValue: String? = null,
+    val margotEnabled: String? = null,
+    val cashPerJetonMinor: Int? = null,
 )
 
 private data class SettingsState(
@@ -387,6 +446,12 @@ private class AppPreferences(context: Context) {
         opponentChoice = runCatching {
             OpponentChoice.valueOf(prefs.getString("opponent_choice", OpponentChoice.HUMAN.name)!!)
         }.getOrElse { OpponentChoice.HUMAN },
+        queueSize = prefs.getString("queue_size", "1") ?: "1",
+        ante = prefs.getString("ante", "1") ?: "1",
+        stake = prefs.getString("stake", "50") ?: "50",
+        holeValue = prefs.getString("hole_value", "5") ?: "5",
+        margotEnabled = prefs.getBoolean("margot_enabled", false),
+        cashPerJeton = prefs.getString("cash_per_jeton", "1.00") ?: "1.00",
     )
 
     fun saveLobby(lobby: LobbyDraft) {
@@ -395,6 +460,12 @@ private class AppPreferences(context: Context) {
             .putString("user_name", lobby.userName)
             .putString("variant_id", lobby.variantId)
             .putString("opponent_choice", lobby.opponentChoice.name)
+            .putString("queue_size", lobby.queueSize)
+            .putString("ante", lobby.ante)
+            .putString("stake", lobby.stake)
+            .putString("hole_value", lobby.holeValue)
+            .putBoolean("margot_enabled", lobby.margotEnabled)
+            .putString("cash_per_jeton", lobby.cashPerJeton)
             .apply()
     }
 
@@ -634,6 +705,12 @@ private class OnlineGameSession(
                 addProperty("client_id", UUID.randomUUID().toString())
                 joinRequest.bot?.let { addProperty("bot", it) }
                 joinRequest.botMargot?.let { addProperty("bot_margot", it) }
+                joinRequest.queueSize?.let { addProperty("queue_size", it) }
+                joinRequest.ante?.let { addProperty("ante", it) }
+                joinRequest.stake?.let { addProperty("stake", it) }
+                joinRequest.holeValue?.let { addProperty("hole_value", it) }
+                joinRequest.margotEnabled?.let { addProperty("margot_enabled", it) }
+                joinRequest.cashPerJetonMinor?.let { addProperty("cash_per_jeton_minor", it) }
             }
 
             runCatching {
@@ -644,8 +721,10 @@ private class OnlineGameSession(
                 ).asJsonObject
 
                 val joinedGame = response.get("game")
-                val playerColor = response.get("player")?.asJsonObjectOrNull()?.get("color")?.asString
                 val snapshot = joinedGame?.let { gson.fromJson(it, GameSnapshotDto::class.java) }
+                val playerColor =
+                    snapshot?.viewer?.seatColor
+                        ?: response.get("player")?.asJsonObjectOrNull()?.get("color")?.asString
 
                 emit(
                     state.copy(
@@ -681,11 +760,12 @@ private class OnlineGameSession(
     fun reset() = push("reset", JsonObject(), cue = "turnStart")
     fun resign() = push("resign", JsonObject(), cue = "error")
     fun remainSeated() = push("remain_seated", JsonObject(), cue = "confirm")
+    fun claimQueueSpot() = push("claim_queue_spot", JsonObject(), cue = "confirm")
+    fun claimRosterSlot() = push("claim_roster_slot", JsonObject(), cue = "confirm")
 
     fun sendChat(text: String) {
         push("chat", JsonObject().apply {
             add("chat", JsonObject().apply {
-                addProperty("author", state.playerColor ?: "white")
                 addProperty("type", "text")
                 add("data", JsonObject().apply { addProperty("text", text) })
             })
@@ -803,7 +883,7 @@ private class LocalBackgammonSession(
     }
 }
 
-private data class GameSnapshotDto(
+internal data class GameSnapshotDto(
     val variant: VariantDto = VariantDto(),
     val status: String = "",
     val players: PlayersDto = PlayersDto(),
@@ -822,34 +902,38 @@ private data class GameSnapshotDto(
     val chat: List<ChatMessageDto> = emptyList(),
     val bot: BotDto? = null,
     @SerializedName("seat_reclaim") val seatReclaim: SeatReclaimDto? = null,
+    val viewer: ViewerDto? = null,
+    val poule: PouleDto? = null,
+    val multiplayer: MultiplayerDto? = null,
 )
 
-private data class VariantDto(
+internal data class VariantDto(
     val id: String = "",
     val title: String = "",
     @SerializedName("rule_name") val ruleName: String? = null,
     @SerializedName("active_leg") val activeLeg: ActiveLegDto? = null,
+    @SerializedName("active_variant_id") val activeVariantId: String? = null,
 )
 
-private data class ActiveLegDto(val id: String = "", val title: String = "")
-private data class PlayersDto(val host: PlayerDto? = null, val guest: PlayerDto? = null)
-private data class PlayerDto(val id: String? = null, val name: String? = null, val color: String? = null)
-private data class BoardDto(
+internal data class ActiveLegDto(val id: String = "", val title: String = "")
+internal data class PlayersDto(val host: PlayerDto? = null, val guest: PlayerDto? = null)
+internal data class PlayerDto(val id: String? = null, val name: String? = null, val color: String? = null)
+internal data class BoardDto(
     val points: List<PointDto> = emptyList(),
     val bar: Map<String, Int> = emptyMap(),
     val outside: Map<String, Int> = emptyMap(),
 )
 
-private data class PointDto(val index: Int = 0, val pieces: List<String> = emptyList())
-private data class TurnDto(val number: Int = 0, val color: String? = null, @SerializedName("player_name") val playerName: String? = null)
-private data class DiceDto(
+internal data class PointDto(val index: Int = 0, val pieces: List<String> = emptyList())
+internal data class TurnDto(val number: Int = 0, val color: String? = null, @SerializedName("player_name") val playerName: String? = null)
+internal data class DiceDto(
     val values: List<Int> = emptyList(),
     val moves: List<Int> = emptyList(),
     @SerializedName("moves_left") val movesLeft: List<Int> = emptyList(),
     @SerializedName("moves_played") val movesPlayed: List<LegalMoveDto> = emptyList(),
 )
 
-private data class LegalMoveDto(
+internal data class LegalMoveDto(
     @SerializedName("from") val from: JsonElement? = null,
     @SerializedName("to") val to: JsonElement? = null,
     val die: Int? = null,
@@ -869,16 +953,23 @@ private data class LegalMoveDto(
     }
 }
 
-private data class MatchOptionsDto(
+internal data class MatchOptionsDto(
     val kind: String? = null,
     val prompt: String? = null,
     val choices: List<String> = emptyList(),
-    val responses: Map<String, String> = emptyMap(),
+    val responses: Map<String, String?> = emptyMap(),
     @SerializedName("choiceLabels") val choiceLabels: Map<String, String> = emptyMap(),
+    @SerializedName("defaultChoice") val defaultChoice: String? = null,
+    val participants: List<OptionParticipantDto> = emptyList(),
     val options: List<OptionDto> = emptyList(),
 )
 
-private data class OptionDto(
+internal data class OptionParticipantDto(
+    val id: Int? = null,
+    val name: String? = null,
+)
+
+internal data class OptionDto(
     val key: String,
     val label: String? = null,
     val prompt: String? = null,
@@ -886,26 +977,26 @@ private data class OptionDto(
     val choices: List<OptionChoiceDto> = emptyList(),
 )
 
-private data class OptionChoiceDto(
+internal data class OptionChoiceDto(
     val value: String,
     val label: String? = null,
 )
 
-private data class TurnDecisionDto(
+internal data class TurnDecisionDto(
     val key: String? = null,
     val prompt: String? = null,
     val choices: List<String> = emptyList(),
     @SerializedName("actorColor") val actorColor: String? = null,
 )
 
-private data class OpeningRollDto(
+internal data class OpeningRollDto(
     val pending: Boolean = false,
     val prompt: String? = null,
     val order: String? = null,
     val rolls: Map<String, Int?> = emptyMap(),
 )
 
-private data class MatchDto(
+internal data class MatchDto(
     @SerializedName("is_over") val isOver: Boolean = false,
     val score: Map<String, Int> = emptyMap(),
     val length: Int? = null,
@@ -915,8 +1006,9 @@ private data class MatchDto(
     val options: JsonObject = JsonObject(),
 )
 
-private data class UiActionsDto(
+internal data class UiActionsDto(
     @SerializedName("can_roll") val canRoll: Boolean = false,
+    @SerializedName("can_roll_for_order") val canRollForOrder: Boolean = false,
     @SerializedName("can_undo") val canUndo: Boolean = false,
     @SerializedName("can_confirm") val canConfirm: Boolean = false,
     @SerializedName("can_end_turn") val canEndTurn: Boolean = false,
@@ -927,27 +1019,240 @@ private data class UiActionsDto(
     @SerializedName("can_reset") val canReset: Boolean = false,
 )
 
-private data class ChatMessageDto(
+internal data class ChatMessageDto(
     val author: String? = null,
+    @SerializedName("author_id") val authorId: Int? = null,
+    @SerializedName("author_role") val authorRole: String? = null,
+    @SerializedName("author_color") val authorColor: String? = null,
     val player: String? = null,
     val text: String? = null,
     val data: ChatDataDto? = null,
 ) {
     fun displayText(): String = data?.text ?: text ?: ""
-    fun displayAuthor(playerColor: String?): String = when (author ?: player) {
-        null -> "Someone"
-        playerColor -> "You"
-        else -> author ?: player ?: "Opponent"
+    fun displayAuthor(viewer: ViewerDto?): String = when {
+        authorId != null && authorId == viewer?.id -> "You"
+        !author.isNullOrBlank() && author == viewer?.name -> "You"
+        !author.isNullOrBlank() -> author
+        !player.isNullOrBlank() -> player
+        else -> "Someone"
     }
 }
 
-private data class ChatDataDto(val text: String? = null)
-private data class BotDto(val enabled: Boolean = false, val kind: String? = null, val name: String? = null, val color: String? = null)
-private data class SeatReclaimDto(
+internal data class ChatDataDto(val text: String? = null)
+internal data class BotDto(val enabled: Boolean = false, val kind: String? = null, val name: String? = null, val color: String? = null)
+internal data class SeatReclaimDto(
     @SerializedName("seat_color") val seatColor: String? = null,
     @SerializedName("defender_name") val defenderName: String? = null,
     @SerializedName("claimant_name") val claimantName: String? = null,
     @SerializedName("expires_at_ms") val expiresAtMs: Long? = null,
+)
+
+internal data class ViewerDto(
+    val id: Int? = null,
+    val name: String? = null,
+    val role: String? = null,
+    val seat: String? = null,
+    @SerializedName("seat_color") val seatColor: String? = null,
+    val side: String? = null,
+    @SerializedName("partner_id") val partnerId: Int? = null,
+    @SerializedName("can_claim_queue_spot") val canClaimQueueSpot: Boolean = false,
+    @SerializedName("can_claim_roster_slot") val canClaimRosterSlot: Boolean = false,
+)
+
+internal data class SessionMemberDto(
+    val id: Int? = null,
+    val name: String? = null,
+    val connected: Boolean? = null,
+)
+
+internal data class SessionEntryDto(
+    val kind: String? = null,
+    val id: Int? = null,
+    val name: String? = null,
+    val connected: Boolean? = null,
+    val role: String? = null,
+    val side: String? = null,
+    @SerializedName("slot_id") val slotId: Int? = null,
+)
+
+internal data class ActiveSeatDto(
+    val id: Int? = null,
+    val name: String? = null,
+    val color: String? = null,
+)
+
+internal data class ActivePairDto(
+    val host: ActiveSeatDto? = null,
+    val guest: ActiveSeatDto? = null,
+)
+
+internal data class PouleConfigDto(
+    @SerializedName("queue_size") val queueSize: Int? = null,
+    @SerializedName("competitor_target") val competitorTarget: Int? = null,
+    val ante: Int? = null,
+    @SerializedName("win_target") val winTarget: Int? = null,
+    @SerializedName("margot_enabled") val margotEnabled: Boolean? = null,
+    val stake: Int? = null,
+    @SerializedName("hole_value") val holeValue: Int? = null,
+)
+
+internal data class PouleLedgerDto(
+    val id: Int? = null,
+    val name: String? = null,
+    val contributed: Int? = null,
+    val payout: Int? = null,
+    val net: Int? = null,
+)
+
+internal data class PouleHistoryDto(
+    val winner: SessionMemberDto? = null,
+    @SerializedName("payout_amount") val payoutAmount: Int? = null,
+    @SerializedName("settlement_trous") val settlementTrous: Int? = null,
+)
+
+internal data class PouleDto(
+    val style: String? = null,
+    val phase: String? = null,
+    val config: PouleConfigDto? = null,
+    val active: ActivePairDto? = null,
+    @SerializedName("draw_order") val drawOrder: List<SessionEntryDto> = emptyList(),
+    val queue: List<SessionEntryDto> = emptyList(),
+    @SerializedName("open_queue_slots") val openQueueSlots: Int? = null,
+    val spectators: List<SessionMemberDto> = emptyList(),
+    val ledger: List<PouleLedgerDto> = emptyList(),
+    val history: List<PouleHistoryDto> = emptyList(),
+    val pool: Int? = null,
+    val champion: SessionMemberDto? = null,
+    val streak: Int? = null,
+)
+
+internal data class MultiplayerAccountingDto(
+    @SerializedName("cash_per_jeton_minor") val cashPerJetonMinor: Int? = null,
+    @SerializedName("cash_per_fiche_minor") val cashPerFicheMinor: Int? = null,
+    @SerializedName("cash_minor_scale") val cashMinorScale: Int? = null,
+)
+
+internal data class OrderDrawRollDto(
+    val member: SessionMemberDto? = null,
+    val value: Int? = null,
+)
+
+internal data class ResolvedOpeningDto(
+    val host: SessionMemberDto? = null,
+    val guest: SessionMemberDto? = null,
+    val resting: SessionMemberDto? = null,
+    @SerializedName("starting_side") val startingSide: String? = null,
+    @SerializedName("die_holder") val dieHolder: SessionMemberDto? = null,
+)
+
+internal data class OrderDrawDto(
+    val step: String? = null,
+    @SerializedName("current_roller") val currentRoller: SessionMemberDto? = null,
+    val rolls: List<OrderDrawRollDto> = emptyList(),
+    val rerolling: Boolean = false,
+    @SerializedName("reroll_participants") val rerollParticipants: List<SessionMemberDto> = emptyList(),
+    @SerializedName("resolved_opening") val resolvedOpening: ResolvedOpeningDto? = null,
+)
+
+internal data class RotationStateDto(
+    val resting: SessionMemberDto? = null,
+    @SerializedName("associate_order") val associateOrder: List<SessionMemberDto> = emptyList(),
+    @SerializedName("associate_coups_in_block") val associateCoupsInBlock: Int? = null,
+    @SerializedName("white_partner") val whitePartner: SessionMemberDto? = null,
+    @SerializedName("black_partner") val blackPartner: SessionMemberDto? = null,
+)
+
+internal data class MultiplayerPlayerLedgerDto(
+    val id: Int? = null,
+    val name: String? = null,
+    @SerializedName("coups_lost") val coupsLost: Int? = null,
+    val jetons: Int? = null,
+    @SerializedName("jetons_cash_minor") val jetonsCashMinor: Int? = null,
+    @SerializedName("resting_consolation") val restingConsolation: Int? = null,
+    @SerializedName("resting_consolation_cash_minor") val restingConsolationCashMinor: Int? = null,
+    @SerializedName("paris_net") val parisNet: Int? = null,
+    @SerializedName("paris_net_cash_minor") val parisNetCashMinor: Int? = null,
+    @SerializedName("queue_paris") val queueParis: Int? = null,
+    @SerializedName("queue_paris_cash_minor") val queueParisCashMinor: Int? = null,
+    @SerializedName("queue_jetons") val queueJetons: Int? = null,
+    @SerializedName("queue_jetons_cash_minor") val queueJetonsCashMinor: Int? = null,
+    @SerializedName("final_total") val finalTotal: Int? = null,
+    @SerializedName("final_total_cash_minor") val finalTotalCashMinor: Int? = null,
+)
+
+internal data class MultiplayerSideLedgerDto(
+    val side: String? = null,
+    val members: List<SessionMemberDto> = emptyList(),
+    val marques: Int? = null,
+    val points: Int? = null,
+    @SerializedName("coups_won") val coupsWon: Int? = null,
+    @SerializedName("coups_lost") val coupsLost: Int? = null,
+    val paris: Int? = null,
+    @SerializedName("paris_cash_minor") val parisCashMinor: Int? = null,
+    val jetons: Int? = null,
+    @SerializedName("jetons_cash_minor") val jetonsCashMinor: Int? = null,
+    val honneurs: Int? = null,
+    val classes: JsonObject? = null,
+    @SerializedName("combine_paid") val combinePaid: Int? = null,
+    @SerializedName("combine_paid_cash_minor") val combinePaidCashMinor: Int? = null,
+    @SerializedName("combine_received") val combineReceived: Int? = null,
+    @SerializedName("combine_received_cash_minor") val combineReceivedCashMinor: Int? = null,
+    @SerializedName("basket_won") val basketWon: Int? = null,
+    @SerializedName("basket_won_cash_minor") val basketWonCashMinor: Int? = null,
+)
+
+internal data class CombinePouleDto(
+    val basket: Int? = null,
+    @SerializedName("basket_cash_minor") val basketCashMinor: Int? = null,
+    val cycle: Int? = null,
+    @SerializedName("contract_side") val contractSide: String? = null,
+    @SerializedName("first_winner_side") val firstWinnerSide: String? = null,
+    @SerializedName("last_partie_side") val lastPartieSide: String? = null,
+    @SerializedName("last_capture_side") val lastCaptureSide: String? = null,
+    @SerializedName("last_capture_amount") val lastCaptureAmount: Int? = null,
+    @SerializedName("last_capture_amount_cash_minor") val lastCaptureAmountCashMinor: Int? = null,
+)
+
+internal data class MultiplayerLedgerDto(
+    val players: List<MultiplayerPlayerLedgerDto> = emptyList(),
+    val sides: List<MultiplayerSideLedgerDto> = emptyList(),
+    @SerializedName("combine_poule") val combinePoule: CombinePouleDto? = null,
+)
+
+internal data class MultiplayerHistoryDto(
+    val coup: Int? = null,
+    val winner: SessionMemberDto? = null,
+    val loser: SessionMemberDto? = null,
+    val resting: SessionMemberDto? = null,
+    @SerializedName("winner_side") val winnerSide: String? = null,
+    @SerializedName("points_awarded") val pointsAwarded: Int? = null,
+    @SerializedName("consolation_bonus") val consolationBonus: Int? = null,
+    @SerializedName("continuing_honneurs") val continuingHonneurs: Boolean = false,
+)
+
+internal data class SessionWinnerDto(
+    val side: String? = null,
+    val id: Int? = null,
+    val name: String? = null,
+)
+
+internal data class MultiplayerDto(
+    val kind: String? = null,
+    val family: String? = null,
+    val mode: String? = null,
+    val phase: String? = null,
+    @SerializedName("competitor_target") val competitorTarget: Int? = null,
+    @SerializedName("partie_length") val partieLength: Int? = null,
+    val accounting: MultiplayerAccountingDto? = null,
+    val participants: List<SessionEntryDto> = emptyList(),
+    @SerializedName("active_pair") val activePair: ActivePairDto? = null,
+    @SerializedName("order_draw") val orderDraw: OrderDrawDto? = null,
+    @SerializedName("waiting_slots") val waitingSlots: Int? = null,
+    @SerializedName("rotation_state") val rotationState: RotationStateDto? = null,
+    val ledger: MultiplayerLedgerDto? = null,
+    @SerializedName("session_winner") val sessionWinner: SessionWinnerDto? = null,
+    val history: List<MultiplayerHistoryDto> = emptyList(),
+    @SerializedName("awaiting_match_options") val awaitingMatchOptions: Boolean = false,
 )
 
 private sealed interface SpaceRef {
@@ -1091,8 +1396,13 @@ private fun LobbyScreen(
     onOpenOnline: () -> Unit,
     onOpenLocal: () -> Unit,
 ) {
+    val sessionVariant = isSessionVariant(lobby.variantId)
+    val pouleVariant = isPouleVariant(lobby.variantId)
+    val growingPotVariant = isGrowingPotVariant(lobby.variantId)
+    val pluckedPouleVariant = isPluckedPouleVariant(lobby.variantId)
+    val multiplayerVariant = isMultiplayerVariant(lobby.variantId)
     val selectedBot = lobby.toJoinRequest().bot
-    val supportedBot = selectedBot != null
+    val supportedBot = !sessionVariant && selectedBot != null
 
     Column(
         modifier = Modifier
@@ -1103,7 +1413,14 @@ private fun LobbyScreen(
     ) {
         HeroCard(
             title = strings.text("lobby.title"),
-            body = "${strings.text("lobby.botNote")} ${strings.text("join.connecting")}",
+            body = if (sessionVariant) {
+                strings.text(
+                    "lobby.multiSeatSpectatorsNote",
+                    fallback = "Extra joiners watch as spectators. If a roster spot opens, a spectator can claim it.",
+                )
+            } else {
+                "${strings.text("lobby.botNote")} ${strings.text("join.connecting")}"
+            },
         )
 
         AppCard {
@@ -1137,7 +1454,18 @@ private fun LobbyScreen(
                     catalogs.variantOrder().forEach { variantId ->
                         FilterChip(
                             selected = variantId == lobby.variantId,
-                            onClick = { onLobbyChange(lobby.copy(variantId = variantId)) },
+                            onClick = {
+                                onLobbyChange(
+                                    lobby.copy(
+                                        variantId = variantId,
+                                        opponentChoice = if (isSessionVariant(variantId)) {
+                                            OpponentChoice.HUMAN
+                                        } else {
+                                            lobby.opponentChoice
+                                        },
+                                    ),
+                                )
+                            },
                             label = {
                                 Text(catalogs.variantTitle(settings.languageId, variantId))
                             },
@@ -1152,9 +1480,15 @@ private fun LobbyScreen(
                 Text(strings.text("lobby.playAgainst"), style = MaterialTheme.typography.titleLarge)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OpponentChoice.values().forEach { choice ->
+                        val enabled = !sessionVariant || choice == OpponentChoice.HUMAN
                         FilterChip(
-                            selected = choice == lobby.opponentChoice,
-                            onClick = { onLobbyChange(lobby.copy(opponentChoice = choice)) },
+                            selected = choice == if (sessionVariant) OpponentChoice.HUMAN else lobby.opponentChoice,
+                            onClick = {
+                                if (enabled) {
+                                    onLobbyChange(lobby.copy(opponentChoice = choice))
+                                }
+                            },
+                            enabled = enabled,
                             label = {
                                 Text(
                                     when (choice) {
@@ -1167,12 +1501,74 @@ private fun LobbyScreen(
                         )
                     }
                 }
-                if (!supportedBot && lobby.opponentChoice != OpponentChoice.HUMAN) {
+                if (sessionVariant) {
+                    Text(
+                        text = strings.text(
+                            "lobby.multiSeatSpectatorsNote",
+                            fallback = "Extra joiners watch as spectators. If a roster spot opens, a spectator can claim it.",
+                        ),
+                        color = HermesColors.Ink.copy(alpha = 0.8f),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                } else if (!supportedBot && lobby.opponentChoice != OpponentChoice.HUMAN) {
                     Text(
                         text = strings.text("lobby.computerNote"),
                         color = HermesColors.AccentRed,
                         style = MaterialTheme.typography.bodySmall,
                     )
+                }
+            }
+        }
+
+        if (sessionVariant) {
+            AppCard {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    if (pouleVariant) {
+                        LabeledField(
+                            label = strings.text("lobby.queueSize"),
+                            value = lobby.queueSize,
+                            onValueChange = { onLobbyChange(lobby.copy(queueSize = it)) },
+                        )
+                    }
+                    if (growingPotVariant) {
+                        LabeledField(
+                            label = strings.text("lobby.ante"),
+                            value = lobby.ante,
+                            onValueChange = { onLobbyChange(lobby.copy(ante = it)) },
+                        )
+                    }
+                    if (pluckedPouleVariant) {
+                        LabeledField(
+                            label = strings.text("lobby.stake"),
+                            value = lobby.stake,
+                            onValueChange = { onLobbyChange(lobby.copy(stake = it)) },
+                        )
+                        LabeledField(
+                            label = strings.text("lobby.holeValue"),
+                            value = lobby.holeValue,
+                            onValueChange = { onLobbyChange(lobby.copy(holeValue = it)) },
+                        )
+                    }
+                    if (pouleVariant) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(strings.text("lobby.margot"))
+                            Switch(
+                                checked = lobby.margotEnabled,
+                                onCheckedChange = { onLobbyChange(lobby.copy(margotEnabled = it)) },
+                            )
+                        }
+                    }
+                    if (multiplayerVariant) {
+                        LabeledField(
+                            label = strings.text("lobby.cashPerJeton"),
+                            value = lobby.cashPerJeton,
+                            onValueChange = { onLobbyChange(lobby.copy(cashPerJeton = it)) },
+                        )
+                    }
                 }
             }
         }
@@ -1208,6 +1604,8 @@ private fun OnlineScreen(
     onReset: () -> Unit,
     onResign: () -> Unit,
     onRemainSeated: () -> Unit,
+    onClaimQueueSpot: () -> Unit,
+    onClaimRosterSlot: () -> Unit,
     onSendChat: (String) -> Unit,
     onSubmitOptions: (Map<String, Any>) -> Unit,
     onSubmitDecision: (String) -> Unit,
@@ -1236,9 +1634,12 @@ private fun OnlineScreen(
             return
         }
 
-        val bottomColor = state.playerColor ?: "white"
+        val viewer = game.viewer
+        val bottomColor = viewer?.seatColor ?: state.playerColor ?: "white"
+        val isActiveViewer = viewer?.role == "active"
         val activeMoves = if (
-            game.turn?.color == state.playerColor &&
+            isActiveViewer &&
+            game.turn?.color == bottomColor &&
             game.pendingTurnDecision == null &&
             game.openingRoll?.pending != true
         ) {
@@ -1255,28 +1656,41 @@ private fun OnlineScreen(
         } ?: emptyList()
 
         HeroCard(
-            title = catalogs.variantTitle(settings.languageId, game.variant.id),
+            title =
+                catalogs.variantTitle(
+                    settings.languageId,
+                    game.variant.activeLeg?.id ?: game.variant.activeVariantId ?: game.variant.id,
+                ),
             body = when {
                 game.bot?.enabled == true ->
-                    strings.text("game.againstBot", mapOf("color" to colorLabel(strings, bottomColor), "bot" to (game.bot.name ?: strings.text("lobby.computer"))))
+                    strings.text(
+                        "game.againstBot",
+                        mapOf("color" to colorLabel(strings, bottomColor), "bot" to (game.bot.name ?: strings.text("lobby.computer"))),
+                    )
+                game.poule != null || game.multiplayer != null ->
+                    viewerSeatSummary(strings, game, viewer, bottomColor)
                 bottomColor.isNotBlank() ->
-                    strings.text("game.againstHuman", mapOf("color" to colorLabel(strings, bottomColor)))
-                else -> strings.text("game.settingUp")
+                    strings.text(
+                        "game.againstHuman",
+                        mapOf("color" to colorLabel(strings, bottomColor)),
+                        fallback = "You are ${colorLabel(strings, bottomColor)} on the board.",
+                    )
+                else -> strings.text("game.settingUp", fallback = "Setting up the game.")
             },
         )
 
-        if (game.seatReclaim != null) {
+        if (game.seatReclaim?.seatColor == bottomColor) {
             AppCard {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(strings.text("game.seatWarning"), style = MaterialTheme.typography.titleLarge)
                     Text(
                         strings.text(
                             "game.reclaimingSeat",
-                            mapOf("name" to (game.seatReclaim.claimantName ?: strings.text("someone"))),
+                            mapOf("name" to (game.seatReclaim.claimantName ?: strings.text("someone", fallback = "someone"))),
                         ),
                     )
                     Button(onClick = onRemainSeated) {
-                        Text(strings.text("game.remainSeated"))
+                        Text(strings.text("game.remainSeated", fallback = "Remain seated"))
                     }
                 }
             }
@@ -1284,21 +1698,17 @@ private fun OnlineScreen(
 
         AppCard {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(strings.text("game.currentPlayer"), style = MaterialTheme.typography.titleLarge)
-                Text(
-                    when {
-                        game.match.isOver && game.match.winner != null ->
-                            strings.text("game.wonBy", mapOf("winner" to colorLabel(strings, game.match.winner), "kind" to (game.match.winnerKind ?: strings.text("unknown"))))
-                        game.turn?.playerName != null ->
-                            strings.text("game.toMove", mapOf("player" to game.turn.playerName))
-                        game.status == "waiting_for_opponent" ->
-                            strings.text("game.waitingOpponent")
-                        game.openingRoll?.pending == true ->
-                            strings.text("game.rollToStart")
-                        else -> strings.text("game.settingUp")
-                    },
-                )
+                Text(strings.text("game.currentPlayer", fallback = "Current player"), style = MaterialTheme.typography.titleLarge)
+                Text(sessionStatusText(strings, game, viewer, bottomColor))
             }
+        }
+
+        if (game.poule != null) {
+            PouleCard(strings, game.poule, viewer, onClaimQueueSpot)
+        }
+
+        if (game.multiplayer != null) {
+            MultiplayerCard(strings, game.multiplayer, viewer, onClaimRosterSlot)
         }
 
         if (game.openingRoll?.pending == true) {
@@ -1329,10 +1739,9 @@ private fun OnlineScreen(
 
         ActionCard(
             strings = strings,
-            canRoll = game.uiActions.canRoll && game.pendingMatchOptions == null && game.pendingTurnDecision == null,
-            canUndo = game.uiActions.canUndo,
-            canConfirm = game.uiActions.canConfirm,
-            canReset = game.uiActions.canReset,
+            game = game,
+            viewer = viewer,
+            playerColor = bottomColor,
             onRoll = onRoll,
             onUndo = onUndo,
             onConfirm = onConfirm,
@@ -1344,7 +1753,10 @@ private fun OnlineScreen(
             MatchOptionsCard(
                 strings = strings,
                 payload = game.pendingMatchOptions,
+                viewer = viewer,
                 playerColor = bottomColor,
+                multiplayer = game.multiplayer,
+                canSubmit = canSubmitMatchOptions(game, viewer),
                 onSubmit = onSubmitOptions,
             )
         }
@@ -1362,7 +1774,7 @@ private fun OnlineScreen(
                     Text(strings.text("chat.empty"), color = HermesColors.Ink.copy(alpha = 0.7f))
                 } else {
                     game.chat.forEach { message ->
-                        Text("${message.displayAuthor(state.playerColor)}: ${message.displayText()}")
+                        Text("${message.displayAuthor(viewer)}: ${message.displayText()}")
                     }
                 }
                 LabeledField(
@@ -1700,13 +2112,90 @@ private fun ActionCard(
 }
 
 @Composable
+private fun ActionCard(
+    strings: SharedStrings,
+    game: GameSnapshotDto,
+    viewer: ViewerDto?,
+    playerColor: String,
+    onRoll: () -> Unit,
+    onUndo: () -> Unit,
+    onConfirm: () -> Unit,
+    onReset: () -> Unit,
+    onResign: () -> Unit,
+) {
+    val isActiveViewer = viewer?.role == "active"
+    val currentOrderRollerId = game.multiplayer?.orderDraw?.currentRoller?.id
+    val canRollForOrder =
+        game.uiActions.canRollForOrder &&
+            currentOrderRollerId != null &&
+            currentOrderRollerId == viewer?.id
+    val canRoll =
+        canRollForOrder ||
+            (
+                isActiveViewer &&
+                    game.uiActions.canRoll &&
+                    game.pendingMatchOptions == null &&
+                    game.pendingTurnDecision == null &&
+                    (game.openingRoll?.pending != true || game.openingRoll.rolls[playerColor] == null)
+            )
+    val canUndo = isActiveViewer && game.uiActions.canUndo
+    val canConfirm = isActiveViewer && (game.uiActions.canConfirm || game.uiActions.canEndTurn)
+    val canReset = isActiveViewer && game.uiActions.canReset
+    val showResign =
+        isActiveViewer &&
+            !game.match.isOver &&
+            game.poule?.style != "plucked_pot" &&
+            game.poule?.phase != "finished" &&
+            game.multiplayer?.phase != "finished"
+    val confirmLabel =
+        if (game.uiActions.canEndTurn) {
+            strings.text("game.endTurn", fallback = "End turn")
+        } else {
+            strings.text("game.confirm")
+        }
+
+    AppCard {
+        Text(strings.text("game.actions"), style = MaterialTheme.typography.titleLarge)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = onRoll, enabled = canRoll, modifier = Modifier.weight(1f)) {
+                Text(strings.text("game.roll"))
+            }
+            Button(onClick = onUndo, enabled = canUndo, modifier = Modifier.weight(1f)) {
+                Text(strings.text("game.undo"))
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = onConfirm, enabled = canConfirm, modifier = Modifier.weight(1f)) {
+                Text(confirmLabel)
+            }
+            Button(onClick = onReset, enabled = canReset, modifier = Modifier.weight(1f)) {
+                Text(strings.text("game.newMatch"))
+            }
+        }
+        if (showResign) {
+            TextButton(onClick = onResign) {
+                Text(strings.text("game.resign"))
+            }
+        }
+    }
+}
+
+@Composable
 private fun MatchOptionsCard(
     strings: SharedStrings,
     payload: MatchOptionsDto,
+    viewer: ViewerDto?,
     playerColor: String,
+    multiplayer: MultiplayerDto?,
+    canSubmit: Boolean,
     onSubmit: (Map<String, Any>) -> Unit,
 ) {
     val draft = remember(payload.kind) { mutableStateMapOf<String, Any>() }
+    val responseKey = if (payload.kind == "multiplayer_partie_length_consent") {
+        viewer?.id?.toString() ?: ""
+    } else {
+        playerColor
+    }
 
     AppCard {
         Text(strings.text("game.matchOptions"), style = MaterialTheme.typography.titleLarge)
@@ -1725,6 +2214,7 @@ private fun MatchOptionsCard(
                                 FilterChip(
                                     selected = draft[option.key]?.toString() == choice.value,
                                     onClick = { draft[option.key] = choice.value },
+                                    enabled = canSubmit,
                                     label = { Text(choice.label ?: choice.value) },
                                 )
                             }
@@ -1740,6 +2230,7 @@ private fun MatchOptionsCard(
                                 Text(option.key)
                                 Checkbox(
                                     checked = draft[option.key] as? Boolean ?: defaultValue.asBoolean,
+                                    enabled = canSubmit,
                                     onCheckedChange = { draft[option.key] = it },
                                 )
                             }
@@ -1748,13 +2239,14 @@ private fun MatchOptionsCard(
                                 label = option.key,
                                 value = draft[option.key]?.toString() ?: defaultValue?.asString.orEmpty(),
                                 onValueChange = { draft[option.key] = it },
+                                enabled = canSubmit,
                             )
                         }
                     }
                 }
             }
-            Button(onClick = { onSubmit(draft.toMap()) }) {
-                Text(strings.text("game.startMatch"))
+            Button(onClick = { onSubmit(draft.toMap()) }, enabled = canSubmit) {
+                    Text(strings.text("game.startMatch", fallback = "Start match"))
             }
         } else {
             Row(
@@ -1766,12 +2258,14 @@ private fun MatchOptionsCard(
                         selected = false,
                         onClick = {
                             val key = when (payload.kind) {
-                                "trictrac_partie_length_consent" -> "aEcrirePartieLengthConsent"
+                                "trictrac_partie_length_consent",
+                                "multiplayer_partie_length_consent" -> "aEcrirePartieLengthConsent"
                                 "tavli_target_consent" -> "tavliTarget"
                                 else -> "margotConsent"
                             }
                             onSubmit(mapOf(key to choice))
                         },
+                        enabled = canSubmit,
                         label = {
                             Text(
                                 payload.choiceLabels[choice]
@@ -1783,7 +2277,281 @@ private fun MatchOptionsCard(
             }
             if (payload.responses.isNotEmpty()) {
                 Divider(color = HermesColors.CardBorder)
-                Text("${strings.text("game.yourChoice")}: ${payload.responses[playerColor] ?: strings.text("waiting")}")
+                if (payload.kind == "multiplayer_partie_length_consent" && payload.participants.isNotEmpty()) {
+                    payload.participants.forEach { participant ->
+                        val answer =
+                            pendingChoiceLabel(
+                                strings,
+                                payload,
+                                payload.responses[participant.id?.toString().orEmpty()],
+                            )
+                        Text("${participant.name ?: strings.text("waiting")}: $answer")
+                    }
+                } else {
+                    Text(
+                        "${strings.text("game.yourChoice", fallback = "Your choice")}: ${pendingChoiceLabel(strings, payload, payload.responses[responseKey])}",
+                    )
+                    if (multiplayer == null) {
+                        Text(
+                            "${strings.text("game.opponentChoice", fallback = "Opponent choice")}: ${
+                                pendingChoiceLabel(strings, payload, payload.responses[oppositeColor(playerColor)])
+                            }",
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PouleCard(
+    strings: SharedStrings,
+    payload: PouleDto,
+    viewer: ViewerDto?,
+    onClaimQueueSpot: () -> Unit,
+) {
+    val isPluckedPoule = payload.style == "plucked_pot"
+    val drawOrderText =
+        payload.drawOrder
+            .takeIf { it.isNotEmpty() }
+            ?.joinToString(", ") { sessionEntryLabel(strings, it, "queue") }
+            ?: strings.text("game.noDrawOrderYet", fallback = "Draw order will appear when the table fills.")
+    val queueText =
+        payload.queue
+            .takeIf { it.isNotEmpty() }
+            ?.joinToString(", ") { sessionEntryLabel(strings, it, "queue") }
+            ?: strings.text("game.emptyQueue", fallback = "No one is waiting in the queue.")
+    val spectatorsText =
+        payload.spectators
+            .takeIf { it.isNotEmpty() }
+            ?.joinToString(", ") { it.name ?: strings.text("waiting") }
+            ?: strings.text("game.noSpectators", fallback = "No spectators are watching right now.")
+    val latestRound = payload.history.lastOrNull()
+    val championText =
+        if (!payload.champion?.name.isNullOrBlank() && (payload.streak ?: 0) > 0) {
+            strings.text(
+                "game.currentStreak",
+                mapOf("name" to (payload.champion?.name ?: strings.text("waiting")), "count" to (payload.streak ?: 0)),
+                fallback = "${payload.champion?.name ?: strings.text("waiting")} is on a streak of ${payload.streak ?: 0}.",
+            )
+        } else {
+            strings.text("game.noChampion", fallback = "No streak is running yet.")
+        }
+    val settlementText =
+        if (!latestRound?.winner?.name.isNullOrBlank() && latestRound?.settlementTrous != null) {
+            strings.text(
+                "game.latestSettlement",
+                mapOf(
+                    "name" to (latestRound.winner?.name ?: strings.text("waiting")),
+                    "amount" to (latestRound.payoutAmount ?: 0),
+                    "trous" to latestRound.settlementTrous,
+                ),
+                fallback = "${latestRound.winner?.name ?: strings.text("waiting")} took ${latestRound.payoutAmount ?: 0} on a ${latestRound.settlementTrous} trou lead.",
+            )
+        } else {
+            strings.text("game.noSettlementYet", fallback = "No payout has been taken from the common fund yet.")
+        }
+
+    AppCard {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(strings.text("game.poule", fallback = "Poule"), style = MaterialTheme.typography.titleLarge)
+            Text(
+                strings.text(
+                    "game.poulePhase.${payload.phase}",
+                    fallback = capitalizeFirst(humanizeToken(payload.phase ?: "session")),
+                ),
+            )
+            Text(if (isPluckedPoule) settlementText else championText)
+            Text("${strings.text(if (isPluckedPoule) "game.remainingFund" else "game.pool")}: ${payload.pool ?: 0}")
+            if (isPluckedPoule) {
+                Text(
+                    "${strings.text("game.stake", fallback = "Stake")}: ${payload.config?.stake ?: 0} · " +
+                        "${strings.text("game.holeValue", fallback = "Hole value")}: ${payload.config?.holeValue ?: 0}",
+                )
+                Text(
+                    "${strings.text("game.fixedRing", fallback = "Fixed ring")}: " +
+                        strings.text(
+                            "game.fixedRingNote",
+                            fallback = "the second player stays on, and the first rotates to the tail.",
+                        ),
+                )
+            } else {
+                Text(
+                    "${strings.text("game.ante", fallback = "Ante")}: ${payload.config?.ante ?: 0} · " +
+                        "${strings.text("game.winTarget", fallback = "Target")}: ${payload.config?.winTarget ?: 0}",
+                )
+            }
+            Text(
+                "${strings.text("game.activeSeats", fallback = "Active seats")}: " +
+                    "${payload.active?.host?.name ?: strings.text("waiting")} / ${payload.active?.guest?.name ?: strings.text("waiting")}",
+            )
+            Text("${strings.text("game.drawOrder", fallback = "Draw order")}: $drawOrderText")
+            Text("${strings.text("game.queueOrder", fallback = "Queue")}: $queueText")
+            Text("${strings.text("game.spectators", fallback = "Spectators")}: $spectatorsText")
+            if (payload.ledger.isNotEmpty()) {
+                payload.ledger.forEach { entry ->
+                    Text(
+                        "${entry.name ?: strings.text("waiting")}: " +
+                            "${strings.text("game.paid", fallback = "paid")} ${entry.contributed ?: 0}, " +
+                            "${strings.text("game.won", fallback = "won")} ${entry.payout ?: 0}, " +
+                            "${strings.text("game.net", fallback = "net")} ${entry.net ?: 0}",
+                    )
+                }
+            }
+            if (viewer?.canClaimQueueSpot == true) {
+                Button(onClick = onClaimQueueSpot) {
+                    Text(strings.text("game.claimQueueSpot", fallback = "Claim queue spot"))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MultiplayerCard(
+    strings: SharedStrings,
+    payload: MultiplayerDto,
+    viewer: ViewerDto?,
+    onClaimRosterSlot: () -> Unit,
+) {
+    val participantsText =
+        payload.participants
+            .takeIf { it.isNotEmpty() }
+            ?.joinToString(", ") { sessionEntryLabel(strings, it, "roster") }
+            ?: strings.text("game.noCompetitors", fallback = "No competitors have joined yet.")
+    val accounting = payload.accounting
+    val cashMinorScale = accounting?.cashMinorScale ?: 100
+    val orderDraw = payload.orderDraw
+    val orderRollsText =
+        orderDraw?.rolls
+            ?.takeIf { it.isNotEmpty() }
+            ?.joinToString(", ") { "${it.member?.name ?: strings.text("waiting")}: ${it.value ?: 0}" }
+            ?: strings.text("game.noOrderRollsYet", fallback = "No draw rolls have been recorded yet.")
+    val rerollText =
+        orderDraw?.rerollParticipants
+            ?.mapNotNull { it.name }
+            ?.takeIf { it.isNotEmpty() }
+            ?.joinToString(", ")
+    val resolvedOpeningText =
+        if (orderDraw?.resolvedOpening?.host?.name != null && orderDraw.resolvedOpening.guest?.name != null) {
+            val resolved = orderDraw.resolvedOpening
+            strings.text(
+                "game.orderDrawResolved",
+                mapOf(
+                    "host" to (resolved?.host?.name ?: strings.text("waiting")),
+                    "guest" to (resolved?.guest?.name ?: strings.text("waiting")),
+                    "resting" to (resolved?.resting?.name ?: strings.text("waiting")),
+                    "dieHolder" to (resolved?.dieHolder?.name ?: strings.text("waiting")),
+                    "side" to colorLabel(strings, resolved?.startingSide ?: "white"),
+                ),
+                fallback =
+                    "${resolved?.host?.name ?: strings.text("waiting")} opens against ${resolved?.guest?.name ?: strings.text("waiting")}. " +
+                        "${resolved?.dieHolder?.name ?: strings.text("waiting")} holds the die for ${colorLabel(strings, resolved?.startingSide ?: "white")}.",
+            )
+        } else {
+            null
+        }
+
+    AppCard {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(strings.text("game.multiplayer", fallback = "Multiplayer"), style = MaterialTheme.typography.titleLarge)
+            Text(
+                strings.text(
+                    "game.multiplayerMode.${payload.mode}",
+                    fallback = capitalizeFirst(humanizeToken(payload.mode ?: "multiplayer")),
+                ),
+            )
+            Text(
+                strings.text(
+                    "game.multiplayerPhase.${payload.phase}",
+                    fallback = capitalizeFirst(humanizeToken(payload.phase ?: "session")),
+                ),
+            )
+            Text(
+                "${strings.text("game.activeSeats", fallback = "Active seats")}: " +
+                    "${payload.activePair?.host?.name ?: strings.text("waiting")} / ${payload.activePair?.guest?.name ?: strings.text("waiting")}",
+            )
+            Text("${strings.text("game.participants", fallback = "Participants")}: $participantsText")
+            Text("${strings.text("game.competitors", fallback = "Competitors")}: ${payload.competitorTarget ?: 0}")
+            Text("${strings.text("game.coups", fallback = "Coups")}: ${payload.partieLength ?: 0}")
+            Text("${strings.text("game.openSlots", fallback = "Open slots")}: ${payload.waitingSlots ?: 0}")
+            if (accounting?.cashPerJetonMinor != null) {
+                Text(
+                    "${strings.text("game.cashPerJeton", fallback = "Cash per jeton")}: ${
+                        formatCashMinor(accounting.cashPerJetonMinor, cashMinorScale) ?: "0.00"
+                    }",
+                )
+            }
+            if (accounting?.cashPerFicheMinor != null) {
+                Text(
+                    "${strings.text("game.cashPerFiche", fallback = "Cash per fiche")}: ${
+                        formatCashMinor(accounting.cashPerFicheMinor, cashMinorScale) ?: "0.00"
+                    }",
+                )
+            }
+            if (orderDraw != null) {
+                Text("${strings.text("game.orderDraw", fallback = "Opening draw")}: ${capitalizeFirst(humanizeToken(orderDraw.step ?: "draw"))}")
+                Text("${strings.text("game.currentRoller", fallback = "Current roller")}: ${orderDraw.currentRoller?.name ?: strings.text("waiting")}")
+                Text("${strings.text("game.orderRolls", fallback = "Rolls")}: $orderRollsText")
+                if (orderDraw.rerolling && !rerollText.isNullOrBlank()) {
+                    Text("${strings.text("game.orderDrawReroll", fallback = "Rerolling")}: $rerollText")
+                }
+                if (!resolvedOpeningText.isNullOrBlank()) {
+                    Text(resolvedOpeningText)
+                }
+            }
+            payload.rotationState?.resting?.name?.let { restingName ->
+                Text("${strings.text("game.restingPlayer", fallback = "Resting player")}: $restingName")
+            }
+            if (payload.rotationState?.associateOrder?.isNotEmpty() == true) {
+                val associateOrder =
+                    payload.rotationState?.associateOrder?.joinToString(", ") {
+                        it.name ?: strings.text("waiting")
+                    } ?: strings.text("waiting")
+                Text(
+                    "${strings.text("game.associateOrder", fallback = "Associate order")}: $associateOrder",
+                )
+            }
+            payload.ledger?.players?.forEach { entry ->
+                Text(
+                    "${entry.name ?: strings.text("waiting")}: " +
+                        "${strings.text("game.coupsLost", fallback = "coups lost")} ${entry.coupsLost ?: 0}, " +
+                        "${strings.text("game.jetons", fallback = "jetons")} ${entry.jetons ?: 0}, " +
+                        "${strings.text("game.cash", fallback = "cash")} ${formatCashMinor(entry.finalTotalCashMinor, cashMinorScale) ?: "0.00"}, " +
+                        "${strings.text("game.finalTotal", fallback = "final")} ${entry.finalTotal ?: 0}",
+                )
+            }
+            payload.ledger?.sides?.forEach { entry ->
+                Text(
+                    "${colorLabel(strings, entry.side ?: "white")}: " +
+                        "${strings.text("game.marques", fallback = "marques")} ${entry.marques ?: 0}, " +
+                        "${strings.text("game.jetons", fallback = "jetons")} ${entry.jetons ?: 0}, " +
+                        "${strings.text("game.cash", fallback = "cash")} ${formatCashMinor(entry.jetonsCashMinor, cashMinorScale) ?: "0.00"}, " +
+                        "${strings.text("game.honneurs", fallback = "honneurs")} ${entry.honneurs ?: 0}" +
+                        if ((entry.combinePaid ?: 0) != 0 || (entry.combineReceived ?: 0) != 0 || (entry.basketWon ?: 0) != 0) {
+                            ", ${strings.text("game.combinePaid", fallback = "combine paid")} ${entry.combinePaid ?: 0}, " +
+                                "${strings.text("game.combineReceived", fallback = "combine won")} ${entry.combineReceived ?: 0}, " +
+                                "${strings.text("game.basketWon", fallback = "basket won")} ${entry.basketWon ?: 0}"
+                        } else {
+                            ""
+                        },
+                )
+            }
+            payload.ledger?.combinePoule?.let { combinePoule ->
+                Text(
+                    "${strings.text("game.combineBasket", fallback = "Basket")}: ${combinePoule.basket ?: 0} " +
+                        "(${formatCashMinor(combinePoule.basketCashMinor, cashMinorScale) ?: "0.00"}) · " +
+                        "${strings.text("game.contractSide", fallback = "Contract")}: ${
+                            combinePoule.contractSide?.let { colorLabel(strings, it) }
+                                ?: strings.text("game.none", fallback = "none")
+                        }",
+                )
+            }
+            if (viewer?.canClaimRosterSlot == true) {
+                Button(onClick = onClaimRosterSlot) {
+                    Text(strings.text("game.claimRosterSlot", fallback = "Claim roster slot"))
+                }
             }
         }
     }
@@ -1816,10 +2584,19 @@ private fun TurnDecisionCard(
 @Composable
 private fun MatchSummaryCard(strings: SharedStrings, game: GameSnapshotDto) {
     AppCard {
-        Text(strings.text("game.match"), style = MaterialTheme.typography.titleLarge)
+        Text(strings.text("game.match", fallback = "Match"), style = MaterialTheme.typography.titleLarge)
         Text("White ${game.match.score["white"] ?: 0} - Black ${game.match.score["black"] ?: 0}")
         if (game.match.winner != null) {
-            Text(strings.text("game.wonBy", mapOf("winner" to colorLabel(strings, game.match.winner), "kind" to (game.match.winnerKind ?: strings.text("unknown")))))
+            Text(
+                strings.text(
+                    "game.wonBy",
+                    mapOf(
+                        "winner" to colorLabel(strings, game.match.winner),
+                        "kind" to (game.match.winnerKind ?: strings.text("unknown", fallback = "unknown")),
+                    ),
+                    fallback = "${colorLabel(strings, game.match.winner)} won.",
+                ),
+            )
         }
     }
 }
@@ -1980,7 +2757,7 @@ private fun MiddleRail(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Pocket(
-            label = strings.text("game.opponentBar"),
+            label = strings.text("game.opponentBar", fallback = "Opponent bar"),
             count = board.bar[topColor] ?: 0,
             color = topColor,
             actionable = barSource && !activeBarIsBottom,
@@ -1991,7 +2768,7 @@ private fun MiddleRail(
         )
         DiceStrip(dice = dice, color = turnColor)
         Pocket(
-            label = strings.text("game.bearOff"),
+            label = strings.text("game.bearOff", fallback = "Bear off"),
             count = board.outside[turnColor] ?: 0,
             color = turnColor,
             actionable = homeTarget,
@@ -1999,7 +2776,7 @@ private fun MiddleRail(
             onClick = { if (homeTarget) onSelectTarget(SpaceRef.Home) },
         )
         Pocket(
-            label = strings.text("game.yourBar"),
+            label = strings.text("game.yourBar", fallback = "Your bar"),
             count = board.bar[bottomColor] ?: 0,
             color = bottomColor,
             actionable = barSource && activeBarIsBottom,
@@ -2200,6 +2977,177 @@ private fun rememberAssetBitmap(path: String): ImageBitmap? {
 }
 
 private fun oppositeColor(color: String): String = if (color == "white") "black" else "white"
+
+private fun isPouleVariant(variantId: String): Boolean = variantId in POULE_VARIANT_IDS
+
+private fun isGrowingPotVariant(variantId: String): Boolean = variantId in GROWING_POT_VARIANT_IDS
+
+private fun isPluckedPouleVariant(variantId: String): Boolean = variantId in PLUCKED_POT_VARIANT_IDS
+
+private fun isMultiplayerVariant(variantId: String): Boolean = variantId in MULTIPLAYER_VARIANT_IDS
+
+private fun isSessionVariant(variantId: String): Boolean =
+    isPouleVariant(variantId) || isMultiplayerVariant(variantId)
+
+private fun normalizeCashPerJetonMinor(value: String?): Int? {
+    val normalized = value?.trim()?.replace(",", ".") ?: return null
+    val match = Regex("""\A(\d+)(?:\.(\d{1,2}))?\z""").matchEntire(normalized) ?: return null
+    val wholeMinor = (match.groupValues.getOrNull(1)?.toIntOrNull() ?: return null) * 100
+    val centsMinor = (match.groupValues.getOrNull(2).orEmpty().padEnd(2, '0')).toIntOrNull() ?: 0
+    val cashMinor = wholeMinor + centsMinor
+    return cashMinor.takeIf { it >= 1 }
+}
+
+private fun formatCashMinor(value: Int?, scale: Int): String? {
+    val numeric = value ?: return null
+    if (scale <= 0) return null
+    return String.format(Locale.US, "%.2f", numeric.toDouble() / scale.toDouble())
+}
+
+private fun humanizeToken(token: String): String =
+    token.replace('_', ' ').replaceFirstChar { it.uppercase() }
+
+private fun capitalizeFirst(text: String): String =
+    text.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
+
+private fun sessionEntryLabel(strings: SharedStrings, entry: SessionEntryDto, kind: String): String =
+    when (entry.kind) {
+        "open_slot" ->
+            if (kind == "queue") {
+                strings.text("game.openQueueSlot", fallback = "Open queue slot")
+            } else {
+                strings.text("game.openRosterSlot", fallback = "Open roster slot")
+            }
+
+        else -> entry.name ?: strings.text("waiting")
+    }
+
+private fun viewerSeatSummary(
+    strings: SharedStrings,
+    game: GameSnapshotDto,
+    viewer: ViewerDto?,
+    bottomColor: String,
+): String =
+    when {
+        game.poule != null ->
+            when (viewer?.role) {
+                "active" ->
+                    strings.text(
+                        "game.viewerActive",
+                        mapOf("color" to colorLabel(strings, bottomColor)),
+                        fallback = "You are ${colorLabel(strings, bottomColor)} on the board.",
+                    )
+                "queued" -> strings.text("game.viewerQueued", fallback = "You are currently in the queue.")
+                else -> strings.text("game.viewerSpectator", fallback = "You are watching as a spectator.")
+            }
+
+        game.multiplayer != null ->
+            when (viewer?.role) {
+                "active" ->
+                    strings.text(
+                        "game.viewerActive",
+                        mapOf("color" to colorLabel(strings, bottomColor)),
+                        fallback = "You are ${colorLabel(strings, bottomColor)} on the board.",
+                    )
+                "bench" -> strings.text("game.viewerBench", fallback = "You are currently waiting in the competitor rotation.")
+                else -> strings.text("game.viewerSpectator", fallback = "You are watching as a spectator.")
+            }
+
+        else ->
+            strings.text(
+                "game.againstHuman",
+                mapOf("color" to colorLabel(strings, bottomColor)),
+                fallback = "You are ${colorLabel(strings, bottomColor)} on the board.",
+            )
+    }
+
+private fun sessionStatusText(
+    strings: SharedStrings,
+    game: GameSnapshotDto,
+    viewer: ViewerDto?,
+    bottomColor: String,
+): String =
+    when {
+        game.poule?.phase == "waiting_for_competitors" ->
+            strings.text("game.waitingCompetitors", fallback = "Waiting for enough competitors to fill the table.")
+
+        game.poule?.phase == "waiting_for_queue_refill" ->
+            strings.text("game.waitingQueueRefill", fallback = "Waiting for a spectator to claim the open queue slot.")
+
+        game.poule?.phase == "finished" ->
+            strings.text("game.pouleFinished", fallback = "The poule session is finished.")
+
+        game.multiplayer?.phase == "waiting_for_players" ->
+            strings.text("game.waitingPlayers", fallback = "Waiting for enough players to fill the table.")
+
+        game.multiplayer?.phase == "awaiting_order_draw" ->
+            strings.text("game.waitingOrderDraw", fallback = "Waiting for the opening draw.")
+
+        game.multiplayer?.phase == "awaiting_match_options" ->
+            strings.text("game.waitingLengthAgreement", fallback = "Waiting for the competitors to agree on the coup length.")
+
+        game.multiplayer?.phase == "waiting_for_roster_refill" ->
+            strings.text("game.waitingRosterRefill", fallback = "Waiting for a spectator to claim the open roster slot.")
+
+        game.multiplayer?.phase == "continuing_honneurs_after_coup" ->
+            strings.text("game.continuingHonneurs", fallback = "The coup is settled and the honneurs side is still continuing.")
+
+        game.multiplayer?.phase == "finished" ->
+            strings.text("game.multiplayerFinished", fallback = "The multiplayer session is finished.")
+
+        game.match.isOver && game.match.winner != null ->
+            strings.text(
+                "game.wonBy",
+                mapOf("winner" to colorLabel(strings, game.match.winner), "kind" to (game.match.winnerKind ?: strings.text("unknown"))),
+            )
+
+        game.turn?.playerName != null ->
+            strings.text(
+                "game.toMove",
+                mapOf("player" to game.turn.playerName),
+                fallback = "${game.turn.playerName} to move.",
+            )
+
+        game.status == "waiting_for_opponent" ->
+            strings.text("game.waitingOpponent", fallback = "Waiting for opponent.")
+
+        game.openingRoll?.pending == true ->
+            strings.text("game.rollToStart", fallback = "Roll to start.")
+
+        game.pendingTurnDecision != null ->
+            strings.text(
+                "game.decisionRequired",
+                mapOf("player" to (game.turn?.playerName ?: viewer?.name ?: colorLabel(strings, bottomColor))),
+                fallback = "A decision is required.",
+            )
+
+        else -> strings.text("game.settingUp", fallback = "Setting up the game.")
+    }
+
+private fun pendingChoiceLabel(
+    strings: SharedStrings,
+    payload: MatchOptionsDto,
+    choice: String?,
+): String {
+    val value = choice ?: return strings.text("waiting")
+    return payload.choiceLabels[value]
+        ?: when (value) {
+            "yes", "no" -> strings.text(value)
+            else -> value
+        }
+}
+
+private fun canSubmitMatchOptions(game: GameSnapshotDto, viewer: ViewerDto?): Boolean {
+    if (!game.uiActions.canSubmitMatchOptions) {
+        return false
+    }
+
+    return when {
+        game.multiplayer != null -> viewer?.role == "active" || viewer?.role == "bench"
+        game.poule != null -> viewer?.role == "active" || viewer?.role == "queued"
+        else -> viewer?.role == "active" || viewer == null
+    }
+}
 
 private fun colorLabel(strings: SharedStrings, color: String): String = strings.text("color.$color", fallback = color.replaceFirstChar { it.uppercase() })
 

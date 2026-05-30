@@ -1,0 +1,52 @@
+<.shell
+  return_context={@return_context}
+  query={@query}
+  title={@book.title}
+  subtitle={@book.author || @book.site_author || "Historical Trictrac text"}
+>
+  <section class="rules-section">
+    <div class="rules-book-hero">
+      <div class="rules-book-copy">
+        <p>
+          <strong><%= length(@book.chapters) %></strong> chapter entries are available in this imported edition.
+        </p>
+        <%= if @book.repo_url do %>
+          <p>
+            Source repository:
+            <a href={@book.repo_url}><%= @book.repo_url %></a>
+          </p>
+        <% end %>
+        <%= if @book.editors != [] do %>
+          <p>Edition and online preparation: <%= Enum.join(@book.editors, ", ") %></p>
+        <% end %>
+      </div>
+
+      <%= if @book.first_chapter_path do %>
+        <div class="rules-book-actions">
+          <a class="rules-primary-link" href={RulesLibrary.chapter_path(@book.slug, @book.first_chapter_path, @nav_context)}>
+            Start reading
+          </a>
+        </div>
+      <% end %>
+    </div>
+  </section>
+
+  <section class="rules-section">
+    <div class="rules-section-heading">
+      <h2>Table of contents</h2>
+      <p>Derived directly from the upstream `mkdocs.yml` navigation.</p>
+    </div>
+
+    <nav class="rules-toc" aria-label={"#{@book.title} table of contents"}>
+      <%= for entry <- @book.toc_entries do %>
+        <a
+          class="rules-toc-entry"
+          href={RulesLibrary.chapter_path(@book.slug, entry.route_path, @nav_context)}
+          style={"--rules-depth: #{entry.depth}"}
+        >
+          <%= entry.title %>
+        </a>
+      <% end %>
+    </nav>
+  </section>
+</.shell>

@@ -172,6 +172,9 @@ defmodule HermesTrictracWeb.PageControllerTest do
     assert body =~ ~s(data-bot="trictrac_zero")
     assert body =~ ~s(data-bot-margot="yes")
     assert body =~ ~s(data-variant="trictrac_combine")
+
+    assert body =~
+             ~s(data-rules-url="/rules?return_label=Back+to+game&amp;return_to=%2Fgame%2Fcombine-bot")
   end
 
   test "POST /game preserves BackgammonAI for English backgammon", %{conn: conn} do
@@ -186,6 +189,7 @@ defmodule HermesTrictracWeb.PageControllerTest do
     body = html_response(conn, 200)
     assert body =~ ~s(data-bot="backgammon_ai")
     assert body =~ ~s(data-variant="backgammon")
+    assert body =~ ~s(data-rules-url="")
   end
 
   test "POST /game drops BackgammonAI for non-backgammon variants", %{conn: conn} do

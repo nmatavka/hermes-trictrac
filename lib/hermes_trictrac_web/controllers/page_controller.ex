@@ -1,7 +1,7 @@
 defmodule HermesTrictracWeb.PageController do
   use HermesTrictracWeb, :controller
 
-  alias HermesTrictrac.{GameServer, Identity}
+  alias HermesTrictrac.{GameServer, Identity, RulesLibrary}
 
   plug :require_table_identity when action in [:game]
 
@@ -187,6 +187,7 @@ defmodule HermesTrictracWeb.PageController do
       margot_enabled: margot_enabled,
       a_ecrire_partie_length: a_ecrire_partie_length,
       cash_per_jeton_minor: cash_per_jeton_minor,
+      rules_url: rules_url_for_variant(game, variant),
       client_id_scope: Atom.to_string(client_id_scope),
       identity_mode: identity_mode,
       current_identity: current_identity
@@ -206,7 +207,9 @@ defmodule HermesTrictracWeb.PageController do
 
       conn
       |> put_flash(:error, "Sign in with Bluesky to open or join a table.")
-      |> redirect(to: "/?return_to=#{URI.encode_www_form(Identity.sanitize_return_to(return_to))}")
+      |> redirect(
+        to: "/?return_to=#{URI.encode_www_form(Identity.sanitize_return_to(return_to))}"
+      )
       |> halt()
     else
       conn
@@ -238,11 +241,24 @@ defmodule HermesTrictracWeb.PageController do
 
   defp normalize_cash_per_jeton_minor(_variant, _value), do: nil
 
-  defp normalize_a_ecrire_partie_length(variant, _params) when variant in @cash_per_jeton_variants,
-    do: nil
+  defp normalize_a_ecrire_partie_length(variant, _params)
+       when variant in @cash_per_jeton_variants,
+       do: nil
 
   defp normalize_a_ecrire_partie_length(_variant, params),
     do: Map.get(params, "aEcrirePartieLength")
+
+  defp rules_url_for_variant(game, variant) when is_binary(variant) do
+    if String.starts_with?(variant, "trictrac_") do
+      RulesLibrary.library_path(%{
+        return_to: "/game/#{game}",
+        return_label: "Back to game",
+        query: ""
+      })
+    end
+  end
+
+  defp rules_url_for_variant(_game, _variant), do: nil
 
   defp existing_table_variant(game) do
     case GenServer.whereis(GameServer.reg(game)) do

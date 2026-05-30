@@ -20,6 +20,10 @@ defmodule HermesTrictracWeb.Router do
 
     get "/", PageController, :index
     get "/dev/model-lab", PageController, :model_lab
+    get "/rules", RulesController, :index
+    get "/rules-assets/:book_slug/*asset_path", RulesController, :asset
+    get "/rules/:book_slug", RulesController, :book
+    get "/rules/:book_slug/*chapter_path", RulesController, :chapter
     get "/game/:game", PageController, :game
     post "/game", PageController, :game
   end

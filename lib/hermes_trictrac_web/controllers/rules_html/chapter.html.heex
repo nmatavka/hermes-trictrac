@@ -1,0 +1,56 @@
+<.shell
+  return_context={@return_context}
+  query={@query}
+  title={@chapter.title}
+  subtitle={@book.title}
+>
+  <div class="rules-reader-layout">
+    <aside class="rules-sidebar">
+      <div class="rules-sidebar-card">
+        <p class="rules-sidebar-label">Book</p>
+        <h2>
+          <a href={RulesLibrary.book_path(@book.slug, @nav_context)}><%= @book.title %></a>
+        </h2>
+      </div>
+
+      <nav class="rules-sidebar-card rules-toc" aria-label={"#{@book.title} table of contents"}>
+        <%= for entry <- @book.toc_entries do %>
+          <a
+            class={["rules-toc-entry", if(entry.route_path == @chapter.route_path, do: "active")]}
+            href={RulesLibrary.chapter_path(@book.slug, entry.route_path, @nav_context)}
+            style={"--rules-depth: #{entry.depth}"}
+          >
+            <%= entry.title %>
+          </a>
+        <% end %>
+      </nav>
+    </aside>
+
+    <article class="rules-article">
+      <header class="rules-article-header">
+        <p class="rules-book-eyebrow"><%= @book.title %></p>
+        <h2><%= @chapter.title %></h2>
+      </header>
+
+      <div class="rules-prose">
+        <%= raw(@chapter_html) %>
+      </div>
+
+      <footer class="rules-article-footer">
+        <%= if @previous_chapter do %>
+          <a href={RulesLibrary.chapter_path(@book.slug, @previous_chapter.route_path, @nav_context)}>
+            ← <%= @previous_chapter.title %>
+          </a>
+        <% else %>
+          <span />
+        <% end %>
+
+        <%= if @next_chapter do %>
+          <a href={RulesLibrary.chapter_path(@book.slug, @next_chapter.route_path, @nav_context)}>
+            <%= @next_chapter.title %> →
+          </a>
+        <% end %>
+      </footer>
+    </article>
+  </div>
+</.shell>
