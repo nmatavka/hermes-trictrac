@@ -1,0 +1,69 @@
+FROM elixir:1.18.4-otp-27
+
+ARG JULIA_VERSION=1.12.5
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV MIX_ENV=prod
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+      build-essential \
+      ca-certificates \
+      curl \
+      git \
+      nodejs \
+      npm && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN ARCH="$(dpkg --print-architecture)" && \
+    case "$ARCH" in \
+      amd64) JULIA_DIR_ARCH="x64"; JULIA_FILE_ARCH="x86_64" ;; \
+      arm64) JULIA_DIR_ARCH="aarch64"; JULIA_FILE_ARCH="aarch64" ;; \
+      *) echo "Unsupported architecture: $ARCH" >&2; exit 1 ;; \
+    esac && \
+    curl -fsSL "https://julialang-s3.julialang.org/bin/linux/${JULIA_DIR_ARCH}/1.12/julia-${JULIA_VERSION}-linux-${JULIA_FILE_ARCH}.tar.gz" \
+      -o /tmp/julia.tar.gz && \
+    tar -xzf /tmp/julia.tar.gz -C /opt && \
+    ln -s "/opt/julia-${JULIA_VERSION}/bin/julia" /usr/local/bin/julia && \
+    rm /tmp/julia.tar.gz
+
+WORKDIR /app
+
+ENV PHX_SERVER=true
+ENV PORT=4000
+ENV PHX_URL_SCHEME=https
+ENV HERMES_TRICTRAC_IDENTITY_MODE=manual
+ENV HERMES_TRICTRAC_RULES_SOURCES_DIR=/app/gamedocs/sources
+ENV HERMES_TRICTRAC_BOT_PROJECT_DIR=/app/trictrac_zero
+ENV HERMES_TRICTRAC_BOT_SCRIPT=/app/trictrac_zero/scripts/frontend_bot.jl
+ENV HERMES_TRICTRAC_BOT_JULIA=/usr/local/bin/julia
+ENV HERMES_TRICTRAC_BOT_SESSION_DIR=/app/trictrac_zero/sessions/trictrac-classique-sparse-v4-arena96x16
+ENV TRICTRAC_ZERO_SKIP_BOOTSTRAP=1
+ENV JULIA_DEPOT_PATH=/app/.julia
+ENV JULIA_PKG_PRECOMPILE_AUTO=0
+
+COPY mix.exs mix.lock ./
+COPY config ./config
+COPY lib ./lib
+COPY priv ./priv
+COPY assets ./assets
+COPY gamedocs ./gamedocs
+COPY hermes-bluesky ./hermes-bluesky
+COPY trictrac_zero ./trictrac_zero
+
+RUN test -d /app/gamedocs/sources
+
+RUN mix local.hex --force && \
+    mix local.rebar --force && \
+    mix deps.get --only prod && \
+    mix deps.compile && \
+    mix assets.deploy && \
+    julia --project=/app/trictrac_zero -e 'using Pkg; Pkg.develop(path="/app/trictrac_zero/vendor/AlphaZero.jl"); Pkg.instantiate()' && \
+    mix compile && \
+    mix phx.digest
+
+EXPOSE 4000
+
+CMD ["mix", "phx.server"]

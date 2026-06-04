@@ -730,9 +730,12 @@ defmodule HermesTrictrac.RulesLibrary do
 
   defp sources_root do
     candidates = [
+      System.get_env("HERMES_TRICTRAC_RULES_SOURCES_DIR"),
       Path.expand("gamedocs/sources", File.cwd!()),
-      Path.expand("../../../../gamedocs/sources", Application.app_dir(:hermes_trictrac))
+      Path.expand("../../../../gamedocs/sources", Application.app_dir(:hermes_trictrac)),
+      "/app/gamedocs/sources"
     ]
+    |> Enum.reject(&is_nil/1)
 
     Enum.find(candidates, &File.dir?/1) ||
       raise "Unable to find gamedocs/sources for the Trictrac rules library"

@@ -1,0 +1,43 @@
+# fly.toml app configuration file generated for wistful-wildflower-7138 on 2026-06-03T10:50:23-04:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'wistful-wildflower-7138'
+primary_region = 'yyz'
+
+[build]
+  dockerfile = 'Dockerfile.fly'
+
+[env]
+  HERMES_TRICTRAC_BOT_JULIA = '/usr/local/bin/julia'
+  HERMES_TRICTRAC_BOT_PROJECT_DIR = '/app/trictrac_zero'
+  HERMES_TRICTRAC_BOT_SCRIPT = '/app/trictrac_zero/scripts/frontend_bot.jl'
+  HERMES_TRICTRAC_BOT_SESSION_DIR = '/app/trictrac_zero/sessions/trictrac-classique-sparse-v4-arena96x16'
+  HERMES_TRICTRAC_IDENTITY_MODE = 'manual'
+  HERMES_TRICTRAC_RULES_SOURCES_DIR = '/app/gamedocs/sources'
+  PHX_SERVER = 'true'
+  PHX_URL_SCHEME = 'https'
+  PORT = '4000'
+  TRICTRAC_ZERO_SKIP_BOOTSTRAP = '1'
+
+[http_service]
+  internal_port = 4000
+  force_https = true
+  auto_stop_machines = 'off'
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ['app']
+
+  [[http_service.checks]]
+    interval = '30s'
+    timeout = '5s'
+    grace_period = '1m30s'
+    method = 'GET'
+    path = '/'
+
+[[vm]]
+  memory = '4gb'
+  cpu_kind = 'shared'
+  cpus = 2
+  memory_mb = 4096

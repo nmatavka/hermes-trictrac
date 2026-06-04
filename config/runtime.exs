@@ -11,6 +11,30 @@ config :hermes_trictrac, :client_id_scope, client_id_scope
 
 prod_env? = config_env() == :prod
 
+trictrac_zero_dir =
+  System.get_env("HERMES_TRICTRAC_BOT_PROJECT_DIR") ||
+    Path.expand("../trictrac_zero", __DIR__)
+
+trictrac_bot_script =
+  System.get_env("HERMES_TRICTRAC_BOT_SCRIPT") ||
+    Path.join(trictrac_zero_dir, "scripts/frontend_bot.jl")
+
+trictrac_bot_session_dir =
+  System.get_env("HERMES_TRICTRAC_BOT_SESSION_DIR") ||
+    Path.join(trictrac_zero_dir, "sessions/trictrac-classique-sparse-v4-arena96x16")
+
+trictrac_bot_julia =
+  System.get_env("HERMES_TRICTRAC_BOT_JULIA") || System.find_executable("julia") || "julia"
+
+trictrac_bot_name = System.get_env("HERMES_TRICTRAC_BOT_NAME") || "TricTracZero"
+
+config :hermes_trictrac, :trictrac_model_bot,
+  project_dir: trictrac_zero_dir,
+  script: trictrac_bot_script,
+  session_dir: trictrac_bot_session_dir,
+  julia: trictrac_bot_julia,
+  name: trictrac_bot_name
+
 identity_mode =
   case {System.get_env("HERMES_TRICTRAC_IDENTITY_MODE"), prod_env?} do
     {"manual", _} -> :manual
