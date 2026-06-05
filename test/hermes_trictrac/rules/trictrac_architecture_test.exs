@@ -83,6 +83,37 @@ defmodule HermesTrictrac.Rules.TrictracArchitectureTest do
     assert Validation.build_conservation_candidates(board, variant, :white, dice, analysis) == []
   end
 
+  test "material jan fillability distinguishes blocked, grand-only, and open retour phases" do
+    variant = %{id: "trictrac_classique", family: :trictrac, total_pieces: 15}
+
+    petit_alive_board =
+      empty_board()
+      |> fill_range(:black, 0, 5, 2)
+
+    grand_only_board =
+      empty_board()
+      |> put_piece(:black, 11, 6)
+      |> put_piece(:black, 10, 4)
+      |> put_piece(:black, 8, 3)
+      |> put_piece(:black, 6, 2)
+
+    grand_dead_board =
+      empty_board()
+      |> put_piece(:black, 11, 7)
+      |> put_piece(:black, 10, 5)
+      |> put_piece(:black, 8, 1)
+      |> put_piece(:black, 0, 2)
+
+    assert Moves.can_opponent_still_fill_jan?(petit_alive_board, variant, :black, 18)
+    assert Moves.can_opponent_still_fill_jan?(petit_alive_board, variant, :black, 12)
+
+    refute Moves.can_opponent_still_fill_jan?(grand_only_board, variant, :black, 18)
+    assert Moves.can_opponent_still_fill_jan?(grand_only_board, variant, :black, 12)
+
+    refute Moves.can_opponent_still_fill_jan?(grand_dead_board, variant, :black, 18)
+    refute Moves.can_opponent_still_fill_jan?(grand_dead_board, variant, :black, 12)
+  end
+
   test "obligation building and satisfaction stay paired" do
     start_board =
       empty_board()

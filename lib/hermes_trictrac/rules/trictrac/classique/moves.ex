@@ -54,20 +54,27 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Moves do
     else
       opp = State.opposite(color)
       opp_norm = norm_pos(variant, destination, opp)
+      destination_table = destination_jan_table_for_opponent_norm(opp_norm)
 
       cond do
-        VariantRules.toccategli?(variant) and opp_norm in 12..17 and
-            can_opponent_still_fill_jan?(board, variant, opp, 12) ->
+        is_nil(destination_table) ->
           false
 
-        opp_norm in 18..23 ->
-          opponent_table_protected?(board, variant, opp, :petit)
-
-        opp_norm in 12..17 ->
-          opponent_table_protected?(board, variant, opp, :grand)
+        VariantRules.toccategli?(variant) and destination_table == :grand and
+            opponent_table_protected?(board, variant, opp, :grand) ->
+          false
 
         true ->
-          false
+          case retour_passage_phase(board, variant, opp) do
+            :retour_blocked ->
+              destination_table in [:petit, :grand]
+
+            :retour_open_grand_protected ->
+              destination_table == :grand
+
+            :retour_open_grand_open ->
+              false
+          end
       end
     end
   end
@@ -120,12 +127,12 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Moves do
   end
 
   def opponent_table_protected?(board, variant, color, :petit) do
-    can_opponent_still_fill_jan?(board, variant, color, 18) or
+    can_opponent_still_fill_table?(board, variant, color, :petit) or
       table_full_for_movement?(board, variant, color, :petit)
   end
 
   def opponent_table_protected?(board, variant, color, :grand) do
-    can_opponent_still_fill_jan?(board, variant, color, 12) or
+    can_opponent_still_fill_table?(board, variant, color, :grand) or
       table_full_for_movement?(board, variant, color, :grand)
   end
 
@@ -134,10 +141,10 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Moves do
   end
 
   def can_opponent_still_fill_jan?(board, variant, color, jan_start_norm) do
-    Enum.reduce(0..23, 0, fn pos, acc ->
-      cnt = pieces_at(board, pos, color)
-      if cnt > 0 and norm_pos(variant, pos, color) >= jan_start_norm, do: acc + cnt, else: acc
-    end) >= 12
+    case jan_table_key_for_start_norm(jan_start_norm) do
+      nil -> false
+      key -> can_opponent_still_fill_table?(board, variant, color, key)
+    end
   end
 
   defp remove_piece(board, color, point, count),
@@ -215,10 +222,10 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Moves do
         middle_empty = count_all_at(board, middle) == 0
         final_opp = pieces_at(board, raw_destination, opp)
         passing_retour? = source_norm >= 6 and final_norm < 6
-        opponent_still_petit? = opponent_table_protected?(board, variant, opp, :petit)
+        retour_phase = retour_passage_phase(board, variant, opp)
 
         cond do
-          passing_retour? and opponent_still_petit? ->
+          passing_retour? and retour_phase == :retour_blocked ->
             []
 
           middle_opp >= 2 ->
@@ -552,7 +559,7 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Moves do
 
     extra_points =
       if VariantRules.toccategli?(variant) and
-           can_opponent_still_fill_jan?(board, variant, opp, 12) do
+           opponent_table_protected?(board, variant, opp, :grand) do
         Enum.map(12..17, &denorm_pos(variant, &1, opp))
       else
         []
@@ -572,6 +579,55 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Moves do
         end)
     end
   end
+
+  defp retour_passage_phase(board, variant, color) do
+    petit_fillable? = can_opponent_still_fill_table?(board, variant, color, :petit)
+
+    grand_fillable? =
+      petit_fillable? or can_opponent_still_fill_table?(board, variant, color, :grand)
+
+    cond do
+      petit_fillable? -> :retour_blocked
+      grand_fillable? -> :retour_open_grand_protected
+      true -> :retour_open_grand_open
+    end
+  end
+
+  defp can_opponent_still_fill_table?(board, variant, color, key) do
+    case Constants.jan_table(State.normalize_table_key(key)) do
+      nil ->
+        false
+
+      table ->
+        Enum.all?(table.from..table.to, fn suffix_start ->
+          available = available_checkers_from_norm(board, variant, color, suffix_start)
+          required = missing_units_in_suffix(board, variant, color, suffix_start, table.to)
+          available >= required
+        end)
+    end
+  end
+
+  defp available_checkers_from_norm(board, variant, color, start_norm) do
+    Enum.reduce(start_norm..23, 0, fn norm, acc ->
+      acc + pieces_at(board, denorm_pos(variant, norm, color), color)
+    end)
+  end
+
+  defp missing_units_in_suffix(board, variant, color, start_norm, end_norm) do
+    Enum.reduce(start_norm..end_norm, 0, fn norm, acc ->
+      count = pieces_at(board, denorm_pos(variant, norm, color), color)
+      acc + max(2 - count, 0)
+    end)
+  end
+
+  defp jan_table_key_for_start_norm(18), do: :petit
+  defp jan_table_key_for_start_norm(12), do: :grand
+  defp jan_table_key_for_start_norm(0), do: :retour
+  defp jan_table_key_for_start_norm(_), do: nil
+
+  defp destination_jan_table_for_opponent_norm(norm) when norm in 18..23, do: :petit
+  defp destination_jan_table_for_opponent_norm(norm) when norm in 12..17, do: :grand
+  defp destination_jan_table_for_opponent_norm(_), do: nil
 
   defp own_coin(variant, color), do: State.own_coin(variant, color)
   defp opp_coin(variant, color), do: State.opp_coin(variant, color)

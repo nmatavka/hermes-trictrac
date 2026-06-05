@@ -3490,6 +3490,112 @@ defmodule HermesTrictrac.EngineTest do
     refute Enum.any?(legal, &(&1.to == 5))
   end
 
+  test "trictrac blocks passer au retour while the opponent petit jan is still fillable" do
+    engine = Engine.new("tt-retour-bloque", "trictrac_classique")
+    assert {:ok, engine, _} = Engine.join(engine, "nick", "tab-a")
+    assert {:ok, engine, _} = Engine.join(engine, "jane", "tab-b")
+
+    points =
+      Enum.map(0..23, fn index ->
+        cond do
+          index == 14 -> %{white: 1, black: 0}
+          index in 0..5 -> %{white: 0, black: 2}
+          true -> %{white: 0, black: 0}
+        end
+      end)
+
+    board = %{engine.board | points: points}
+    runtime = %{engine.runtime | board: board}
+    dice = %{values: [5, 5], moves: [5, 5], moves_left: [5, 5], moves_played: []}
+
+    legal =
+      HermesTrictrac.Rules.RaceCore.legal_moves(
+        Map.put(runtime, :dice, dice),
+        engine.variant,
+        :white
+      )
+
+    refute Enum.any?(legal, fn move ->
+             move.from == 14 and move.to == 4 and move.sequence == [5, 5] and move.via == 9
+           end)
+  end
+
+  test "trictrac allows passing into retour through empty grand-jan rests once petit jan is dead" do
+    engine = Engine.new("tt-retour-grand-protege", "trictrac_classique")
+    assert {:ok, engine, _} = Engine.join(engine, "nick", "tab-a")
+    assert {:ok, engine, _} = Engine.join(engine, "jane", "tab-b")
+
+    points =
+      Enum.map(0..23, fn index ->
+        cond do
+          index == 14 -> %{white: 1, black: 0}
+          index == 11 -> %{white: 0, black: 6}
+          index == 10 -> %{white: 0, black: 4}
+          index == 8 -> %{white: 0, black: 3}
+          index == 6 -> %{white: 0, black: 2}
+          true -> %{white: 0, black: 0}
+        end
+      end)
+
+    board = %{engine.board | points: points}
+    runtime = %{engine.runtime | board: board}
+    dice = %{values: [5, 5], moves: [5, 5], moves_left: [5, 5], moves_played: []}
+
+    legal =
+      HermesTrictrac.Rules.RaceCore.legal_moves(
+        Map.put(runtime, :dice, dice),
+        engine.variant,
+        :white
+      )
+
+    assert Enum.any?(legal, fn move ->
+             move.from == 14 and move.to == 4 and move.sequence == [5, 5] and move.via == 9
+           end)
+
+    refute Enum.any?(legal, fn move ->
+             move.from == 14 and move.to == 9 and move.die == 5
+           end)
+  end
+
+  test "trictrac opens grand-jan landings once the opponent can no longer fill it" do
+    engine = Engine.new("tt-retour-grand-ouvert", "trictrac_classique")
+    assert {:ok, engine, _} = Engine.join(engine, "nick", "tab-a")
+    assert {:ok, engine, _} = Engine.join(engine, "jane", "tab-b")
+
+    points =
+      Enum.map(0..23, fn index ->
+        cond do
+          index == 17 -> %{white: 1, black: 0}
+          index == 16 -> %{white: 3, black: 0}
+          index == 15 -> %{white: 2, black: 0}
+          index == 14 -> %{white: 2, black: 0}
+          index == 13 -> %{white: 3, black: 0}
+          index == 12 -> %{white: 3, black: 0}
+          index == 11 -> %{white: 0, black: 7}
+          index == 10 -> %{white: 0, black: 5}
+          index == 8 -> %{white: 0, black: 1}
+          index == 0 -> %{white: 0, black: 2}
+          true -> %{white: 0, black: 0}
+        end
+      end)
+
+    board = %{engine.board | points: points}
+    runtime = %{engine.runtime | board: board}
+    dice = %{values: [6, 1], moves: [6, 1], moves_left: [6, 1], moves_played: []}
+
+    legal =
+      HermesTrictrac.Rules.RaceCore.legal_moves(
+        Map.put(runtime, :dice, dice),
+        engine.variant,
+        :white
+      )
+
+    # Visible board points 15, 17, and 18 map to internal points 9, 7, and 6.
+    assert Enum.any?(legal, &(&1.to == 9 and &1.die == 6))
+    assert Enum.any?(legal, &(&1.to == 7 and &1.die == 6))
+    assert Enum.any?(legal, &(&1.to == 6 and &1.die == 6))
+  end
+
   test "trictrac can move by the sum through an empty coin de repos" do
     engine = Engine.new("tt-empty-coin-rest", "trictrac_classique")
     assert {:ok, engine, _} = Engine.join(engine, "nick", "tab-a")
