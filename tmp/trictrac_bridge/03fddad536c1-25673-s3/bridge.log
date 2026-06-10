@@ -1,0 +1,8 @@
+[0mWaiting for lock on the build directory (held by process 25937)
+
+BREAK: (a)bort (A)bort with dump (c)ontinue (p)roc info (i)nfo
+       (l)oaded (v)ersion (k)ill (D)b-tables (d)istribution
+[0mWaiting for lock on the build directory (held by process 70226)
+
+17:01:08.982 [notice] SIGTERM received - shutting down
+

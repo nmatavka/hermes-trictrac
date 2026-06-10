@@ -200,8 +200,19 @@ function run_simulation!(env::Env, game; η, root=true)
   if GI.game_terminated(game)
     return 0.
   else
-    state = GI.current_state(game)
     actions = GI.available_actions(game)
+    if length(actions) == 1
+      action = only(actions)
+      wp = GI.white_playing(game)
+      GI.play!(game, action)
+      wr = GI.white_reward(game)
+      r = wp ? wr : -wr
+      pswitch = wp != GI.white_playing(game)
+      qnext = run_simulation!(env, game, η=η, root=false)
+      qnext = pswitch ? -qnext : qnext
+      return r + env.gamma * qnext
+    end
+    state = GI.current_state(game)
     info, new_node = state_info(env, state)
     if new_node || isempty(actions) || isempty(info.stats)
       return info.Vest

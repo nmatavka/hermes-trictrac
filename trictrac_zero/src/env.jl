@@ -10,6 +10,10 @@ const TEMP_MAX_GAME_LENGTH_ENV = "TRICTRAC_ZERO_TEMP_MAX_GAME_LENGTH"
 const SCORE_MARGIN_DENOMINATOR_ENV = "TRICTRAC_ZERO_SCORE_MARGIN_DENOMINATOR"
 const VALUE_TARGET_MODE_ENV = "TRICTRAC_ZERO_VALUE_TARGET_MODE"
 const VALUE_TARGET_GAIN_ENV = "TRICTRAC_ZERO_VALUE_TARGET_GAIN"
+const TACTICAL_SHAPING_ENV = "TRICTRAC_ZERO_TACTICAL_SHAPING"
+const TACTICAL_HORIZON_OWN_TURNS_ENV = "TRICTRAC_ZERO_TACTICAL_HORIZON_OWN_TURNS"
+const TACTICAL_REWARD_WEIGHT_ENV = "TRICTRAC_ZERO_TACTICAL_REWARD_WEIGHT"
+const TACTICAL_HEURISTIC_WEIGHT_ENV = "TRICTRAC_ZERO_TACTICAL_HEURISTIC_WEIGHT"
 const AECRIRE_SHAPING_WEIGHT_ENV = "TRICTRAC_ZERO_AECRIRE_SHAPING_WEIGHT"
 const COMBINE_HONNEUR_WEIGHT_ENV = "TRICTRAC_ZERO_COMBINE_HONNEUR_WEIGHT"
 const COMBINE_PARTIE_WEIGHT_ENV = "TRICTRAC_ZERO_COMBINE_PARTIE_WEIGHT"
@@ -37,6 +41,13 @@ function parse_nonnegative_float_env(name::String, default::Float64)
   end
 end
 
+function parse_bool_env(name::String, default::Bool)
+  raw = lowercase(strip(get(ENV, name, default ? "on" : "off")))
+  raw in ("1", "true", "yes", "on") && return true
+  raw in ("0", "false", "no", "off") && return false
+  error("$name must be one of on/off/true/false/1/0; got $(repr(raw)).")
+end
+
 function parse_target_mode_env(name::String, default::String)
   raw = lowercase(strip(get(ENV, name, default)))
   raw in ("linear", "tanh") && return raw
@@ -47,10 +58,12 @@ const DEFAULT_STRAGGLER_TIMEOUT_SECONDS = 45.0
 const DEFAULT_STRAGGLER_REMAINING_GAMES = 1
 const DEFAULT_CHECKPOINT_STRAGGLER_TIMEOUT_SECONDS = 120.0
 const DEFAULT_CHECKPOINT_STRAGGLER_REMAINING_GAMES = 1
-const DEFAULT_TEMP_MAX_GAME_LENGTH = 620
 const DEFAULT_SCORE_MARGIN_DENOMINATOR = 144.0
 const DEFAULT_VALUE_TARGET_MODE = "tanh"
 const DEFAULT_VALUE_TARGET_GAIN = 2.0
+const DEFAULT_TACTICAL_HORIZON_OWN_TURNS = 3
+const DEFAULT_TACTICAL_REWARD_WEIGHT = 1.0
+const DEFAULT_TACTICAL_HEURISTIC_WEIGHT = 1.0
 const DEFAULT_AECRIRE_SHAPING_WEIGHT = 0.15
 const DEFAULT_COMBINE_HONNEUR_WEIGHT = 0.10
 const DEFAULT_COMBINE_PARTIE_WEIGHT = 0.05
@@ -76,14 +89,22 @@ configured_checkpoint_straggler_timeout_seconds() =
   parse_nonnegative_float_env(CHECKPOINT_STRAGGLER_TIMEOUT_SECONDS_ENV, DEFAULT_CHECKPOINT_STRAGGLER_TIMEOUT_SECONDS)
 configured_checkpoint_straggler_remaining_games() =
   parse_nonnegative_int_env(CHECKPOINT_STRAGGLER_REMAINING_GAMES_ENV, DEFAULT_CHECKPOINT_STRAGGLER_REMAINING_GAMES)
-configured_temp_max_game_length() =
-  parse_nonnegative_int_env(TEMP_MAX_GAME_LENGTH_ENV, DEFAULT_TEMP_MAX_GAME_LENGTH)
+function configured_temp_max_game_length()
+  haskey(ENV, TEMP_MAX_GAME_LENGTH_ENV) || return nothing
+  return parse_nonnegative_int_env(TEMP_MAX_GAME_LENGTH_ENV, 0)
+end
 configured_score_margin_denominator() =
   parse_nonnegative_float_env(SCORE_MARGIN_DENOMINATOR_ENV, DEFAULT_SCORE_MARGIN_DENOMINATOR)
 configured_value_target_mode() =
   parse_target_mode_env(VALUE_TARGET_MODE_ENV, DEFAULT_VALUE_TARGET_MODE)
 configured_value_target_gain() =
   parse_nonnegative_float_env(VALUE_TARGET_GAIN_ENV, DEFAULT_VALUE_TARGET_GAIN)
+configured_tactical_horizon_own_turns() =
+  clamp(parse_nonnegative_int_env(TACTICAL_HORIZON_OWN_TURNS_ENV, DEFAULT_TACTICAL_HORIZON_OWN_TURNS), 0, 3)
+configured_tactical_reward_weight() =
+  parse_nonnegative_float_env(TACTICAL_REWARD_WEIGHT_ENV, DEFAULT_TACTICAL_REWARD_WEIGHT)
+configured_tactical_heuristic_weight() =
+  parse_nonnegative_float_env(TACTICAL_HEURISTIC_WEIGHT_ENV, DEFAULT_TACTICAL_HEURISTIC_WEIGHT)
 configured_aecrire_shaping_weight() =
   parse_nonnegative_float_env(AECRIRE_SHAPING_WEIGHT_ENV, DEFAULT_AECRIRE_SHAPING_WEIGHT)
 configured_combine_honneur_weight() =
@@ -99,6 +120,90 @@ function normalize_match_options(options)
   return dict
 end
 
+function classique_variant(variant_id::AbstractString)
+  return String(variant_id) == "trictrac_classique"
+end
+
+function default_tactical_shaping_enabled(variant_id::AbstractString, match_options)
+  return classique_variant(variant_id)
+end
+
+function default_tactical_config(variant_id::AbstractString, match_options)
+  enabled_default = default_tactical_shaping_enabled(variant_id, match_options)
+  enabled = parse_bool_env(TACTICAL_SHAPING_ENV, enabled_default)
+  horizon = configured_tactical_horizon_own_turns()
+  reward_weight = configured_tactical_reward_weight()
+  heuristic_weight = configured_tactical_heuristic_weight()
+  if !classique_variant(variant_id)
+    enabled = false
+    horizon = 0
+  end
+  return Dict{String, Any}(
+    "enabled" => enabled,
+    "horizon_own_turns" => enabled ? horizon : 0,
+    "reward_weight" => reward_weight,
+    "heuristic_weight" => heuristic_weight,
+    "version" => "classique-tactical-v2"
+  )
+end
+
+function normalize_tactical_config(
+  variant_id::AbstractString,
+  match_options,
+  tactical_config = nothing
+)
+  config = default_tactical_config(variant_id, match_options)
+  if !(tactical_config isa AbstractDict)
+    return config
+  end
+
+  enabled = get(tactical_config, "enabled", get(tactical_config, :enabled, config["enabled"]))
+  if !(enabled isa Bool)
+    enabled_text = lowercase(strip(String(enabled)))
+    enabled =
+      enabled_text in ("1", "true", "yes", "on") ? true :
+      enabled_text in ("0", "false", "no", "off") ? false :
+      config["enabled"]
+  end
+  horizon = Int(get(
+    tactical_config,
+    "horizon_own_turns",
+    get(tactical_config, :horizon_own_turns, config["horizon_own_turns"])
+  ))
+  reward_weight = Float64(get(
+    tactical_config,
+    "reward_weight",
+    get(tactical_config, :reward_weight, config["reward_weight"])
+  ))
+  heuristic_weight = Float64(get(
+    tactical_config,
+    "heuristic_weight",
+    get(tactical_config, :heuristic_weight, config["heuristic_weight"])
+  ))
+  version = String(get(
+    tactical_config,
+    "version",
+    get(tactical_config, :version, config["version"])
+  ))
+
+  if !classique_variant(variant_id)
+    enabled = false
+    horizon = 0
+  end
+
+  horizon = enabled ? clamp(horizon, 0, 3) : 0
+  reward_weight = max(0.0, reward_weight)
+  heuristic_weight = max(0.0, heuristic_weight)
+
+  return Dict{String, Any}(
+    "enabled" => enabled,
+    "horizon_own_turns" => horizon,
+    "reward_weight" => reward_weight,
+    "heuristic_weight" => heuristic_weight,
+    "version" => version
+  )
+end
+
 struct TricTracGameSpec <: GI.AbstractGameSpec
   storage::String
 end
@@ -107,13 +212,15 @@ function encode_gspec_storage(;
   repo_root::String,
   bridge_script::String,
   variant_id::AbstractString,
-  match_options
+  match_options,
+  tactical_config
 )
   payload = Dict{String, Any}(
     "repo_root" => repo_root,
     "bridge_script" => bridge_script,
     "variant_id" => String(variant_id),
-    "match_options" => normalize_match_options(match_options)
+    "match_options" => normalize_match_options(match_options),
+    "tactical_config" => normalize_tactical_config(variant_id, match_options, tactical_config)
   )
   return GSPEC_STORAGE_PREFIX * JSON3.write(payload)
 end
@@ -125,7 +232,12 @@ function decode_gspec_storage(storage::String)
       repo_root = String(get(payload, "repo_root", REPO_ROOT)),
       bridge_script = String(get(payload, "bridge_script", BRIDGE_SCRIPT)),
       variant_id = String(get(payload, "variant_id", "trictrac_classique")),
-      match_options = normalize_match_options(get(payload, "match_options", Dict{String, Any}()))
+      match_options = normalize_match_options(get(payload, "match_options", Dict{String, Any}())),
+      tactical_config = normalize_tactical_config(
+        String(get(payload, "variant_id", "trictrac_classique")),
+        normalize_match_options(get(payload, "match_options", Dict{String, Any}())),
+        get(payload, "tactical_config", nothing)
+      )
     )
   end
 
@@ -134,14 +246,19 @@ function decode_gspec_storage(storage::String)
     repo_root = storage,
     bridge_script = joinpath(storage, "priv", "training", "trictrac_bridge_stdio.exs"),
     variant_id = "trictrac_classique",
-    match_options = Dict{String, Any}("margotEnabled" => false)
+    match_options = Dict{String, Any}("margotEnabled" => false),
+    tactical_config = default_tactical_config(
+      "trictrac_classique",
+      Dict{String, Any}("margotEnabled" => false)
+    )
   )
 end
 
 function Base.getproperty(gspec::TricTracGameSpec, name::Symbol)
   if name === :storage
     return getfield(gspec, :storage)
-  elseif name === :repo_root || name === :bridge_script || name === :variant_id || name === :match_options
+  elseif name === :repo_root || name === :bridge_script || name === :variant_id ||
+         name === :match_options || name === :tactical_config
     return getproperty(decode_gspec_storage(getfield(gspec, :storage)), name)
   end
 
@@ -149,7 +266,7 @@ function Base.getproperty(gspec::TricTracGameSpec, name::Symbol)
 end
 
 function Base.propertynames(::TricTracGameSpec, private::Bool = false)
-  names = (:repo_root, :bridge_script, :variant_id, :match_options)
+  names = (:repo_root, :bridge_script, :variant_id, :match_options, :tactical_config)
   return private ? (:storage, names...) : names
 end
 
@@ -157,13 +274,15 @@ function TricTracGameSpec(;
   repo_root::String = REPO_ROOT,
   bridge_script::String = BRIDGE_SCRIPT,
   variant_id::AbstractString = "trictrac_classique",
-  match_options = Dict{String, Any}("margotEnabled" => false)
+  match_options = Dict{String, Any}("margotEnabled" => false),
+  tactical_config = default_tactical_config(variant_id, match_options)
 )
   return TricTracGameSpec(encode_gspec_storage(
     repo_root = repo_root,
     bridge_script = bridge_script,
     variant_id = variant_id,
-    match_options = match_options
+    match_options = match_options,
+    tactical_config = tactical_config
   ))
 end
 
@@ -271,7 +390,7 @@ function GI.init(gspec::TricTracGameSpec, state::TricTracState)
 end
 
 function GI.clone(game::TricTracGameEnv)
-  return TricTracGameEnv(game.spec, game.bridge, game.state, 0.0)
+  return TricTracGameEnv(game.spec, bridge_client(game.spec), game.state, 0.0)
 end
 
 function GI.set_state!(game::TricTracGameEnv, state::TricTracState)
@@ -299,17 +418,83 @@ function GI.actions_mask(game::TricTracGameEnv)
   return mask
 end
 
-function GI.play!(game::TricTracGameEnv, action::TricTracAction)
+function apply_bridge_step!(
+  game::TricTracGameEnv,
+  action::TricTracAction;
+  include_tactical_summary::Bool = true
+)
   previous_state = game.state
-  raw_action = catalog_action_to_bridge_action(action, state_white_to_play(game.state))
-  response = step!(game.bridge, game.spec, game.state, raw_action)
+  raw_action = catalog_action_to_bridge_action(action, state_white_to_play(previous_state))
+  bridge = bridge_client(game.spec)
+  game.bridge = bridge
+  response = step!(bridge, game.spec, previous_state, raw_action; include_tactical_summary)
   game.state = TricTracState(response["state"])
-  game.last_reward = transition_white_reward(
+  return transition_white_reward(
     game.spec,
     previous_state,
     game.state;
     fallback = Float64(response["reward"])
   )
+end
+
+function hydrate_bridge_state!(game::TricTracGameEnv)
+  state_terminal(game.state) && return nothing
+  bridge = bridge_client(game.spec)
+  game.bridge = bridge
+  response = state!(bridge, game.spec, game.state)
+  game.state = TricTracState(response["state"])
+  return nothing
+end
+
+function collapse_forced_tactical_chain!(game::TricTracGameEnv)
+  total_reward = 0.0
+
+  while !GI.game_terminated(game)
+    actions = GI.available_actions(game)
+    length(actions) == 1 || break
+
+    chain_start_state = game.state
+
+    while !GI.game_terminated(game)
+      actions = GI.available_actions(game)
+      length(actions) == 1 || break
+      apply_bridge_step!(game, only(actions); include_tactical_summary = false)
+    end
+
+    hydrate_bridge_state!(game)
+    total_reward += transition_white_reward(game.spec, chain_start_state, game.state; fallback = 0.0)
+  end
+
+  return total_reward
+end
+
+function auto_advance_single_action_chain!(game::TricTracGameEnv)
+  if tactical_shaping_enabled(game.spec)
+    return collapse_forced_tactical_chain!(game)
+  end
+
+  total_reward = 0.0
+
+  while !GI.game_terminated(game)
+    actions = GI.available_actions(game)
+    length(actions) == 1 || break
+    total_reward += apply_bridge_step!(game, only(actions))
+  end
+
+  return total_reward
+end
+
+function GI.play!(game::TricTracGameEnv, action::TricTracAction)
+  total_reward =
+    if tactical_shaping_enabled(game.spec)
+      reward = apply_bridge_step!(game, action)
+      reward + auto_advance_single_action_chain!(game)
+    else
+      reward = apply_bridge_step!(game, action)
+      reward + auto_advance_single_action_chain!(game)
+    end
+
+  game.last_reward = total_reward
   return nothing
 end
 
@@ -327,7 +512,11 @@ function GI.heuristic_value(game::TricTracGameEnv)
     return aecrire_like_value_target(raw, runtime)
   end
 
-  return shape_margin_value(score_margin_unit(score_total(runtime, myself) - score_total(runtime, opponent)))
+  value = shape_margin_value(score_margin_unit(score_total(runtime, myself) - score_total(runtime, opponent)))
+  if tactical_shaping_enabled(game.spec)
+    value += tactical_heuristic_weight(game.spec) * side_to_move_tactical_equity(game.spec, game.state)
+  end
+  return clamp(value, -1.0, 1.0)
 end
 
 function AlphaZero.self_play_straggler_policy(gspec::TricTracGameSpec)
@@ -363,12 +552,82 @@ function AlphaZero.checkpoint_straggler_policy(gspec::TricTracGameSpec)
 end
 
 function AlphaZero.max_game_length(gspec::TricTracGameSpec)
-  if aecrire_like_variant(gspec) && !haskey(ENV, TEMP_MAX_GAME_LENGTH_ENV)
-    return nothing
-  end
   cap = configured_temp_max_game_length()
+  isnothing(cap) && return nothing
   cap > 0 || return nothing
   return cap
+end
+
+function self_play_prewarm_plies(
+  gspec::TricTracGameSpec,
+  sim::AlphaZero.SimParams
+)
+  if sim.use_gpu &&
+     tactical_shaping_enabled(gspec) &&
+     sim.num_workers > 1 &&
+     sim.num_games > 1
+    return 4
+  end
+  return 0
+end
+
+function prewarm_self_play!(
+  gspec::TricTracGameSpec,
+  make_oracle::Function,
+  handler;
+  max_plies::Int = 0
+)
+  max_plies > 0 || return 0
+
+  oracle = make_oracle()
+  game = GI.init(gspec)
+  plies = 0
+
+  while plies < max_plies
+    GI.game_terminated(game) && break
+    state = GI.current_state(game)
+    oracle(state)
+    actions = GI.available_actions(game)
+    isempty(actions) && break
+    action = first(actions)
+    for candidate in actions
+      if action_label(candidate) != "CONFIRM"
+        action = candidate
+        break
+      end
+    end
+    GI.play!(game, action)
+    plies += 1
+    AlphaZero.Handlers.self_play_stepped(handler)
+  end
+
+  return plies
+end
+
+function run_self_play_chunk(
+  simulator,
+  gspec::TricTracGameSpec,
+  sim::AlphaZero.SimParams,
+  handler
+)
+  simulate_fn =
+    local_only_distributed_runtime() ?
+      AlphaZero.simulate :
+      AlphaZero.simulate_distributed
+
+  return @timed simulate_fn(
+    simulator,
+    gspec,
+    sim,
+    game_simulated = () -> AlphaZero.Handlers.game_played(handler),
+    step_played = () -> AlphaZero.Handlers.self_play_stepped(handler),
+    straggler_policy = AlphaZero.self_play_straggler_policy(gspec)
+  )
+end
+
+function local_only_distributed_runtime()
+  workers = AlphaZero.Distributed.workers()
+  return length(workers) == 1 && only(workers) == AlphaZero.Distributed.myid()
 end
 
 function AlphaZero.self_play_step!(
@@ -390,12 +649,18 @@ function AlphaZero.self_play_step!(
   end
 
   try
-    results, elapsed = @timed AlphaZero.simulate_distributed(
+    prewarm_self_play!(
+      env.gspec,
+      make_oracle,
+      handler;
+      max_plies = self_play_prewarm_plies(env.gspec, params.sim)
+    )
+
+    results, elapsed = run_self_play_chunk(
       simulator,
       env.gspec,
       params.sim,
-      game_simulated = () -> AlphaZero.Handlers.game_played(handler),
-      straggler_policy = AlphaZero.self_play_straggler_policy(env.gspec)
+      handler
     )
 
     AlphaZero.new_batch!(env.memory)
@@ -574,7 +839,13 @@ function transition_white_reward(
   elseif family == :combine
     return combine_step_reward(state_runtime(previous_state), state_runtime(next_state))
   else
-    return terminal_white_reward(gspec, next_state; fallback)
+    reward = terminal_white_reward(gspec, next_state; fallback)
+    if tactical_shaping_enabled(gspec)
+      reward += tactical_reward_weight(gspec) * (
+        white_tactical_equity(gspec, next_state) - white_tactical_equity(gspec, previous_state)
+      )
+    end
+    return reward
   end
 end
 
@@ -739,6 +1010,72 @@ function terminal_white_reward(
   return shape_margin_value(score_margin_unit(white_score_margin(runtime)))
 end
 
+tactical_config(gspec::TricTracGameSpec) = gspec.tactical_config
+
+function tactical_shaping_enabled(gspec::TricTracGameSpec)
+  config = tactical_config(gspec)
+  return classique_variant(gspec.variant_id) && Bool(get(config, "enabled", false))
+end
+
+function tactical_horizon_own_turns(gspec::TricTracGameSpec)
+  config = tactical_config(gspec)
+  if !tactical_shaping_enabled(gspec)
+    return 0
+  end
+  return clamp(Int(get(config, "horizon_own_turns", 0)), 0, 3)
+end
+
+tactical_reward_weight(gspec::TricTracGameSpec) =
+  Float64(get(tactical_config(gspec), "reward_weight", DEFAULT_TACTICAL_REWARD_WEIGHT))
+tactical_heuristic_weight(gspec::TricTracGameSpec) =
+  Float64(get(tactical_config(gspec), "heuristic_weight", DEFAULT_TACTICAL_HEURISTIC_WEIGHT))
+
+function tactical_tariff_summary(runtime)
+  summary = get(runtime, "tactical_tariffs", nothing)
+  return summary isa AbstractDict ? summary : nothing
+end
+
+function tactical_tariff_component(summary, color::String, field::String)
+  isnothing(summary) && return 0.0
+  entry = get(summary, color, nothing)
+  entry isa AbstractDict || return 0.0
+  value = get(entry, field, 0.0)
+  return Float64(value)
+end
+
+function white_tactical_equity(gspec::TricTracGameSpec, state::TricTracState)
+  tactical_shaping_enabled(gspec) || return 0.0
+  summary = tactical_tariff_summary(state_runtime(state))
+  isnothing(summary) && return 0.0
+
+  horizon = tactical_horizon_own_turns(gspec)
+  horizon > 0 || return 0.0
+
+  h1_margin =
+    tactical_tariff_component(summary, "white", "h1") -
+    tactical_tariff_component(summary, "black", "h1")
+  h2_margin =
+    tactical_tariff_component(summary, "white", "h2") -
+    tactical_tariff_component(summary, "black", "h2")
+  h3_margin =
+    tactical_tariff_component(summary, "white", "h3") -
+    tactical_tariff_component(summary, "black", "h3")
+
+  value = h1_margin
+  if horizon >= 2
+    value += 0.5 * h2_margin
+  end
+  if horizon >= 3
+    value += 0.25 * h3_margin
+  end
+  return value
+end
+
+function side_to_move_tactical_equity(gspec::TricTracGameSpec, state::TricTracState)
+  margin = white_tactical_equity(gspec, state)
+  return state_white_to_play(state) ? margin : -margin
+end
+
 points_for(runtime, color::String) = get(score_entry(runtime, color), "points", 0)
 trous_for(runtime, color::String) = get(score_entry(runtime, color), "trous", 0)
 score_flag(runtime, color::String, key::String) = get(score_entry(runtime, color), key, false)
@@ -885,13 +1222,13 @@ function AlphaZero.push_trace!(
   mem.cur_batch_size += n
 end
 
-const MCTS_FOOTPRINT_CACHE = Dict{Tuple{String, String}, Int}()
+const MCTS_FOOTPRINT_CACHE = Dict{NTuple{4, Any}, Int}()
 
 function AlphaZero.MCTS.memory_footprint_per_node(gspec::TricTracGameSpec)
-  key = (gspec.repo_root, gspec.bridge_script)
+  key = bridge_service_key(gspec)
   return get!(MCTS_FOOTPRINT_CACHE, key) do
     state_size = Base.summarysize(GI.current_state(GI.init(gspec)))
-    stats_arity = estimated_sparse_stats_arity(gspec)
+    stats_arity = estimated_sparse_stats_arity(gspec; disable_tactical = true)
     size_key = 2 * (state_size + sizeof(Int))
     dummy_stats = AlphaZero.MCTS.StateInfo([
       AlphaZero.MCTS.ActionStats(0, 0, 0) for _ in 1:stats_arity
@@ -900,12 +1237,33 @@ function AlphaZero.MCTS.memory_footprint_per_node(gspec::TricTracGameSpec)
   end
 end
 
-function estimated_sparse_stats_arity(gspec::TricTracGameSpec; max_states::Int = 64)
+function tactical_disabled_probe_gspec(gspec::TricTracGameSpec)
+  return TricTracGameSpec(
+    repo_root = gspec.repo_root,
+    bridge_script = gspec.bridge_script,
+    variant_id = gspec.variant_id,
+    match_options = gspec.match_options,
+    tactical_config = Dict{String, Any}(
+      "enabled" => false,
+      "horizon_own_turns" => 0,
+      "reward_weight" => 0.0,
+      "heuristic_weight" => 0.0,
+      "version" => get(tactical_config(gspec), "version", "classique-tactical-v2")
+    )
+  )
+end
+
+function estimated_sparse_stats_arity(
+  gspec::TricTracGameSpec;
+  max_states::Int = 64,
+  disable_tactical::Bool = false
+)
   counts = Int[]
-  game = GI.init(gspec)
+  probe_gspec = disable_tactical ? tactical_disabled_probe_gspec(gspec) : gspec
+  game = GI.init(probe_gspec)
   while length(counts) < max_states
     if GI.game_terminated(game)
-      game = GI.init(gspec)
+      game = GI.init(probe_gspec)
       continue
     end
     actions = GI.available_actions(game)

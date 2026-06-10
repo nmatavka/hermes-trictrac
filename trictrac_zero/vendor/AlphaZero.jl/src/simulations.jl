@@ -190,7 +190,7 @@ function make_self_play_straggler_control(total_games::Int, policy)
   isnothing(policy) && return nothing
   policy.timeout_seconds > 0 || return nothing
   policy.remaining_games > 0 || return nothing
-  total_games > policy.remaining_games || return nothing
+  total_games >= policy.remaining_games || return nothing
   return SelfPlayStragglerControl(total_games, policy)
 end
 
@@ -280,6 +280,7 @@ function simulate(
     gspec::AbstractGameSpec,
     p::SimParams;
     game_simulated,
+    step_played=nothing,
     straggler_policy=nothing)
 
   oracles = simulator.make_oracles()
@@ -306,7 +307,8 @@ function simulate(
         gspec,
         player_pf,
         flip_probability = p.flip_probability,
-        tail_watcher = straggler_control
+        tail_watcher = straggler_control,
+        step_played = step_played
       )
       report = isnothing(trace) ? nothing : simulator.measure(trace, colors_flipped, player)
       # Reset the player periodically
@@ -333,6 +335,7 @@ function simulate_distributed(
     gspec::AbstractGameSpec,
     p::SimParams;
     game_simulated,
+    step_played=nothing,
     straggler_policy=nothing)
 
   # Spawning a task to keep count of completed simulations
@@ -344,20 +347,50 @@ function simulate_distributed(
     end
   end
   remote_game_simulated() = put!(chan, nothing)
+
+  step_chan =
+    if isnothing(step_played)
+      nothing
+    else
+      Distributed.RemoteChannel(()->Channel{Any}(1024))
+    end
+
+  if !isnothing(step_chan)
+    Util.@tspawn_main begin
+      finished_workers = 0
+      total_workers = Distributed.nworkers()
+      while finished_workers < total_workers
+        msg = take!(step_chan)
+        if msg === :done
+          finished_workers += 1
+        else
+          step_played()
+        end
+      end
+    end
+  end
+
+  remote_step_played() =
+    isnothing(step_chan) ? nothing : put!(step_chan, nothing)
   # Distributing the simulations across workers
   num_each, rem = divrem(p.num_games, Distributed.nworkers())
   @assert num_each >= 1
   workers = Distributed.workers()
   tasks = map(workers) do w
     Distributed.@spawnat w begin
-      Util.@printing_errors begin
-        simulate(
-          simulator,
-          gspec,
-          SimParams(p; num_games=(w == workers[1] ? num_each + rem : num_each)),
-          game_simulated=remote_game_simulated,
-          straggler_policy=straggler_policy)
+      try
+        Util.@printing_errors begin
+          simulate(
+            simulator,
+            gspec,
+            SimParams(p; num_games=(w == workers[1] ? num_each + rem : num_each)),
+            game_simulated=remote_game_simulated,
+            step_played=remote_step_played,
+            straggler_policy=straggler_policy)
         end
+      finally
+        isnothing(step_chan) || put!(step_chan, :done)
+      end
     end
   end
   results = fetch.(tasks)

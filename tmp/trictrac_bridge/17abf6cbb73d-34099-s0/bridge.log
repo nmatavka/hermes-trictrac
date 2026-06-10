@@ -1,0 +1,8 @@
+[trictrac-bridge] tactical_horizons color=white phase=roll horizon=2 elapsed_ms=83
+[trictrac-bridge] tactical_horizons color=black phase=roll horizon=2 elapsed_ms=15
+[trictrac-bridge] tactical_horizons color=white phase=move horizon=2 elapsed_ms=2
+[trictrac-bridge] tactical_horizons color=black phase=move horizon=2 elapsed_ms=15
+[trictrac-bridge] step_response phase=move action=ROLL elapsed_ms=17
+
+03:23:51.443 [notice] SIGTERM received - shutting down
+

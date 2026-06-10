@@ -5,6 +5,11 @@ import Base.Threads
 const AUTO = :auto
 const DEFAULT_CPU_POLICY = :headroom
 const INTERNAL_REEXEC_ENV = "TRICTRAC_ZERO_INTERNAL_REEXEC"
+const REEXEC_PASSTHROUGH_ENVS = [
+  "TRICTRAC_ZERO_BRIDGE_EXECUTABLE",
+  "TRICTRAC_ZERO_BRIDGE_EBIN_ROOT",
+  "TRICTRAC_ZERO_BRIDGE_MODE",
+]
 const ENV_CPU_POLICY = "TRICTRAC_ZERO_CPU_POLICY"
 const ENV_CPU_THREADS = "TRICTRAC_ZERO_CPU_THREADS"
 const ENV_SELF_PLAY_WORKERS = "TRICTRAC_ZERO_SELF_PLAY_WORKERS"
@@ -12,6 +17,10 @@ const ENV_ARENA_WORKERS = "TRICTRAC_ZERO_ARENA_WORKERS"
 const ENV_NUM_ITERS = "TRICTRAC_ZERO_NUM_ITERS"
 const ENV_MOVE_CAP = "TRICTRAC_ZERO_TEMP_MAX_GAME_LENGTH"
 const ENV_VALUE_TARGET_GAIN = "TRICTRAC_ZERO_VALUE_TARGET_GAIN"
+const ENV_TACTICAL_SHAPING = "TRICTRAC_ZERO_TACTICAL_SHAPING"
+const ENV_TACTICAL_HORIZON_OWN_TURNS = "TRICTRAC_ZERO_TACTICAL_HORIZON_OWN_TURNS"
+const ENV_TACTICAL_REWARD_WEIGHT = "TRICTRAC_ZERO_TACTICAL_REWARD_WEIGHT"
+const ENV_TACTICAL_HEURISTIC_WEIGHT = "TRICTRAC_ZERO_TACTICAL_HEURISTIC_WEIGHT"
 const ENV_PARTIE_LENGTH_REPEATS = "TRICTRAC_ZERO_PARTIE_LENGTH_REPEATS"
 const ENV_GAME = "TRICTRAC_ZERO_GAME"
 const VALID_DEVICE_BACKENDS = (:cpu, :cuda, :metal, :auto)
@@ -46,6 +55,10 @@ Base.@kwdef struct StartupConfig
   num_iters::Setting
   move_cap::Setting
   value_target_gain::Setting
+  tactical_shaping::Setting
+  tactical_horizon_own_turns::Setting
+  tactical_reward_weight::Setting
+  tactical_heuristic_weight::Setting
   partie_length_repeats::Setting
   game::Setting{String}
   target_threads::Int
@@ -88,6 +101,20 @@ function parse_nonnegative_float(raw::AbstractString, source_name::AbstractStrin
   isnothing(parsed) && throw(ArgumentError("Invalid value for $source_name: $(repr(raw)). Expected a number >= 0."))
   parsed >= 0 && return parsed
   throw(ArgumentError("Invalid value for $source_name: $(repr(raw)). Expected a number >= 0."))
+end
+
+function parse_on_off(raw::AbstractString, source_name::AbstractString)
+  value = lowercase(strip(raw))
+  value in ("on", "true", "1", "yes") && return true
+  value in ("off", "false", "0", "no") && return false
+  throw(ArgumentError("Invalid value for $source_name: $(repr(raw)). Expected one of: on, off, true, false, 1, 0."))
+end
+
+function parse_tactical_horizon(raw::AbstractString, source_name::AbstractString)
+  parsed = tryparse(Int, strip(raw))
+  isnothing(parsed) && throw(ArgumentError("Invalid value for $source_name: $(repr(raw)). Expected an integer in 0..3."))
+  0 <= parsed <= 3 && return parsed
+  throw(ArgumentError("Invalid value for $source_name: $(repr(raw)). Expected an integer in 0..3."))
 end
 
 function parse_game(raw::AbstractString, source_name::AbstractString)
@@ -155,6 +182,10 @@ function parse_startup(command::Symbol, args::Vector{String}; env::AbstractDict 
   cli_num_iters = nothing
   cli_move_cap = nothing
   cli_value_target_gain = nothing
+  cli_tactical_shaping = nothing
+  cli_tactical_horizon_own_turns = nothing
+  cli_tactical_reward_weight = nothing
+  cli_tactical_heuristic_weight = nothing
   cli_partie_length_repeats = nothing
   cli_game = nothing
 
@@ -194,6 +225,18 @@ function parse_startup(command::Symbol, args::Vector{String}; env::AbstractDict 
     elseif startswith(arg, "--value-target-gain")
       value, index = take_flag_value(args, index, "--value-target-gain")
       cli_value_target_gain = parse_nonnegative_float(value, "--value-target-gain")
+    elseif startswith(arg, "--tactical-shaping")
+      value, index = take_flag_value(args, index, "--tactical-shaping")
+      cli_tactical_shaping = parse_on_off(value, "--tactical-shaping")
+    elseif startswith(arg, "--tactical-horizon-own-turns")
+      value, index = take_flag_value(args, index, "--tactical-horizon-own-turns")
+      cli_tactical_horizon_own_turns = parse_tactical_horizon(value, "--tactical-horizon-own-turns")
+    elseif startswith(arg, "--tactical-reward-weight")
+      value, index = take_flag_value(args, index, "--tactical-reward-weight")
+      cli_tactical_reward_weight = parse_nonnegative_float(value, "--tactical-reward-weight")
+    elseif startswith(arg, "--tactical-heuristic-weight")
+      value, index = take_flag_value(args, index, "--tactical-heuristic-weight")
+      cli_tactical_heuristic_weight = parse_nonnegative_float(value, "--tactical-heuristic-weight")
     elseif startswith(arg, "--partie-length-repeats")
       value, index = take_flag_value(args, index, "--partie-length-repeats")
       cli_partie_length_repeats = parse_auto_or_int(value, "--partie-length-repeats")
@@ -223,6 +266,10 @@ function parse_startup(command::Symbol, args::Vector{String}; env::AbstractDict 
     num_iters = resolve_setting(cli_num_iters, env, ENV_NUM_ITERS, nothing, parse_positive_int),
     move_cap = resolve_setting(cli_move_cap, env, ENV_MOVE_CAP, nothing, parse_nonnegative_int),
     value_target_gain = resolve_setting(cli_value_target_gain, env, ENV_VALUE_TARGET_GAIN, nothing, parse_nonnegative_float),
+    tactical_shaping = resolve_setting(cli_tactical_shaping, env, ENV_TACTICAL_SHAPING, nothing, parse_on_off),
+    tactical_horizon_own_turns = resolve_setting(cli_tactical_horizon_own_turns, env, ENV_TACTICAL_HORIZON_OWN_TURNS, nothing, parse_tactical_horizon),
+    tactical_reward_weight = resolve_setting(cli_tactical_reward_weight, env, ENV_TACTICAL_REWARD_WEIGHT, nothing, parse_nonnegative_float),
+    tactical_heuristic_weight = resolve_setting(cli_tactical_heuristic_weight, env, ENV_TACTICAL_HEURISTIC_WEIGHT, nothing, parse_nonnegative_float),
     partie_length_repeats = resolve_setting(cli_partie_length_repeats, env, ENV_PARTIE_LENGTH_REPEATS, AUTO, parse_auto_or_int),
     game = resolve_setting(cli_game, env, ENV_GAME, "classique", parse_game),
     target_threads = Threads.nthreads(),
@@ -297,7 +344,15 @@ function maybe_relaunch!(config::StartupConfig, script_path::AbstractString, arg
   status = relaunch_status(config)
   status == :would_relaunch || return status
 
-  cmd = addenv(build_relaunch_cmd(script_path, args, config.target_threads), INTERNAL_REEXEC_ENV => "1")
+  passthrough =
+    Pair{String, String}[INTERNAL_REEXEC_ENV => "1"]
+
+  for name in REEXEC_PASSTHROUGH_ENVS
+    value = get(ENV, name, "")
+    isempty(value) || push!(passthrough, name => value)
+  end
+
+  cmd = addenv(build_relaunch_cmd(script_path, args, config.target_threads), passthrough...)
   process = run(ignorestatus(cmd))
   exit(process.exitcode)
 end
@@ -316,6 +371,9 @@ end
 worker_override(setting::Setting) = setting.value === AUTO ? nothing : setting.value
 iterations_override(setting::Setting) = isnothing(setting.value) ? nothing : setting.value
 move_cap_override(setting::Setting) = isnothing(setting.value) ? nothing : setting.value
+tactical_shaping_override(setting::Setting) = isnothing(setting.value) ? nothing : setting.value
+tactical_horizon_override(setting::Setting) = isnothing(setting.value) ? nothing : setting.value
+tactical_weight_override(setting::Setting) = isnothing(setting.value) ? nothing : Float64(setting.value)
 partie_length_repeats_override(setting::Setting) = setting.value === AUTO ? nothing : setting.value
 device_override(setting::Setting{Symbol}) = setting.value
 
@@ -354,6 +412,14 @@ Options:
       Set the temporary hard cap on game length. Use 0 to disable.
   --target-gain <N>
       Set the tanh gain used for value-target shaping. Lower is less slope-y.
+  --tactical-shaping <on|off>
+      Toggle tactical tariff shaping for Trictrac classique.
+  --tactical-horizon-own-turns <0|1|2|3>
+      Set the tactical shaping horizon in own turns.
+  --tactical-reward-weight <N>
+      Set the delta-reward tactical shaping weight.
+  --tactical-heuristic-weight <N>
+      Set the heuristic tactical shaping weight.
   --partie-length-repeats <auto|N>
       For a ecrire/combine training, use N self-play games at each marque target.
   --game <$(join(VALID_GAMES, "|"))>
@@ -369,6 +435,10 @@ Environment:
   $ENV_NUM_ITERS
   $ENV_MOVE_CAP
   $ENV_VALUE_TARGET_GAIN
+  $ENV_TACTICAL_SHAPING
+  $ENV_TACTICAL_HORIZON_OWN_TURNS
+  $ENV_TACTICAL_REWARD_WEIGHT
+  $ENV_TACTICAL_HEURISTIC_WEIGHT
   $ENV_PARTIE_LENGTH_REPEATS
   $ENV_GAME
 
@@ -398,6 +468,10 @@ function prepare_startup(
     num_iters = parsed.num_iters,
     move_cap = parsed.move_cap,
     value_target_gain = parsed.value_target_gain,
+    tactical_shaping = parsed.tactical_shaping,
+    tactical_horizon_own_turns = parsed.tactical_horizon_own_turns,
+    tactical_reward_weight = parsed.tactical_reward_weight,
+    tactical_heuristic_weight = parsed.tactical_heuristic_weight,
     partie_length_repeats = parsed.partie_length_repeats,
     game = parsed.game,
     target_threads = resolve_target_threads(parsed),
@@ -415,6 +489,18 @@ function prepare_startup(
   if config.value_target_gain.source == :cli
     ENV[ENV_VALUE_TARGET_GAIN] = string(config.value_target_gain.value)
   end
+  if config.tactical_shaping.source == :cli
+    ENV[ENV_TACTICAL_SHAPING] = config.tactical_shaping.value ? "on" : "off"
+  end
+  if config.tactical_horizon_own_turns.source == :cli
+    ENV[ENV_TACTICAL_HORIZON_OWN_TURNS] = string(config.tactical_horizon_own_turns.value)
+  end
+  if config.tactical_reward_weight.source == :cli
+    ENV[ENV_TACTICAL_REWARD_WEIGHT] = string(config.tactical_reward_weight.value)
+  end
+  if config.tactical_heuristic_weight.source == :cli
+    ENV[ENV_TACTICAL_HEURISTIC_WEIGHT] = string(config.tactical_heuristic_weight.value)
+  end
   if config.partie_length_repeats.source == :cli && config.partie_length_repeats.value !== AUTO
     ENV[ENV_PARTIE_LENGTH_REPEATS] = string(config.partie_length_repeats.value)
   end
@@ -428,8 +514,15 @@ function print_startup_summary(
   config::StartupConfig;
   self_play_workers::Int,
   arena_workers::Int,
+  self_play_batch_size = nothing,
+  arena_batch_size = nothing,
+  learning_batch_size = nothing,
   move_cap = nothing,
   value_target_gain = nothing,
+  tactical_shaping = nothing,
+  tactical_horizon_own_turns = nothing,
+  tactical_reward_weight = nothing,
+  tactical_heuristic_weight = nothing,
   partie_length_repeats = nothing,
   game::Union{Nothing, String} = nothing,
   self_play_clamped::Bool = false,
@@ -450,6 +543,15 @@ function print_startup_summary(
   println(io, "  Reset memory: ", config.reset_memory ? "yes" : "no")
   println(io, "  Self-play workers: ", self_play_workers, self_play_clamped ? " (clamped)" : "")
   println(io, "  Arena workers: ", arena_workers, arena_clamped ? " (clamped)" : "")
+  if !isnothing(self_play_batch_size)
+    println(io, "  Self-play batch size: ", self_play_batch_size)
+  end
+  if !isnothing(arena_batch_size)
+    println(io, "  Arena batch size: ", arena_batch_size)
+  end
+  if !isnothing(learning_batch_size)
+    println(io, "  Learning batch size: ", learning_batch_size)
+  end
   println(io, "  Iterations: ", isnothing(config.num_iters.value) ? "default" : config.num_iters.value)
   if !isnothing(game)
     println(io, "  Game: ", game)
@@ -459,6 +561,18 @@ function print_startup_summary(
   end
   if !isnothing(value_target_gain)
     println(io, "  Value target gain: ", value_target_gain)
+  end
+  if !isnothing(tactical_shaping)
+    println(io, "  Tactical shaping: ", tactical_shaping ? "on" : "off")
+  end
+  if !isnothing(tactical_horizon_own_turns)
+    println(io, "  Tactical horizon (own turns): ", tactical_horizon_own_turns)
+  end
+  if !isnothing(tactical_reward_weight)
+    println(io, "  Tactical reward weight: ", tactical_reward_weight)
+  end
+  if !isnothing(tactical_heuristic_weight)
+    println(io, "  Tactical heuristic weight: ", tactical_heuristic_weight)
   end
   if !isnothing(partie_length_repeats)
     println(io, "  Partie-length repeats: ", partie_length_repeats)

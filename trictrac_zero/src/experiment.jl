@@ -8,6 +8,7 @@ const DEFAULT_DEVICE = DEVICE_CPU
 const DEFAULT_TRAIN_ITERATIONS = 3
 const DEFAULT_SMOKE_ITERATIONS = 1
 const DEFAULT_PRESET = "classique"
+const SESSION_RUNTIME_METADATA_FILE = "trictraczero_runtime.json"
 const DEFAULT_TOC_OPTIONS = Dict{String, Any}(
   "holeTarget" => "7",
   "doublesMode" => "off"
@@ -317,6 +318,49 @@ end
 
 gpu_batching_backend(backend::Symbol) = backend == DEVICE_CUDA
 
+const CUDA_DEFAULT_SELF_PLAY_WORKERS = 8
+const CUDA_DEFAULT_ARENA_WORKERS = 6
+const CUDA_DEFAULT_SELF_PLAY_BATCH_SIZE = 8
+const CUDA_DEFAULT_ARENA_BATCH_SIZE = 4
+const CUDA_DEFAULT_LEARNING_BATCH_SIZE = 128
+
+function default_cuda_train_workers(worker_settings)
+  return (
+    self_play = min(worker_settings.cap, CUDA_DEFAULT_SELF_PLAY_WORKERS),
+    arena = min(worker_settings.cap, CUDA_DEFAULT_ARENA_WORKERS)
+  )
+end
+
+function resolve_runtime_workers(; smoke::Bool, backend::Symbol, worker_settings)
+  if smoke
+    return (self_play = worker_settings.self_play, arena = worker_settings.arena)
+  elseif backend == DEVICE_CUDA
+    cuda_defaults = default_cuda_train_workers(worker_settings)
+    return (
+      self_play = isnothing(worker_settings.self_play_requested) ? cuda_defaults.self_play : worker_settings.self_play,
+      arena = isnothing(worker_settings.arena_requested) ? cuda_defaults.arena : worker_settings.arena
+    )
+  elseif backend == DEVICE_CPU
+    return (self_play = worker_settings.self_play, arena = worker_settings.arena)
+  else
+    return (self_play = worker_settings.self_play, arena = worker_settings.arena)
+  end
+end
+
+function resolve_batch_sizes(; smoke::Bool, backend::Symbol, self_play_workers::Int, arena_workers::Int)
+  if smoke
+    return (self_play = 1, arena = 1, learning = 8)
+  elseif backend == DEVICE_CUDA
+    return (
+      self_play = min(CUDA_DEFAULT_SELF_PLAY_BATCH_SIZE, self_play_workers),
+      arena = min(CUDA_DEFAULT_ARENA_BATCH_SIZE, arena_workers),
+      learning = CUDA_DEFAULT_LEARNING_BATCH_SIZE
+    )
+  else
+    return (self_play = 1, arena = 1, learning = 64)
+  end
+end
+
 function resolve_worker_settings(;
   smoke::Bool,
   self_play_workers::Union{Nothing, Int} = nothing,
@@ -462,18 +506,26 @@ function build_params(;
   #   * use more than 1 worker
   #   * keep game count low
   #   * keep batch_size = 1 on CPU
-  resolved_self_play_workers =
-    smoke ? worker_settings.self_play : (cpu_mode ? min(worker_settings.cap, 6) : worker_settings.self_play)
-
-  resolved_arena_workers =
-    smoke ? worker_settings.arena : (cpu_mode ? min(worker_settings.cap, 6) : worker_settings.arena)
+  runtime_workers = resolve_runtime_workers(
+    smoke = smoke,
+    backend = resolved_device,
+    worker_settings = worker_settings
+  )
+  resolved_self_play_workers = runtime_workers.self_play
+  resolved_arena_workers = runtime_workers.arena
+  batch_sizes = resolve_batch_sizes(
+    smoke = smoke,
+    backend = resolved_device,
+    self_play_workers = resolved_self_play_workers,
+    arena_workers = resolved_arena_workers
+  )
 
   self_play_sim =
     smoke ?
       SimParams(
         num_games = self_play_games,
         num_workers = resolved_self_play_workers,
-        batch_size = 1,
+        batch_size = batch_sizes.self_play,
         use_gpu = use_gpu,
         fill_batches = batched_gpu_mode,
         reset_every = 1,
@@ -483,7 +535,7 @@ function build_params(;
       SimParams(
         num_games = self_play_games,
         num_workers = resolved_self_play_workers,
-        batch_size = batched_gpu_mode ? 4 : 1,
+        batch_size = batch_sizes.self_play,
         use_gpu = use_gpu,
         fill_batches = batched_gpu_mode,
         reset_every = 1,
@@ -498,7 +550,7 @@ function build_params(;
       SimParams(
         num_games = 2,
         num_workers = resolved_arena_workers,
-        batch_size = 1,
+        batch_size = batch_sizes.arena,
         use_gpu = use_gpu,
         fill_batches = batched_gpu_mode,
         reset_every = 1,
@@ -508,9 +560,9 @@ function build_params(;
       SimParams(
         num_games = cpu_mode ? 8 : 16,
         num_workers = resolved_arena_workers,
-        batch_size = 1,
+        batch_size = batch_sizes.arena,
         use_gpu = use_gpu,
-        fill_batches = false,
+        fill_batches = batched_gpu_mode,
         reset_every = 1,
         flip_probability = 0.0,
         alternate_colors = true
@@ -532,8 +584,8 @@ function build_params(;
         use_gpu = use_gpu,
         use_position_averaging = true,
         samples_weighing_policy = LOG_WEIGHT,
-        batch_size = 8,
-        loss_computation_batch_size = 8,
+        batch_size = batch_sizes.learning,
+        loss_computation_batch_size = batch_sizes.learning,
         optimiser = Adam(lr = 1e-3),
         l2_regularization = 1f-4,
         nonvalidity_penalty = 1f0,
@@ -545,8 +597,8 @@ function build_params(;
         use_gpu = use_gpu,
         use_position_averaging = true,
         samples_weighing_policy = LOG_WEIGHT,
-        batch_size = 64,
-        loss_computation_batch_size = 64,
+        batch_size = batch_sizes.learning,
+        loss_computation_batch_size = batch_sizes.learning,
         optimiser = Adam(lr = 8e-4),
         l2_regularization = 1f-4,
         nonvalidity_penalty = 1f0,
@@ -610,13 +662,24 @@ function default_experiment(;
   num_iters::Union{Nothing, Int} = nothing,
   self_play_workers::Union{Nothing, Int} = nothing,
   arena_workers::Union{Nothing, Int} = nothing,
-  partie_length_repeats::Union{Nothing, Int} = nothing
+  partie_length_repeats::Union{Nothing, Int} = nothing,
+  tactical_shaping::Union{Nothing, Bool} = nothing,
+  tactical_horizon_own_turns::Union{Nothing, Int} = nothing,
+  tactical_reward_weight::Union{Nothing, Float64} = nothing,
+  tactical_heuristic_weight::Union{Nothing, Float64} = nothing
 )
   config = preset_config(preset)
   resolved_device = resolve_device_backend(resolve_requested_device(device = device, use_gpu = use_gpu))
   NetworkType = network_type_for_device(resolved_device)
   hyper = netparams(device = resolved_device, network_type = NetworkType)
-  gspec = game_spec_for_preset(repo_root = repo_root, preset = preset)
+  gspec = game_spec_for_preset(
+    repo_root = repo_root,
+    preset = preset,
+    tactical_shaping = tactical_shaping,
+    tactical_horizon_own_turns = tactical_horizon_own_turns,
+    tactical_reward_weight = tactical_reward_weight,
+    tactical_heuristic_weight = tactical_heuristic_weight
+  )
   return Experiment(
     config.experiment,
     gspec,
@@ -651,13 +714,24 @@ function smoke_experiment(;
   num_iters::Union{Nothing, Int} = nothing,
   self_play_workers::Union{Nothing, Int} = nothing,
   arena_workers::Union{Nothing, Int} = nothing,
-  partie_length_repeats::Union{Nothing, Int} = nothing
+  partie_length_repeats::Union{Nothing, Int} = nothing,
+  tactical_shaping::Union{Nothing, Bool} = nothing,
+  tactical_horizon_own_turns::Union{Nothing, Int} = nothing,
+  tactical_reward_weight::Union{Nothing, Float64} = nothing,
+  tactical_heuristic_weight::Union{Nothing, Float64} = nothing
 )
   config = preset_config(preset)
   resolved_device = resolve_device_backend(resolve_requested_device(device = device, use_gpu = use_gpu))
   NetworkType = network_type_for_device(resolved_device)
   hyper = netparams(device = resolved_device, network_type = NetworkType)
-  gspec = game_spec_for_preset(repo_root = repo_root, preset = preset)
+  gspec = game_spec_for_preset(
+    repo_root = repo_root,
+    preset = preset,
+    tactical_shaping = tactical_shaping,
+    tactical_horizon_own_turns = tactical_horizon_own_turns,
+    tactical_reward_weight = tactical_reward_weight,
+    tactical_heuristic_weight = tactical_heuristic_weight
+  )
   return Experiment(
     string(config.experiment, "-smoke"),
     gspec,
@@ -686,13 +760,29 @@ end
 
 function game_spec_for_preset(;
   repo_root::String = REPO_ROOT,
-  preset::Union{String, Symbol} = DEFAULT_PRESET
+  preset::Union{String, Symbol} = DEFAULT_PRESET,
+  tactical_shaping::Union{Nothing, Bool} = nothing,
+  tactical_horizon_own_turns::Union{Nothing, Int} = nothing,
+  tactical_reward_weight::Union{Nothing, Float64} = nothing,
+  tactical_heuristic_weight::Union{Nothing, Float64} = nothing
 )
   config = preset_config(preset)
+  tactical = normalize_tactical_config(
+    config.variant_id,
+    config.match_options,
+    Dict{String, Any}(
+      "enabled" => isnothing(tactical_shaping) ? default_tactical_config(config.variant_id, config.match_options)["enabled"] : tactical_shaping,
+      "horizon_own_turns" => something(tactical_horizon_own_turns, default_tactical_config(config.variant_id, config.match_options)["horizon_own_turns"]),
+      "reward_weight" => something(tactical_reward_weight, default_tactical_config(config.variant_id, config.match_options)["reward_weight"]),
+      "heuristic_weight" => something(tactical_heuristic_weight, default_tactical_config(config.variant_id, config.match_options)["heuristic_weight"]),
+      "version" => default_tactical_config(config.variant_id, config.match_options)["version"]
+    )
+  )
   return TricTracGameSpec(
     repo_root = repo_root,
     variant_id = config.variant_id,
-    match_options = config.match_options
+    match_options = config.match_options,
+    tactical_config = tactical
   )
 end
 
@@ -751,13 +841,91 @@ function reset_session_memory!(dir::String)
   return true
 end
 
+session_runtime_metadata_path(dir::String) = joinpath(dir, SESSION_RUNTIME_METADATA_FILE)
+
+function tactical_signature(gspec::TricTracGameSpec)
+  config = tactical_config(gspec)
+  return Dict{String, Any}(
+    "variant_id" => gspec.variant_id,
+    "margotEnabled" => margot_enabled(gspec),
+    "enabled" => Bool(get(config, "enabled", false)),
+    "horizon_own_turns" => Int(get(config, "horizon_own_turns", 0)),
+    "reward_weight" => Float64(get(config, "reward_weight", 0.0)),
+    "heuristic_weight" => Float64(get(config, "heuristic_weight", 0.0)),
+    "version" => String(get(config, "version", "classique-tactical-v3"))
+  )
+end
+
+function desired_session_runtime_metadata(gspec::TricTracGameSpec)
+  return Dict{String, Any}(
+    "classique_tactical_signature" => tactical_signature(gspec)
+  )
+end
+
+function load_session_runtime_metadata(dir::String)
+  path = session_runtime_metadata_path(dir)
+  isfile(path) || return Dict{String, Any}()
+  try
+    raw = JSON3.read(read(path, String))
+    metadata = Dict{String, Any}()
+    for (key, value) in pairs(raw)
+      metadata[String(key)] = value isa JSON3.Object ? Dict{String, Any}(string(k) => v for (k, v) in pairs(value)) : value
+    end
+    return metadata
+  catch err
+    @warn "Failed to load session runtime metadata from $path; ignoring it." err
+    return Dict{String, Any}()
+  end
+end
+
+function save_session_runtime_metadata!(dir::String, metadata::Dict{String, Any})
+  AlphaZero.UserInterface.write_json_atomic(session_runtime_metadata_path(dir), metadata)
+  return nothing
+end
+
+function rewrite_session_gspec!(dir::String, gspec::TricTracGameSpec)
+  AlphaZero.UserInterface.valid_session_dir(dir) || return false
+  AlphaZero.UserInterface.serialize_atomic(joinpath(dir, AlphaZero.UserInterface.GSPEC_FILE), gspec)
+  return true
+end
+
+function apply_session_runtime_metadata!(
+  dir::String,
+  gspec::TricTracGameSpec;
+  reset_memory::Bool = false
+)
+  metadata = desired_session_runtime_metadata(gspec)
+  reset_for_signature = false
+
+  if AlphaZero.UserInterface.valid_session_dir(dir)
+    rewrite_session_gspec!(dir, gspec)
+    previous = load_session_runtime_metadata(dir)
+    old_signature = get(previous, "classique_tactical_signature", nothing)
+    new_signature = metadata["classique_tactical_signature"]
+    signatures_match = !isnothing(old_signature) && old_signature == new_signature
+    if gspec.variant_id == "trictrac_classique" && !signatures_match
+      reset_for_signature = !reset_memory && reset_session_memory!(dir)
+      if reset_for_signature
+        @info "Reset replay buffer in $dir because the Classique tactical shaping signature changed."
+      end
+    end
+  end
+
+  save_session_runtime_metadata!(dir, metadata)
+  return reset_for_signature
+end
+
 function register_experiments!(;
   device::Union{Symbol, AbstractString} = DEFAULT_DEVICE,
   use_gpu::Bool = false,
   num_iters::Union{Nothing, Int} = nothing,
   self_play_workers::Union{Nothing, Int} = nothing,
   arena_workers::Union{Nothing, Int} = nothing,
-  partie_length_repeats::Union{Nothing, Int} = nothing
+  partie_length_repeats::Union{Nothing, Int} = nothing,
+  tactical_shaping::Union{Nothing, Bool} = nothing,
+  tactical_horizon_own_turns::Union{Nothing, Int} = nothing,
+  tactical_reward_weight::Union{Nothing, Float64} = nothing,
+  tactical_heuristic_weight::Union{Nothing, Float64} = nothing
 )
   for preset in available_presets()
     config = preset_config(preset)
@@ -773,7 +941,11 @@ function register_experiments!(;
         num_iters = num_iters,
         self_play_workers = self_play_workers,
         arena_workers = arena_workers,
-        partie_length_repeats = partie_length_repeats
+        partie_length_repeats = partie_length_repeats,
+        tactical_shaping = tactical_shaping,
+        tactical_horizon_own_turns = tactical_horizon_own_turns,
+        tactical_reward_weight = tactical_reward_weight,
+        tactical_heuristic_weight = tactical_heuristic_weight
       )
     AlphaZero.Examples.experiments[string(config.experiment, "-smoke")] =
       smoke_experiment(
@@ -783,10 +955,41 @@ function register_experiments!(;
         num_iters = num_iters,
         self_play_workers = self_play_workers,
         arena_workers = arena_workers,
-        partie_length_repeats = partie_length_repeats
+        partie_length_repeats = partie_length_repeats,
+        tactical_shaping = tactical_shaping,
+        tactical_horizon_own_turns = tactical_horizon_own_turns,
+        tactical_reward_weight = tactical_reward_weight,
+        tactical_heuristic_weight = tactical_heuristic_weight
       )
   end
   return nothing
+end
+
+preferred_bridge_mode(backend::Symbol) =
+  backend == DEVICE_CPU ? "worker" : "shared"
+
+function with_bridge_mode_for_backend(f::Function, backend::Symbol)
+  desired = preferred_bridge_mode(backend)
+  previous = get(ENV, BRIDGE_MODE_ENV, nothing)
+  changed = previous != desired
+
+  if changed
+    close_cached_bridges!()
+    ENV[BRIDGE_MODE_ENV] = desired
+  end
+
+  try
+    return f()
+  finally
+    if changed
+      close_cached_bridges!()
+      if isnothing(previous)
+        delete!(ENV, BRIDGE_MODE_ENV)
+      else
+        ENV[BRIDGE_MODE_ENV] = previous
+      end
+    end
+  end
 end
 
 function run_train(;
@@ -800,71 +1003,94 @@ function run_train(;
   num_iters::Union{Nothing, Int} = nothing,
   self_play_workers::Union{Nothing, Int} = nothing,
   arena_workers::Union{Nothing, Int} = nothing,
-  partie_length_repeats::Union{Nothing, Int} = nothing
+  partie_length_repeats::Union{Nothing, Int} = nothing,
+  tactical_shaping::Union{Nothing, Bool} = nothing,
+  tactical_horizon_own_turns::Union{Nothing, Int} = nothing,
+  tactical_reward_weight::Union{Nothing, Float64} = nothing,
+  tactical_heuristic_weight::Union{Nothing, Float64} = nothing
 )
   requested_device = resolve_requested_device(device = device, use_gpu = use_gpu)
   requested_device == DEVICE_CUDA && require_device_available(DEVICE_CUDA)
   requested_device == DEVICE_METAL && require_device_available(DEVICE_METAL)
   resolved_device = set_runtime_device!(requested_device)
-  if resolved_device == DEVICE_METAL
-    probe = probe_sparse_conv_on_metal()
-    if !probe.supported
-      @info "Metal convolution probe failed on this machine; using the dense Metal sparse-policy network." detail = summarize_probe_error(probe.error)
+  return with_bridge_mode_for_backend(resolved_device) do
+    if resolved_device == DEVICE_METAL
+      probe = probe_sparse_conv_on_metal()
+      if !probe.supported
+        @info "Metal convolution probe failed on this machine; using the dense Metal sparse-policy network." detail = summarize_probe_error(probe.error)
+      end
     end
-  end
-  use_gpu = is_gpu_backend(resolved_device)
-  if !partie_length_mix_enabled(preset) && !isnothing(partie_length_repeats)
-    @warn "Partie-length repeats were requested for preset $(normalize_preset_name(preset)), but only trictrac_aecrire and trictrac_combine use marque-length self-play mixing."
-  end
-  experiment =
-    profile == "smoke" ?
-      smoke_experiment(
-        preset = preset,
-        device = resolved_device,
-        use_gpu = use_gpu,
-        num_iters = num_iters,
-        self_play_workers = self_play_workers,
-        arena_workers = arena_workers,
-        partie_length_repeats = partie_length_repeats
-      ) :
-      default_experiment(
-        preset = preset,
-        device = resolved_device,
-        use_gpu = use_gpu,
-        num_iters = num_iters,
-        self_play_workers = self_play_workers,
-        arena_workers = arena_workers,
-        partie_length_repeats = partie_length_repeats
-  )
-  register_experiments!(
-    device = resolved_device,
-    use_gpu = use_gpu,
-    num_iters = num_iters,
-    self_play_workers = self_play_workers,
-    arena_workers = arena_workers,
-    partie_length_repeats = partie_length_repeats
-  )
-  session_dir = isnothing(dir) ? default_session_dir(experiment) : dir
-  ensure_session_network_compatible!(
-    session_dir,
-    experiment;
-    requested_device = requested_device,
-    resolved_device = resolved_device
-  )
-  if reset_memory
-    if reset_session_memory!(session_dir)
-      @info "Reset replay buffer in $session_dir before training."
-    else
-      @info "No existing session at $session_dir; replay buffer reset skipped."
+    use_gpu = is_gpu_backend(resolved_device)
+    if !partie_length_mix_enabled(preset) && !isnothing(partie_length_repeats)
+      @warn "Partie-length repeats were requested for preset $(normalize_preset_name(preset)), but only trictrac_aecrire and trictrac_combine use marque-length self-play mixing."
     end
+    experiment =
+      profile == "smoke" ?
+        smoke_experiment(
+          preset = preset,
+          device = resolved_device,
+          use_gpu = use_gpu,
+          num_iters = num_iters,
+          self_play_workers = self_play_workers,
+          arena_workers = arena_workers,
+          partie_length_repeats = partie_length_repeats,
+          tactical_shaping = tactical_shaping,
+          tactical_horizon_own_turns = tactical_horizon_own_turns,
+          tactical_reward_weight = tactical_reward_weight,
+          tactical_heuristic_weight = tactical_heuristic_weight
+        ) :
+        default_experiment(
+          preset = preset,
+          device = resolved_device,
+          use_gpu = use_gpu,
+          num_iters = num_iters,
+          self_play_workers = self_play_workers,
+          arena_workers = arena_workers,
+          partie_length_repeats = partie_length_repeats,
+          tactical_shaping = tactical_shaping,
+          tactical_horizon_own_turns = tactical_horizon_own_turns,
+          tactical_reward_weight = tactical_reward_weight,
+          tactical_heuristic_weight = tactical_heuristic_weight
+    )
+    register_experiments!(
+      device = resolved_device,
+      use_gpu = use_gpu,
+      num_iters = num_iters,
+      self_play_workers = self_play_workers,
+      arena_workers = arena_workers,
+      partie_length_repeats = partie_length_repeats,
+      tactical_shaping = tactical_shaping,
+      tactical_horizon_own_turns = tactical_horizon_own_turns,
+      tactical_reward_weight = tactical_reward_weight,
+      tactical_heuristic_weight = tactical_heuristic_weight
+    )
+    session_dir = isnothing(dir) ? default_session_dir(experiment) : dir
+    ensure_session_network_compatible!(
+      session_dir,
+      experiment;
+      requested_device = requested_device,
+      resolved_device = resolved_device
+    )
+    apply_session_runtime_metadata!(
+      session_dir,
+      experiment.gspec;
+      reset_memory = reset_memory
+    )
+    if reset_memory
+      if reset_session_memory!(session_dir)
+        @info "Reset replay buffer in $session_dir before training."
+      else
+        @info "No existing session at $session_dir; replay buffer reset skipped."
+      end
+    end
+    experiment = adjust_experiment_for_resume(
+      experiment,
+      session_dir;
+      auto_extend = profile != "smoke" && isnothing(num_iters)
+    )
+    test_game && AlphaZero.Scripts.test_game(experiment.gspec; n = 4)
+    return AlphaZero.Scripts.train(experiment; dir = session_dir, autosave = true, save_intermediate = false)
   end
-  experiment = adjust_experiment_for_resume(
-    experiment,
-    session_dir;
-    auto_extend = profile != "smoke" && isnothing(num_iters)
-  )
-  test_game && AlphaZero.Scripts.test_game(experiment.gspec; n = 4)
-  return AlphaZero.Scripts.train(experiment; dir = session_dir, autosave = true, save_intermediate = false)
 end
 
 function run_smoke(;
@@ -876,7 +1102,11 @@ function run_smoke(;
   num_iters::Union{Nothing, Int} = nothing,
   self_play_workers::Union{Nothing, Int} = nothing,
   arena_workers::Union{Nothing, Int} = nothing,
-  partie_length_repeats::Union{Nothing, Int} = nothing
+  partie_length_repeats::Union{Nothing, Int} = nothing,
+  tactical_shaping::Union{Nothing, Bool} = nothing,
+  tactical_horizon_own_turns::Union{Nothing, Int} = nothing,
+  tactical_reward_weight::Union{Nothing, Float64} = nothing,
+  tactical_heuristic_weight::Union{Nothing, Float64} = nothing
 )
   session_dir =
     isnothing(dir) ?
@@ -888,7 +1118,11 @@ function run_smoke(;
           num_iters = num_iters,
           self_play_workers = self_play_workers,
           arena_workers = arena_workers,
-          partie_length_repeats = partie_length_repeats
+          partie_length_repeats = partie_length_repeats,
+          tactical_shaping = tactical_shaping,
+          tactical_horizon_own_turns = tactical_horizon_own_turns,
+          tactical_reward_weight = tactical_reward_weight,
+          tactical_heuristic_weight = tactical_heuristic_weight
         )
       ) :
       dir
@@ -903,7 +1137,11 @@ function run_smoke(;
     num_iters = num_iters,
     self_play_workers = self_play_workers,
     arena_workers = arena_workers,
-    partie_length_repeats = partie_length_repeats
+    partie_length_repeats = partie_length_repeats,
+    tactical_shaping = tactical_shaping,
+    tactical_horizon_own_turns = tactical_horizon_own_turns,
+    tactical_reward_weight = tactical_reward_weight,
+    tactical_heuristic_weight = tactical_heuristic_weight
   )
 end
 
@@ -917,20 +1155,22 @@ function run_explore(;
   requested_device == DEVICE_CUDA && require_device_available(DEVICE_CUDA)
   requested_device == DEVICE_METAL && require_device_available(DEVICE_METAL)
   resolved_device = set_runtime_device!(requested_device)
-  if resolved_device == DEVICE_METAL
-    probe = probe_sparse_conv_on_metal()
-    if !probe.supported
-      @info "Metal convolution probe failed on this machine; using the dense Metal sparse-policy network." detail = summarize_probe_error(probe.error)
+  return with_bridge_mode_for_backend(resolved_device) do
+    if resolved_device == DEVICE_METAL
+      probe = probe_sparse_conv_on_metal()
+      if !probe.supported
+        @info "Metal convolution probe failed on this machine; using the dense Metal sparse-policy network." detail = summarize_probe_error(probe.error)
+      end
     end
+    experiment = default_experiment(preset = preset, device = resolved_device)
+    register_experiments!(device = resolved_device)
+    session_dir = isnothing(dir) ? default_session_dir(experiment) : dir
+    ensure_session_network_compatible!(
+      session_dir,
+      experiment;
+      requested_device = requested_device,
+      resolved_device = resolved_device
+    )
+    return AlphaZero.Scripts.explore(experiment; dir = session_dir)
   end
-  experiment = default_experiment(preset = preset, device = resolved_device)
-  register_experiments!(device = resolved_device)
-  session_dir = isnothing(dir) ? default_session_dir(experiment) : dir
-  ensure_session_network_compatible!(
-    session_dir,
-    experiment;
-    requested_device = requested_device,
-    resolved_device = resolved_device
-  )
-  return AlphaZero.Scripts.explore(experiment; dir = session_dir)
 end

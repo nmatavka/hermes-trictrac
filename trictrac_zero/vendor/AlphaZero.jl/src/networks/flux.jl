@@ -14,6 +14,17 @@ using Base: @kwdef
 import Flux
 
 CUDA.allowscalar(false)
+
+const HAS_CUDNN = let
+  try
+    @eval using cuDNN
+    true
+  catch err
+    @warn "cuDNN could not be loaded; CUDA convolutions may fall back to unsupported scalar-indexing paths." exception = (err, catch_backtrace())
+    false
+  end
+end
+
 array_on_gpu(::Array) = false
 array_on_gpu(::CuArray) = true
 array_on_gpu(arr) = error("Usupported array type: ", typeof(arr))

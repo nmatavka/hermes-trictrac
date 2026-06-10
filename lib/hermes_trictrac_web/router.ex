@@ -35,6 +35,13 @@ defmodule HermesTrictracWeb.Router do
     post "/model-lab/run", ModelAnalysisController, :run
   end
 
+  scope "/api", HermesTrictracWeb do
+    pipe_through :api
+
+    get "/desktop/health", DesktopController, :health
+    get "/desktop/catalog", DesktopController, :catalog
+  end
+
   scope "/auth", HermesTrictracWeb do
     pipe_through :browser
 

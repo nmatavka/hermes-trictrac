@@ -43,6 +43,215 @@ defmodule HermesTrictrac.Rules.TrictracArchitectureTest do
     assert length(analysis.branches) > 0
   end
 
+  test "best_end_state_by matches scored best leaf selection without materializing all winners" do
+    variant = %{id: "trictrac_classique", total_pieces: 15}
+
+    board =
+      empty_board()
+      |> put_piece(:white, 23, 2)
+      |> put_piece(:white, 22, 2)
+      |> put_piece(:white, 20, 1)
+
+    dice = %{values: [2, 1], moves: [2, 1], moves_left: [2, 1], moves_played: []}
+    runtime = %{board: board, dice: dice}
+
+    scorer = fn leaf_runtime, _played ->
+      score =
+        Moves.pieces_at(leaf_runtime.board, 23, :white) +
+          Moves.pieces_at(leaf_runtime.board, 22, :white) * 10
+
+      {score, :erlang.term_to_binary(leaf_runtime.board, [:deterministic])}
+    end
+
+    expected =
+      runtime
+      |> Branches.best_end_states(variant, :white)
+      |> Enum.map(fn leaf ->
+        leaf_runtime = %{board: leaf.board, dice: leaf.dice}
+        {score, sort_key} = scorer.(leaf_runtime, leaf.played)
+        %{board: leaf.board, dice: leaf.dice, played: leaf.played, score: score, sort_key: sort_key}
+      end)
+      |> Enum.reduce(nil, fn candidate, best ->
+        cond do
+          best == nil -> candidate
+          candidate.played > best.played -> candidate
+          candidate.played < best.played -> best
+          candidate.score > best.score -> candidate
+          candidate.score < best.score -> best
+          candidate.sort_key < best.sort_key -> candidate
+          true -> best
+        end
+      end)
+
+    best = Branches.best_end_state_by(runtime, variant, :white, scorer)
+
+    assert best.played == expected.played
+    assert best.score == expected.score
+    assert best.sort_key == expected.sort_key
+    assert best.board == expected.board
+    assert best.dice == expected.dice
+  end
+
+  test "best_end_state_by supports canonical dice memoization without changing best leaf selection" do
+    variant = %{id: "trictrac_classique", total_pieces: 15}
+
+    board =
+      empty_board()
+      |> put_piece(:white, 23, 2)
+      |> put_piece(:white, 22, 2)
+      |> put_piece(:white, 20, 1)
+
+    runtime_a = %{board: board, dice: %{values: [2, 1], moves: [2, 1], moves_left: [2, 1], moves_played: []}}
+    runtime_b = %{board: board, dice: %{values: [2, 1], moves: [2, 1], moves_left: [1, 2], moves_played: []}}
+
+    scorer = fn leaf_runtime, _played ->
+      score =
+        Moves.pieces_at(leaf_runtime.board, 23, :white) +
+          Moves.pieces_at(leaf_runtime.board, 22, :white) * 10
+
+      {score, :erlang.term_to_binary(leaf_runtime.board, [:deterministic])}
+    end
+
+    best_a = Branches.best_end_state_by(runtime_a, variant, :white, scorer, canonical_dice_for_memo: true)
+    best_b = Branches.best_end_state_by(runtime_b, variant, :white, scorer, canonical_dice_for_memo: true)
+
+    assert best_a.played == best_b.played
+    assert best_a.score == best_b.score
+    assert best_a.sort_key == best_b.sort_key
+    assert best_a.board == best_b.board
+  end
+
+  test "best_end_state_by greedy branch-width-1 mode matches explicit greedy leaf walk" do
+    variant = %{id: "trictrac_classique", total_pieces: 15}
+
+    board =
+      empty_board()
+      |> put_piece(:white, 23, 2)
+      |> put_piece(:white, 22, 2)
+      |> put_piece(:white, 20, 1)
+
+    runtime = %{board: board, dice: %{values: [2, 1], moves: [2, 1], moves_left: [2, 1], moves_played: []}}
+
+    scorer = fn leaf_runtime, _played ->
+      score =
+        Moves.pieces_at(leaf_runtime.board, 23, :white) +
+          Moves.pieces_at(leaf_runtime.board, 22, :white) * 10
+
+      {score, :erlang.term_to_binary(leaf_runtime.board, [:deterministic])}
+    end
+
+    move_ranker = fn current_runtime, move ->
+      used = Map.get(move, :dice_used, [move.die])
+      next_board = Moves.apply_step_move(current_runtime.board, :white, move)
+      score = Moves.pieces_at(next_board, 23, :white) + Moves.pieces_at(next_board, 22, :white) * 10
+      {length(used), score}
+    end
+
+    best =
+      Branches.best_end_state_by(
+        runtime,
+        variant,
+        :white,
+        scorer,
+        max_branch_moves: 1,
+        move_ranker: move_ranker
+      )
+
+    greedy =
+      greedy_reference_leaf(
+        runtime,
+        variant,
+        :white,
+        scorer,
+        move_ranker,
+        0
+      )
+
+    assert best.played == greedy.played
+    assert best.score == greedy.score
+    assert best.sort_key == greedy.sort_key
+    assert best.board == greedy.board
+    assert best.dice == greedy.dice
+  end
+
+  test "best_end_state_by greedy primary ranker skips secondary scoring for discarded root moves" do
+    variant = %{id: "trictrac_classique", total_pieces: 15}
+
+    board =
+      empty_board()
+      |> put_piece(:white, 23, 2)
+      |> put_piece(:white, 22, 2)
+      |> put_piece(:white, 20, 1)
+
+    runtime = %{board: board, dice: %{values: [2, 1], moves: [2, 1], moves_left: [2, 1], moves_played: []}}
+    root_moves_left = runtime.dice.moves_left
+    root_board = runtime.board
+    rank_counts = :ets.new(:rank_counts, [:set, :public])
+
+    scorer = fn leaf_runtime, _played ->
+      score =
+        Moves.pieces_at(leaf_runtime.board, 23, :white) +
+          Moves.pieces_at(leaf_runtime.board, 22, :white) * 10
+
+      {score, :erlang.term_to_binary(leaf_runtime.board, [:deterministic])}
+    end
+
+    tuple_move_ranker = fn current_runtime, move ->
+      used = Map.get(move, :dice_used, [move.die])
+      next_board = Moves.apply_step_move(current_runtime.board, :white, move)
+      score = Moves.pieces_at(next_board, 23, :white) + Moves.pieces_at(next_board, 22, :white) * 10
+      {length(used), score}
+    end
+
+    filtered_move_ranker = fn current_runtime, move ->
+      used = Map.get(move, :dice_used, [move.die])
+
+      if current_runtime.board == root_board and Map.get(current_runtime.dice || %{}, :moves_left, []) == root_moves_left do
+        :ets.update_counter(rank_counts, length(used), {2, 1}, {length(used), 0})
+      end
+
+      next_board = Moves.apply_step_move(current_runtime.board, :white, move)
+      Moves.pieces_at(next_board, 23, :white) + Moves.pieces_at(next_board, 22, :white) * 10
+    end
+
+    try do
+      baseline =
+        Branches.best_end_state_by(
+          runtime,
+          variant,
+          :white,
+          scorer,
+          max_branch_moves: 1,
+          move_ranker: tuple_move_ranker
+        )
+
+      filtered =
+        Branches.best_end_state_by(
+          runtime,
+          variant,
+          :white,
+          scorer,
+          max_branch_moves: 1,
+          move_primary_ranker: fn move ->
+            move
+            |> Map.get(:dice_used, [move.die])
+            |> length()
+          end,
+          move_ranker: filtered_move_ranker
+        )
+
+      assert filtered.played == baseline.played
+      assert filtered.score == baseline.score
+      assert filtered.sort_key == baseline.sort_key
+      assert filtered.board == baseline.board
+      assert filtered.dice == baseline.dice
+      assert root_rank_count(rank_counts, 1) == 0
+      assert root_rank_count(rank_counts, 2) == 10
+    after
+      :ets.delete(rank_counts)
+    end
+  end
+
   test "best_end_branches ignores raw coin-rest singleton branches for conservation" do
     variant = %{id: "trictrac_classique", family: :trictrac, total_pieces: 15}
 
@@ -324,5 +533,71 @@ defmodule HermesTrictrac.Rules.TrictracArchitectureTest do
     Enum.reduce(first..last, board, fn point, acc ->
       put_piece(acc, color, point, count)
     end)
+  end
+
+  defp greedy_reference_leaf(runtime, variant, color, scorer, move_ranker, played) do
+    moves =
+      runtime
+      |> Moves.legal_moves(variant, color)
+      |> Enum.uniq_by(fn move ->
+        {move.from, move.to, move.die, Map.get(move, :dice_used), Map.get(move, :via),
+         Map.get(move, :sequence)}
+      end)
+
+    moves_left = Map.get(runtime.dice || %{}, :moves_left, [])
+
+    cond do
+      moves_left == [] or moves == [] ->
+        {score, sort_key} = scorer.(runtime, played)
+        %{board: runtime.board, dice: runtime.dice, played: played, score: score, sort_key: sort_key}
+
+      true ->
+        move =
+          Enum.reduce(tl(moves), hd(moves), fn candidate, best ->
+            candidate_rank =
+              {move_ranker.(runtime, candidate),
+               {candidate.from, candidate.to, candidate.die, Map.get(candidate, :dice_used), Map.get(candidate, :via),
+                Map.get(candidate, :sequence)}}
+
+            best_rank =
+              {move_ranker.(runtime, best),
+               {best.from, best.to, best.die, Map.get(best, :dice_used), Map.get(best, :via),
+                Map.get(best, :sequence)}}
+
+            if compare_ranked_move(candidate_rank, best_rank), do: candidate, else: best
+          end)
+
+        used = Map.get(move, :dice_used, [move.die])
+        next_board = Moves.apply_step_move(runtime.board, color, move)
+        next_moves = State.remove_all_used(moves_left, used)
+        dice = runtime.dice || %{}
+
+        next_runtime = %{
+          runtime
+          | board: next_board,
+            dice:
+              dice
+              |> Map.put(:moves_left, next_moves)
+              |> Map.put(:moves_played, Map.get(dice, :moves_played, []) ++ used)
+        }
+
+        greedy_reference_leaf(next_runtime, variant, color, scorer, move_ranker, played + length(used))
+    end
+  end
+
+  defp compare_ranked_move({left_rank, left_sort}, {right_rank, right_sort}) do
+    cond do
+      left_rank > right_rank -> true
+      left_rank < right_rank -> false
+      left_sort < right_sort -> true
+      true -> false
+    end
+  end
+
+  defp root_rank_count(table, rank) do
+    case :ets.lookup(table, rank) do
+      [{^rank, count}] -> count
+      [] -> 0
+    end
   end
 end

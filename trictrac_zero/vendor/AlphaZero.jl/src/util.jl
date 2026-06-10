@@ -7,6 +7,11 @@ import Distributions
 import ThreadPools
 using Distributions: Categorical
 
+const WORKER_SLOT_TLS_KEY = :alphazero_worker_slot
+
+set_worker_slot!(slot::Integer) = Base.task_local_storage(WORKER_SLOT_TLS_KEY, Int(slot))
+clear_worker_slot!() = Base.task_local_storage(WORKER_SLOT_TLS_KEY, nothing)
+
 """
     @printing_errors expr
 
@@ -175,23 +180,31 @@ function mapreduce(make_worker, args, num_workers, combine, init)
   for i in 1:num_workers
     tid = nbg > 0 ? 2 + ((i - 1) % nbg) : 1
     task = ThreadPools.@tspawnat tid Util.@printing_errors begin
+      set_worker_slot!(i)
       local k = 0
       worker = make_worker()
-      while true
-        Base.lock(lock)
-        if next > length(args)
+      try
+        while true
+          Base.lock(lock)
+          if next > length(args)
+            Base.unlock(lock)
+            break
+          end
+          k = next
+          next += 1
           Base.unlock(lock)
-          break
+          y = worker.process(args[k])
+          Base.lock(lock)
+          ret = combine(ret, y)
+          Base.unlock(lock)
         end
-        k = next
-        next += 1
-        Base.unlock(lock)
-        y = worker.process(args[k])
-        Base.lock(lock)
-        ret = combine(ret, y)
-        Base.unlock(lock)
+      finally
+        try
+          worker.terminate()
+        finally
+          clear_worker_slot!()
+        end
       end
-      worker.terminate()
     end
     push!(tasks, task)
   end

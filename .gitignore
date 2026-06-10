@@ -44,3 +44,6 @@ node_modules
 /config/*.secret.exs
 
 /trictrac_zero/sessions/
+/.desktop/
+/haskell/hermes-desktop/.stack-work/
+/haskell/hermes-desktop/dist-newstyle/

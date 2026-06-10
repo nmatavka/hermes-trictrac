@@ -41,10 +41,20 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Events do
 
   @spec detect_turn_events(map(), map(), map(), atom(), map(), map()) :: TurnAnalysis.t()
   def detect_turn_events(start_board, end_board, variant, color, dice, trictrac) do
+    detect_turn_events(start_board, end_board, variant, color, dice, trictrac, [])
+  end
+
+  @spec detect_turn_events(map(), map(), map(), atom(), map(), map(), keyword()) :: TurnAnalysis.t()
+  def detect_turn_events(start_board, end_board, variant, color, dice, trictrac, opts)
+      when is_list(opts) do
     trictrac = State.ensure(trictrac)
     opening = trictrac.opening
     is_double = State.double?(dice)
-    branches_info = Branches.best_end_branches(start_board, variant, color, dice)
+
+    branches_info =
+      Keyword.get_lazy(opts, :branches_info, fn ->
+        Branches.best_end_branches(start_board, variant, color, dice)
+      end)
 
     context = %Context{
       start_board: start_board,

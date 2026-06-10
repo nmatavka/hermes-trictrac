@@ -3,6 +3,8 @@ defmodule HermesTrictrac.RulesLibrary do
 
   alias HermesTrictrac.Identity
 
+  @compile {:no_warn_undefined, [Earmark, Floki, YamlElixir]}
+
   @book_configs [
     %{slug: "traite-complet-trictrac", source_dir: "traiteCompletTrictrac"},
     %{slug: "cours-complet-de-trictrac", source_dir: "coursCompletdeTrictrac"},

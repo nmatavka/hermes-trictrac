@@ -1,0 +1,9 @@
+
+BREAK: (a)bort (A)bort with dump (c)ontinue (p)roc info (i)nfo
+       (l)oaded (v)ersion (k)ill (D)b-tables (d)istribution
+** (MatchError) no match of right hand side value:
+
+    {:error, :eaddrinuse}
+
+    priv/training/trictrac_bridge_daemon.exs:9: HermesTrictrac.Training.TrictracBridgeDaemon.run/3
+    priv/training/trictrac_bridge_daemon.exs:147: (file)

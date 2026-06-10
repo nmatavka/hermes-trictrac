@@ -100,7 +100,17 @@ function Progress(logger::Logger, nsteps)
   return ProgressMeter.Progress(nsteps, desc=desc, output=logger.console)
 end
 
-render(progress) = ProgressMeter.update!(progress, 0; force=true)
+function render(progress; warming_up::Union{Nothing, String} = nothing)
+  if isnothing(warming_up)
+    return ProgressMeter.update!(progress, 0; force=true)
+  end
+  return ProgressMeter.update!(
+    progress,
+    0;
+    force = true,
+    showvalues = [("Status", warming_up)]
+  )
+end
 
 #####
 ##### Tables

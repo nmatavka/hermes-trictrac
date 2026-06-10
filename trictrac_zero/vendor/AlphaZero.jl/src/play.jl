@@ -202,6 +202,11 @@ function RandomMctsPlayer(game_spec::AbstractGameSpec, params::MctsParams)
 end
 
 function think(p::MctsPlayer, game)
+  actions = GI.available_actions(game)
+  if length(actions) <= 1
+    π = fill(1.0, length(actions))
+    return actions, π
+  end
   if isnothing(p.timeout) # Fixed number of MCTS simulations
     MCTS.explore!(p.mcts, game, p.niters)
   else # Run simulations until timeout
@@ -303,11 +308,22 @@ Simulate a game by an [`AbstractPlayer`](@ref).
   is _flipped_ randomly at every turn with probability ``p``,
   using [`GI.apply_random_symmetry!`](@ref).
 """
-function play_game(gspec, player; flip_probability=0., tail_watcher=nothing)
+function play_game(gspec, player; flip_probability=0., tail_watcher=nothing, step_played=nothing)
   game = GI.init(gspec)
   trace = Trace(GI.current_state(game))
   game_length_cap = max_game_length(gspec)
   while true
+    while !GI.game_terminated(game)
+      actions = GI.available_actions(game)
+      length(actions) == 1 || break
+      GI.play!(game, only(actions))
+      if isempty(trace.rewards)
+        trace.states[end] = GI.current_state(game)
+      else
+        trace.rewards[end] += GI.white_reward(game)
+        trace.states[end] = GI.current_state(game)
+      end
+    end
     if GI.game_terminated(game)
       return trace
     end
@@ -330,6 +346,7 @@ function play_game(gspec, player; flip_probability=0., tail_watcher=nothing)
     a = actions[Util.rand_categorical(π_sample)]
     GI.play!(game, a)
     push!(trace, π_target, GI.white_reward(game), GI.current_state(game))
+    isnothing(step_played) || step_played()
   end
 end
 

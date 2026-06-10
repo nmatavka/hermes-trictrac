@@ -78,6 +78,7 @@ module Handlers
 
   function iteration_started(h)      return end
   function self_play_started(h)      return end
+  function self_play_stepped(h)      return end
   function game_played(h)            return end
   function self_play_finished(h, r)  return end
   function memory_analyzed(h, r)     return end

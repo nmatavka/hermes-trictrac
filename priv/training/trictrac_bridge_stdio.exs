@@ -12,7 +12,13 @@ defmodule HermesTrictrac.Training.TrictracBridgeStdio do
     if line != "" do
       line
       |> Jason.decode()
-      |> handle_request()
+      |> case do
+        {:ok, request} ->
+          TrictracBridge.rpc(request)
+
+        {:error, error} ->
+          %{"id" => nil, "ok" => false, "error" => Exception.message(error)}
+      end
       |> then(fn response ->
         response
         |> Jason.encode!()
@@ -21,31 +27,6 @@ defmodule HermesTrictrac.Training.TrictracBridgeStdio do
       end)
     end
   end
-
-  defp handle_request({:ok, %{"id" => id, "cmd" => "ping"}}) do
-    result(TrictracBridge.ping(), id)
-  end
-
-  defp handle_request({:ok, %{"id" => id, "cmd" => "new_game"} = request}) do
-    result(TrictracBridge.new_game(Map.get(request, "config", %{})), id)
-  end
-
-  defp handle_request(
-         {:ok, %{"id" => id, "cmd" => "step", "state" => state, "action" => action} = request}
-       ) do
-    result(TrictracBridge.step(state, action, Map.get(request, "config", %{})), id)
-  end
-
-  defp handle_request({:ok, %{"id" => id}}) do
-    %{"id" => id, "ok" => false, "error" => "Unknown command."}
-  end
-
-  defp handle_request({:error, error}) do
-    %{"id" => nil, "ok" => false, "error" => Exception.message(error)}
-  end
-
-  defp result({:ok, payload}, id), do: %{"id" => id, "ok" => true, "result" => payload}
-  defp result({:error, message}, id), do: %{"id" => id, "ok" => false, "error" => message}
 end
 
 HermesTrictrac.Training.TrictracBridgeStdio.run()

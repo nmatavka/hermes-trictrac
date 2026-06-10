@@ -52,12 +52,14 @@ mutable struct Session{Env}
   benchmark :: Vector{Benchmark.Evaluation}
   # Temporary state for logging
   progress :: Union{Progress, Nothing}
+  warmup_steps :: Int
+  completed_games :: Int
   report :: SessionReport
 
   function Session(env, dir, logger, autosave, save_intermediate, benchmark)
     return new{typeof(env)}(
       env, dir, logger, autosave, save_intermediate,
-      benchmark, nothing, SessionReport())
+      benchmark, nothing, 0, 0, SessionReport())
   end
 end
 
@@ -535,10 +537,35 @@ function Handlers.self_play_started(session::Session)
   ngames = session.env.params.self_play.sim.num_games
   Log.section(session.logger, 2, "Starting self-play")
   session.progress = Log.Progress(session.logger, ngames)
-  Log.render(session.progress)
+  session.warmup_steps = 0
+  session.completed_games = 0
+  Log.render(
+    session.progress;
+    warming_up = "warming up workers; ETA appears after the first completed game"
+  )
+end
+
+function Handlers.self_play_stepped(session::Session)
+  session.warmup_steps += 1
+  if !isnothing(session.progress) &&
+     session.completed_games == 0 &&
+     (session.warmup_steps <= 5 || session.warmup_steps % 8 == 0)
+    Log.render(
+      session.progress;
+      warming_up = "warming up workers; simulated $(session.warmup_steps) plies"
+    )
+  end
+  if session.completed_games == 0 &&
+     (session.warmup_steps in (1, 2, 4, 8, 16, 32) || session.warmup_steps % 64 == 0)
+    Log.print(
+      session.logger,
+      "Warmup progress: simulated $(session.warmup_steps) plies so far"
+    )
+  end
 end
 
 function Handlers.game_played(session::Session)
+  session.completed_games += 1
   next!(session.progress)
 end
 
@@ -546,6 +573,8 @@ function Handlers.self_play_finished(session::Session, report)
   show_space_after_progress_bar(session.logger)
   print_report(session.logger, report)
   session.progress = nothing
+  session.warmup_steps = 0
+  session.completed_games = 0
 end
 
 function Handlers.memory_analyzed(session::Session, report)
@@ -572,7 +601,10 @@ function Handlers.checkpoint_started(session::Session)
   # In single player games, each game has to be played twice (with both networks)
   n = GI.two_players(session.env.gspec) ? num_games : 2 * num_games
   session.progress = Log.Progress(session.logger, n)
-  Log.render(session.progress)
+  Log.render(
+    session.progress;
+    warming_up = "warming up arena workers; ETA appears after the first completed game"
+  )
 end
 
 function Handlers.checkpoint_game_played(session::Session)

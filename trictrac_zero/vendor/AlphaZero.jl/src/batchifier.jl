@@ -18,6 +18,21 @@ using ..AlphaZero: MCTS, Util, ProfUtils
 
 export BatchedOracle
 
+const SERVER_FLUSH_SECONDS = 0.005
+const REQUEST_CHANNEL_LOCKS = WeakKeyDict{Channel, ReentrantLock}()
+const REQUEST_CHANNEL_LOCKS_GUARD = ReentrantLock()
+
+function request_channel_lock(reqchan::Channel)
+  lock(REQUEST_CHANNEL_LOCKS_GUARD)
+  try
+    return get!(REQUEST_CHANNEL_LOCKS, reqchan) do
+      ReentrantLock()
+    end
+  finally
+    unlock(REQUEST_CHANNEL_LOCKS_GUARD)
+  end
+end
+
 """
     launch_server(f; num_workers, batch_size)
 
@@ -52,18 +67,31 @@ function launch_server(f; num_workers, batch_size)
     num_active = num_workers
     pending = []
     while num_active > 0
-      req = take!(channel)
-      if req == :done
-        num_active -= 1
-        if num_active < batch_size
-          batch_size = num_active
-        end
+      req = nothing
+      if isempty(pending)
+        req = take!(channel)
+      elseif isready(channel)
+        req = take!(channel)
       else
-        push!(pending, req)
+        waited = timedwait(() -> isready(channel), SERVER_FLUSH_SECONDS; pollint=0.001)
+        if waited === :ok
+          req = take!(channel)
+        end
+      end
+
+      if req !== nothing
+        if req == :done
+          num_active -= 1
+          if num_active < batch_size
+            batch_size = num_active
+          end
+        else
+          push!(pending, req)
+        end
       end
       @assert length(pending) <= num_active
       @assert batch_size <= num_active
-      if length(pending) >= batch_size && length(pending) > 0
+      if length(pending) > 0 && (length(pending) >= batch_size || req === nothing)
         batch = [p.query for p in pending]
         results = ProfUtils.log_event(;
             name="Infer (batch size: $(length(batch)))",
@@ -95,7 +123,15 @@ indicated to [`launch_server`](@ref).
     oracles per worker (e.g. a worker can simulate games between two players that each
     rely on a neural network).
 """
-client_done!(reqc) = put!(reqc, :done)
+function client_done!(reqc)
+  req_lock = request_channel_lock(reqc)
+  lock(req_lock)
+  try
+    put!(reqc, :done)
+  finally
+    unlock(req_lock)
+  end
+end
 
 """
     BatchedOracle(reqc, preprocess=(x->x))
@@ -121,7 +157,13 @@ function (oracle::BatchedOracle)(state)
   query = oracle.preprocess(state)
   ProfUtils.instant_event(
     name="Query", cat="Query", pid=0, tid=Threads.threadid())
-  put!(oracle.reqchan, (query=query, answer_channel=oracle.anschan))
+  req_lock = request_channel_lock(oracle.reqchan)
+  lock(req_lock)
+  try
+    put!(oracle.reqchan, (query=query, answer_channel=oracle.anschan))
+  finally
+    unlock(req_lock)
+  end
   answer = take!(oracle.anschan)
   return answer
 end

@@ -13,10 +13,10 @@ config :hermes_trictrac, HermesTrictracWeb.Endpoint,
 config :hermes_trictrac, HermesTrictracWeb.Endpoint,
   live_reload: [
     patterns: [
-      ~r{priv/static/.*(js|css|png|jpeg|jpg|gif|svg)$}E,
-      ~r{priv/gettext/.*(po)$}E,
-      ~r{lib/hermes_trictrac_web/(controllers|components)/.*\.(ex|heex)$}E,
-      ~r{lib/hermes_trictrac_web/router\.ex$}E
+      ~r{priv/static/.*(js|css|png|jpeg|jpg|gif|svg)$},
+      ~r{priv/gettext/.*(po)$},
+      ~r{lib/hermes_trictrac_web/(controllers|components)/.*\.(ex|heex)$},
+      ~r{lib/hermes_trictrac_web/router\.ex$}
     ]
   ]
 
