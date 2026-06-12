@@ -182,7 +182,7 @@ For a single-node deployment, the default DETS store is fine. For a multi-node d
 
 ### Optional Julia Model Bot
 
-The web app can launch a Julia-powered TricTrac bot through [`HermesTrictrac.TrictracModelBot`](./lib/hermes_trictrac/trictrac_model_bot.ex). This is optional for deployment of the web service itself, but required if you
+The web app can launch a Julia-powered Trictrac bot through [`HermesTrictrac.TrictracModelBot`](./lib/hermes_trictrac/trictrac_model_bot.ex). This is optional for deployment of the web service itself, but required if you
 want AI table opponents.
 
 Useful runtime variables for the model bot:
