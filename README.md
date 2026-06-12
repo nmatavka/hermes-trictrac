@@ -60,7 +60,19 @@ For games in the race family, this architecture is in large part unnecessary, an
 
 # Instructions for Deployment
 
-## Frontend
+## Phoenix / Web Service
+
+This application is a Phoenix `1.8` service with cookie-backed sessions. It is not a typical “wire up Postgres and go” Phoenix deployment: the current root app does **not** require a database for normal operation.
+
+What it does require in production:
+
+  * Elixir `~> 1.18`
+  * Node/npm to build assets
+  * a writable filesystem for release assets, logs, and Bluesky OAuth session storage
+  * Julia only if you want the bundled model bot
+  * Docker only if you want the default Docker-backed Julia/bridge bot path
+
+### Local Development
 
 To start the development server:
 
@@ -70,14 +82,123 @@ To start the development server:
 
 Now you can visit [`localhost:4000`](http://localhost:4000) from your browser.
 
+Identity defaults to manual in local development, so you do not need Bluesky OAuth keys just to bring up the lobby and tables UI.
+
+### Build And Release
+
 To build production assets:
 
   * Run `mix assets.deploy`
 
 To build a release:
 
+  * Run `MIX_ENV=prod mix deps.get`
+  * Run `MIX_ENV=prod mix assets.deploy`
   * Run `MIX_ENV=prod mix release`
-  * Start it with `PHX_SERVER=true SECRET_KEY_BASE=$(mix phx.gen.secret) _build/prod/rel/hermes_trictrac/bin/hermes_trictrac start`
+
+Minimal production start:
+
+```sh
+PHX_SERVER=true \
+SECRET_KEY_BASE="$(mix phx.gen.secret)" \
+_build/prod/rel/hermes_trictrac/bin/hermes_trictrac start
+```
+
+### Runtime Configuration
+
+The core runtime knobs come from [`config/runtime.exs`](./config/runtime.exs).
+
+Important Phoenix/web variables:
+
+  * `PHX_SERVER`
+    Enable the HTTP server in a release.
+  * `SECRET_KEY_BASE`
+    Required in normal production mode.
+  * `PHX_HOST`
+    Public hostname for generated URLs and OAuth callback construction.
+  * `PORT`
+    HTTP listen port. Defaults to `4000`, or `4050` in local desktop mode.
+  * `PHX_URL_SCHEME`
+    Public URL scheme. Defaults to `https` in production, `http` otherwise.
+  * `PHX_URL_PORT`
+    Public URL port override. If unset, defaults to `443` for `https` and `80` for `http` in production.
+
+Important Hermes identity variables:
+
+  * `HERMES_TRICTRAC_IDENTITY_MODE`
+    `manual` or `bluesky_oauth`.
+  * `HERMES_TRICTRAC_CLIENT_ID_SCOPE`
+    `tab` or `browser`. Defaults to `tab`.
+
+Identity mode defaults are:
+
+  * development: `manual`
+  * production: `bluesky_oauth`
+  * local desktop mode: `manual`
+
+That means a plain production release will try to enforce Bluesky sign-in for table access unless you explicitly override it.
+
+### Bluesky OAuth Deployment
+
+Bluesky OAuth is wired through the bundled `hermes_bluesky` / `atex` stack and the app’s `/auth/bluesky/...` routes.
+
+If `HERMES_TRICTRAC_IDENTITY_MODE=bluesky_oauth` or you accept the default production identity mode, you must set:
+
+  * `HERMES_TRICTRAC_ATPROTO_OAUTH_PRIVATE_KEY`
+  * `HERMES_TRICTRAC_ATPROTO_OAUTH_KEY_ID`
+
+Optional but important:
+
+  * `HERMES_TRICTRAC_ATPROTO_SERVICE_DID`
+    The service DID used as the ATProto audience value.
+  * `ATEX_PLC_DIRECTORY_URL`
+    Overrides the PLC directory base URL. Default is `https://plc.directory`.
+
+The OAuth callback base URL is derived from:
+
+  * `PHX_HOST`
+  * `PHX_URL_SCHEME`
+  * `PHX_URL_PORT`
+
+so those must describe the **public** address users actually hit.
+
+If you need an emergency fallback without Bluesky identity, force:
+
+```sh
+HERMES_TRICTRAC_IDENTITY_MODE=manual
+```
+
+#### OAuth Session Storage
+
+OAuth sessions are stored by default in a DETS file, not in your browser cookie. The default path is:
+
+```text
+priv/dets/atex_oauth_sessions.dets
+```
+
+relative to the running release. That file must live on writable storage if you want OAuth sessions to persist across restarts.
+
+For a single-node deployment, the default DETS store is fine. For a multi-node deployment, you will likely want to replace it with a shared session store.
+
+### Optional Julia Model Bot
+
+The web app can launch a Julia-powered TricTrac bot through [`HermesTrictrac.TrictracModelBot`](./lib/hermes_trictrac/trictrac_model_bot.ex). This is optional for deployment of the web service itself, but required if you
+want AI table opponents.
+
+Useful runtime variables for the model bot:
+
+  * `HERMES_TRICTRAC_BOT_PROJECT_DIR`
+    Path to the `trictrac_zero` project.
+  * `HERMES_TRICTRAC_BOT_SCRIPT`
+    Julia entrypoint script. Defaults to `scripts/frontend_bot.jl`.
+  * `HERMES_TRICTRAC_BOT_SESSION_DIR`
+    Default model session directory.
+  * `HERMES_TRICTRAC_BOT_JULIA`
+    Julia executable path.
+  * `HERMES_TRICTRAC_BOT_NAME`
+    Display name for the bot.
+
+If you use the default Docker-backed bridge/tooling around the Julia bot, the repo layout assumption is still `/root/backgammon`. If your deployment uses a different path, adjust the bridge launcher or override the bot/bridge paths explicitly.
 
 ## Trainer
 
@@ -86,6 +207,92 @@ To build a release:
 ```shell
 $ julia --project scripts/train.jl --cpu-policy max --iterations 200 --game classique --target-gain 4 --move-cap 2000 --tactical-horizon-own-turns 1
 ```
+
+### Deployment Notes
+
+The trainer is not a lightweight sidecar. For `classique` with tactical shaping enabled, treat it as a **CPU-first deployment** with heavy memory pressure on the bridge side.
+
+Recommended practical floor for a dedicated remote trainer box:
+
+  * `>= 96GB` RAM
+  * a fast many-core CPU
+  * Docker installed and usable by the launch user
+  * `tmux` or equivalent process supervision
+  * swap configured; `64GB` has been a good operational baseline on large CPU boxes
+
+If you are using the default bridge launcher in
+[`trictrac_zero/scripts/bridge_container_runner.sh`](./trictrac_zero/scripts/bridge_container_runner.sh),
+note that it currently mounts the repository at `/root/backgammon`. The easiest path is therefore:
+
+  * clone or sync this repo to `/root/backgammon`
+  * run the trainer from `/root/backgammon/trictrac_zero`
+
+If your checkout lives somewhere else, either adjust that script or export a different `TRICTRAC_ZERO_BRIDGE_EXECUTABLE`.
+
+#### Fresh Box Checklist
+
+On a new remote CPU trainer machine, the minimum useful setup is:
+
+  * install Julia `1.12.x`
+  * install Docker
+  * install `tmux`
+  * sync the repo, including the Julia project and the compiled Elixir `_build/dev/lib` tree if you want the bridge to work immediately
+
+If you need to create swap quickly on Linux:
+
+```sh
+fallocate -l 64G /swapfile || dd if=/dev/zero of=/swapfile bs=1M count=65536 status=progress
+chmod 600 /swapfile
+mkswap /swapfile
+swapon /swapfile
+echo '/swapfile none swap sw 0 0' >> /etc/fstab
+printf 'vm.swappiness=10\n' > /etc/sysctl.d/99-trictrac-swappiness.conf
+sysctl -p /etc/sysctl.d/99-trictrac-swappiness.conf
+```
+
+#### Remote Launch Pattern
+
+For CPU training with the Docker-backed bridge, the most reliable launch shape has been:
+
+```sh
+cd /root/backgammon/trictrac_zero
+export TRICTRAC_ZERO_BRIDGE_EXECUTABLE=/root/backgammon/trictrac_zero/scripts/bridge_container_runner.sh
+export TRICTRAC_ZERO_BRIDGE_EBIN_ROOT=/root/backgammon/_build/dev/lib
+export TRICTRAC_ZERO_BRIDGE_MODE=worker
+
+tmux new-session -d -s trictrac_train \
+  "cd /root/backgammon/trictrac_zero && \
+   export TRICTRAC_ZERO_BRIDGE_EXECUTABLE=/root/backgammon/trictrac_zero/scripts/bridge_container_runner.sh && \
+   export TRICTRAC_ZERO_BRIDGE_EBIN_ROOT=/root/backgammon/_build/dev/lib && \
+   export TRICTRAC_ZERO_BRIDGE_MODE=worker && \
+   script -q -e -f /root/trictrac_train.log -c '/opt/julia-1.12.5/bin/julia --project scripts/train.jl --cpu-policy max --iterations 200 --game classique --target-gain 4 --move-cap 2000 --tactical-horizon-own-turns 1'"
+```
+
+Notes:
+
+  * `TRICTRAC_ZERO_BRIDGE_MODE=worker` is the preferred mode for CPU boxes. It gives each logical worker its own bridge daemon instead of routing all CPU-side tactical work through one shared daemon.
+  * `script -e` is important. Without it, an OOM-killed Julia process can leave a misleadingly clean-looking `Script done ... [COMMAND_EXIT_CODE="0"]` footer in the log.
+  * `--cpu-policy max` will re-exec Julia to use the full visible core count unless you override threads explicitly.
+
+#### Monitoring
+
+Useful remote checks while a run is live:
+
+```sh
+tail -f /root/trictrac_train.log
+```
+
+```sh
+free -h
+swapon --show
+ps -eo pid,pcpu,pmem,rss,etime,comm,args --sort=-pcpu | head -n 20
+```
+
+```sh
+journalctl -k --since '10 minutes ago' --no-pager | tail -n 80
+```
+
+The most common operational failure mode has been memory pressure from long-lived bridge daemons rather than raw Julia compute. If a run appears to stop unexpectedly, check the kernel log for OOM-killer entries before assuming the trainer exited cleanly.
 
 ### Options
 
