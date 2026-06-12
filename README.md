@@ -8,7 +8,7 @@ This is a monorepository that contains essentially everything you need to start 
 
 If you're not quite sure what a tables game is, this class includes all, and only, those stochastic games that can be played on a backgammon board. Be warned that this does **not necessarily** mean they are even remotely similar as a class; the name refers to the *equipment* only (fifteen black and fifteen white pieces, all identical, one board with twelve points, and two or three dice).
 
-Most of this is a Web service. If you are **not** a Web developer, we instead invite you to play at [trictrac.hermes.cx](trictrac.hermes.cx); honestly, this applies even if you **are** a Web developer.
+Most of this is a Web service. If you are **not** a Web developer, we instead invite you to play at [trictrac.hermes.cx](https://trictrac.hermes.cx); honestly, this applies even if you **are** a Web developer.
 
 ## Technologies Used
 
