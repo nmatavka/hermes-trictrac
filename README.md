@@ -382,7 +382,7 @@ The shared desktop variant catalogue is written to:
 
 ## How to Play
 
-There are eight games in this collection. Among these, the most rule-dense are the Group A games and bräde. All of our supported games have been collected in the form of a parallel translation in our multilingual compilation, which can be found at `/gamedocs/multilingual/Das Trictrac- und Toccategli-Spiel.md`. The compilation does not include English; from the anglophone perspective, it is invaluable to consult [Wikipedia](https://en.wikipedia.org/wiki/Trictrac).
+There are sixteen games in this collection. Among these, the most rule-dense are the Group A games and bräde. All of our supported games have been collected in the form of a parallel translation in our multilingual compilation, which can be found at `/gamedocs/multilingual/Das Trictrac- und Toccategli-Spiel.md`. The compilation does not include English; from the anglophone perspective, it is invaluable to consult [Wikipedia](https://en.wikipedia.org/wiki/Trictrac).
 
 ### Trictrac
 
