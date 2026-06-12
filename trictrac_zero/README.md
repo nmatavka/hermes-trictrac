@@ -2,7 +2,7 @@
 
 Standalone Julia training package for `trictrac_classique`, backed by the Elixir rules engine in the parent repo.
 
-## Bootstrap
+##  [README.md](README.md) Bootstrap
 
 ```bash
 cd /Users/nick/hermes_trictrac/trictrac_zero

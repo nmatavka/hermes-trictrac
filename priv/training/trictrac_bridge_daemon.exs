@@ -41,8 +41,10 @@ defmodule HermesTrictrac.Training.TrictracBridgeDaemon do
       {:error, :closed} ->
         :ok
 
-      {:error, _reason} ->
-        :ok
+      {:error, reason} ->
+        IO.warn("Bridge daemon accept failed; retrying. reason=#{inspect(reason)}")
+        Process.sleep(50)
+        accept_loop(listen_socket, parent)
     end
   end
 

@@ -19,17 +19,61 @@ using ..AlphaZero: MCTS, Util, ProfUtils
 export BatchedOracle
 
 const SERVER_FLUSH_SECONDS = 0.005
-const REQUEST_CHANNEL_LOCKS = WeakKeyDict{Channel, ReentrantLock}()
-const REQUEST_CHANNEL_LOCKS_GUARD = ReentrantLock()
 
-function request_channel_lock(reqchan::Channel)
-  lock(REQUEST_CHANNEL_LOCKS_GUARD)
+mutable struct RequestQueue
+  lock::ReentrantLock
+  ready::Threads.Condition
+  items::Vector{Any}
+  head::Int
+end
+
+function RequestQueue()
+  lock = ReentrantLock()
+  return RequestQueue(lock, Threads.Condition(lock), Any[], 1)
+end
+
+@inline request_queue_empty(queue::RequestQueue) = queue.head > length(queue.items)
+
+function maybe_compact_request_queue!(queue::RequestQueue)
+  if queue.head > 1024 && queue.head > (length(queue.items) >>> 1)
+    queue.items = queue.items[queue.head:end]
+    queue.head = 1
+  end
+  return queue
+end
+
+function request_queue_push!(queue::RequestQueue, item)
+  lock(queue.lock)
   try
-    return get!(REQUEST_CHANNEL_LOCKS, reqchan) do
-      ReentrantLock()
-    end
+    push!(queue.items, item)
+    notify(queue.ready)
   finally
-    unlock(REQUEST_CHANNEL_LOCKS_GUARD)
+    unlock(queue.lock)
+  end
+  return nothing
+end
+
+function request_queue_take!(queue::RequestQueue)
+  lock(queue.lock)
+  try
+    while request_queue_empty(queue)
+      wait(queue.ready)
+    end
+    item = @inbounds queue.items[queue.head]
+    queue.head += 1
+    maybe_compact_request_queue!(queue)
+    return item
+  finally
+    unlock(queue.lock)
+  end
+end
+
+function request_queue_isready(queue::RequestQueue)
+  lock(queue.lock)
+  try
+    return !request_queue_empty(queue)
+  finally
+    unlock(queue.lock)
   end
 end
 
@@ -61,7 +105,7 @@ The server stops automatically after all workers send `:none`.
 """
 function launch_server(f; num_workers, batch_size)
   @assert batch_size <= num_workers
-  channel = Channel(num_workers)
+  queue = RequestQueue()
   # The server is spawned on the main thread for maximal responsiveness
   Util.@tspawn_main Util.@printing_errors begin
     num_active = num_workers
@@ -69,13 +113,13 @@ function launch_server(f; num_workers, batch_size)
     while num_active > 0
       req = nothing
       if isempty(pending)
-        req = take!(channel)
-      elseif isready(channel)
-        req = take!(channel)
+        req = request_queue_take!(queue)
+      elseif request_queue_isready(queue)
+        req = request_queue_take!(queue)
       else
-        waited = timedwait(() -> isready(channel), SERVER_FLUSH_SECONDS; pollint=0.001)
+        waited = timedwait(() -> request_queue_isready(queue), SERVER_FLUSH_SECONDS; pollint=0.001)
         if waited === :ok
-          req = take!(channel)
+          req = request_queue_take!(queue)
         end
       end
 
@@ -105,7 +149,7 @@ function launch_server(f; num_workers, batch_size)
       end
     end
   end
-  return channel
+  return queue
 end
 
 """
@@ -124,13 +168,7 @@ indicated to [`launch_server`](@ref).
     rely on a neural network).
 """
 function client_done!(reqc)
-  req_lock = request_channel_lock(reqc)
-  lock(req_lock)
-  try
-    put!(reqc, :done)
-  finally
-    unlock(req_lock)
-  end
+  request_queue_push!(reqc, :done)
 end
 
 """
@@ -146,7 +184,7 @@ Create an oracle that delegates its job to an inference server.
 """
 struct BatchedOracle{F}
   preprocess :: F
-  reqchan :: Channel
+  reqchan :: RequestQueue
   anschan :: Channel
   function BatchedOracle(reqchan, preprocess=(x->x))
     return new{typeof(preprocess)}(preprocess, reqchan, Channel(1))
@@ -157,13 +195,7 @@ function (oracle::BatchedOracle)(state)
   query = oracle.preprocess(state)
   ProfUtils.instant_event(
     name="Query", cat="Query", pid=0, tid=Threads.threadid())
-  req_lock = request_channel_lock(oracle.reqchan)
-  lock(req_lock)
-  try
-    put!(oracle.reqchan, (query=query, answer_channel=oracle.anschan))
-  finally
-    unlock(req_lock)
-  end
+  request_queue_push!(oracle.reqchan, (query=query, answer_channel=oracle.anschan))
   answer = take!(oracle.anschan)
   return answer
 end

@@ -949,6 +949,11 @@ function dispatch_failed_step_batch!(service::BridgeService, spec, pending, last
       @warn "Bridge daemon step_batch failed; retrying this batch as individual daemon step requests." exception = (last_error, last_backtrace) state_dir = service.state_dir batch_items = length(pending)
     end
 
+    try
+      reset_daemon_connections!(service)
+    catch
+    end
+
     for request in pending
       try
         put!(request.reply_channel, daemon_step_request!(service, spec, request.payload))
@@ -1012,7 +1017,7 @@ function daemon_control_request!(service::BridgeService, spec, payload::Dict{Str
     try
       if attempt == 2
         try
-          reset_control_connection!(service)
+          reset_daemon_connections!(service)
         catch
         end
       end

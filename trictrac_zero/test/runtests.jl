@@ -538,15 +538,17 @@ end
 end
 
 @testset "Batchifier Concurrent Query Stress" begin
-  reqc = AlphaZero.Batchifier.launch_server(; num_workers = 8, batch_size = 8) do batch
+  reqc = AlphaZero.Batchifier.launch_server(; num_workers = 16, batch_size = 8) do batch
     return [(value = value, doubled = value * 2) for value in batch]
   end
 
+  start_gate = Base.Event()
   tasks = [
     Threads.@spawn begin
+      wait(start_gate)
       oracle = AlphaZero.Batchifier.BatchedOracle(reqc)
       try
-        for turn in 1:64
+        for turn in 1:256
           query = worker_id * 1_000 + turn
           response = oracle(query)
           @test response.value == query
@@ -556,9 +558,10 @@ end
         AlphaZero.Batchifier.client_done!(reqc)
       end
       return nothing
-    end for worker_id in 1:8
+    end for worker_id in 1:16
   ]
 
+  notify(start_gate)
   foreach(wait, tasks)
   @test all(istaskdone, tasks)
 end
@@ -1087,6 +1090,29 @@ end
     @test recovered_state["state"]["phase"] == TricTracZero.state_phase(state)
     @test !haskey(recovered_state, "error")
     @test isnothing(service.control)
+
+    fake_proc = run(`sleep 60`; wait = false)
+    try
+      TricTracZero.reset_daemon_connections!(service)
+      service.daemon_proc = fake_proc
+      service.transport = :daemon
+      mkpath(service.state_dir)
+      write(service.ready_path, "ready\n")
+      write(service.pid_path, string(getpid()))
+      open(service.socket_path, "w") do io
+        write(io, "")
+      end
+
+      recovered_again = TricTracZero.state!(TricTracZero.bridge_client(spec), spec, state)
+      @test recovered_again["state"]["phase"] == TricTracZero.state_phase(state)
+      @test !haskey(recovered_again, "error")
+      @test isnothing(service.control)
+    finally
+      try
+        Base.kill(fake_proc)
+      catch
+      end
+    end
 
     stats6 = TricTracZero.bridge_stats(spec)
     @test stats6["transport"] == "daemon"

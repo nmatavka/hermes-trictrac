@@ -1,6 +1,66 @@
-# HERMES Trictrac
+![](./assets/static/images/trictrac-wordmark.svg)
 
-Modern Phoenix 1.8 app with a React frontend over Phoenix Channels.
+# Introduction
+
+This is a monorepository that contains essentially everything you need to start your own multiplayer online tables server, with social (powered by Bluesky), ML/AI, and tournament functionality. Most major tables games are supported. For ease of use, they have been divided into two sections. **List A** contains backgammon, trictrac, trictrac à écrire, trictrac combiné, toc, and toccategli. The majority of energy has gone into List A primarily because of the rule-complexity of the games on it (not including backgammon).
+
+**List B** contains tapa, jacquet, bräde, garanguet, tavli (a repeating loop of backgammon, tapa, and jacquet), sbaraglio, sbaraglino, plein, tourne-case, and dames rabattues. *Not all of these have been fully implemented.* In terms of rule-complexity, it is likely that bräde is heaviest; not coincidentally, bräde is next to be fully audited and, if by chance it hasn't fully been implemented, it will be.
+
+If you're not quite sure what a tables game is, this class includes all, and only, those stochastic games that can be played on a backgammon board. Be warned that this does **not necessarily** mean they are even remotely similar as a class; the name refers to the *equipment* only (fifteen black and fifteen white pieces, all identical, one board with twelve points, and two or three dice).
+
+Most of this is a Web service. If you are **not** a Web developer, we instead invite you to play at [trictrac.hermes.cx](trictrac.hermes.cx); honestly, this applies even if you **are** a Web developer.
+
+## Technologies Used
+
+The multi-game itself is a Phoenix 1.8 app with a React frontend over Phoenix Channels. The code that powers it is, therefore, in Elixir. The social portion of the game is likewise in Elixir. If functional or event-driven programming is new to you, enjoy this gentle introduction.
+
+The AI trainer is in Julia with a BEAM bridge. Take note that it is *highly* demanding, and on the **CPU** side; for tactical shaping (a must!), you will want *at least* 96GB of memory and a processor that doesn't suck. A consumer GPU is good to have, but not necessary. Keep in mind that compute requirements for tactical shaping scale *exponentially*.
+
+There is also a phone app in Kotlin and a desktop app in Haskell. These are in extremely early condition and untested.
+
+
+
+## Game Structure
+
+### Event-Driven Games
+
+Other than backgammon, the List A games are **event-driven**. This means that every turn is effectively a loop of `roll -> score -> move -> pass dice`, with the `score` portion containing any number of flags which can be set either to `true` or `false`, or to `0`, `1`, `2`, or `3`. Each flag has a scoring tariff. Winning is by point accumulation.
+
+Above and below this basic loop is the scoring architecture (that part of the game that defines *how* the points are accumulated). This can be to a linear equation (*2m + n = 12* or *4w + 3x + 2y + z = 12*), to a variable (to *M* marks, with any given mark *p1, p2,... pM* consisting of *q > 6*, each *q* consisting of 12 points, thus *r* total, greater *r* at time *M* wins), or to an integer constant.
+
+Moving is *not a necessary condition* to score, and scoring follows Boolean logic (cf. "if *B* and not *C*, then you win *a* points on the opponent's behalf").
+
+The *telos* of event-driven games is **not** to race. Reaching the end of the board is merely an auditing event with a consequent token reward, followed by the immediate and unceremonious resumption of play.
+
+We are aware the above description may sound like the idle vapourings of a mind diseased—or like a finite state machine. Take your pick; we disclaim all responsibility in any event. Those who wish to inquire further may take it up with Me Euverte de Jollivet, sieur de Votilley.
+
+### Multiplex Race Games
+
+Backgammon and most of the List B games have a different structure. They are *race* games in that the object is to get all of one's pieces to a defined objective (in this case, off the board). They are *multiplex* in that, every turn, out of *u* pieces, one selects up to *v* to move. The point-scoring element is greatly reduced or absent, with the racing element privileged in exchange; the terminal win condition may, in most cases, be modelled as binary and categorical ("Marie won; Pierre lost"). That is a **complete** description of this family *qua* family.
+
+What varies, as far as the developer is concerned, are the details. Do the pieces move parallel or contrariwise? Does moving one of your pieces onto one of the opponent's put him in a sort of 'gaol' (called the *bar*)? If not, does moving one of your pieces onto one of the opponent's pin him in place so he can't move? If not, is there a special piece which must be the *first* off the board? Two dice or three? Are doubles played once or twice, and how about *trebles*?
+
+## Artificial Intelligence
+
+This repository includes an artificial intelligence trainer written in Julia that is currently set up for **event-driven games** only. The reason for this is that, as designed, it is neither bird nor beast; it is **not** a clean example of a trainer of the AlphaZero type, **nor** is it a pure expectimax search or even deterministic.
+
+In fact, it is a hybrid of both. The problem it was designed to solve is that, in event-driven games, it is conceivable (in actuality, it is true) that the primary scoring engines include the pre-positioning and the maintenance *in situ* of **complex structures**. The deliberately narrow definition we'll use is a structure that takes multiple turns to set up, and distributes rewards in a form akin to `[0, 0, 0.0417]`. (The prototypical complex structure is a capture in the game of go.)
+
+Given infinite time, an AlphaZero-class trainer with a non-binary reward structure (with the reward term being the anticipated score differential between player and opponent, put through the traditional tanh wringer) would almost surely derive a reward function for such a game, irrespective of how weak and how delayed the tactical signal. Even odds on whether this would occur before or after an infinite number of simians would reproduce the complete literary works of one Wm Shakespeare, Esq.
+
+Needless to say, we do not have infinite time for stochasticity to do the work for us. The solution chosen was to have a sort of finite-horizon tactical oracle that could highlight locally-promising lines of play. This is hard CPU work.
+
+What's even harder CPU work is that this is a fine example of the **managed code problem**. Elixir code, much like Java, runs on a virtual machine. Virtualisation inherently incurs a speed penalty. What we have now could certainly be improved—for instance, by reproducing the entire rules of all five event-driven games in Julia. Whether that would be a good use of labour is left as an exercise for the reader.
+
+We will note that we have had good results with an AMD EPYC 7C13 processor and 256 gigabytes of memory. A graphics card is recommended, though optional.
+
+For games in the race family, this architecture is in large part unnecessary, and in fact likely unwanted: no reasonable backgammon engine *needs* to learn about fractional win margins, and complex structures as defined above don't form part of the rules. Notwithstanding some technicalities (i.e. equity can vary, as with all gambling games), wins and losses in backgammon are binary, and treating them as fractional would simply be wrong (in the sense that 'Alice's expected score was 0.125 more than Bob's', which is actually a perfectly cromulent reward function for trictrac!). Thus, for race-class training, we can only recommend standard AlphaZero, preferably in Julia for interoperability.
+
+
+
+# Instructions for Deployment
+
+## Frontend
 
 To start the development server:
 
@@ -18,6 +78,73 @@ To build a release:
 
   * Run `MIX_ENV=prod mix release`
   * Start it with `PHX_SERVER=true SECRET_KEY_BASE=$(mix phx.gen.secret) _build/prod/rel/hermes_trictrac/bin/hermes_trictrac start`
+
+## Trainer
+
+### Example
+
+```shell
+$ julia --project scripts/train.jl --cpu-policy max --iterations 200 --game classique --target-gain 4 --move-cap 2000 --tactical-horizon-own-turns 1
+```
+
+### Options
+
+```
+--device <cpu|cuda|metal|auto>
+    Select the execution backend. Default: cpu.
+--gpu
+    Compatibility alias for --device=auto.
+--reset-memory
+    Reset only the replay buffer before resuming an existing session.
+--cpu-policy <headroom|max|conservative|off>
+    Set the automatic CPU policy. Default: headroom.
+--cpu-threads <auto|N>
+    Set Julia master threads directly. Explicit values override policy.
+--self-play-workers <auto|N>
+    Set self-play worker count. 'auto' restores derived behaviour.
+--arena-workers <auto|N>
+    Set arena worker count. 'auto' restores derived behaviour.
+--iterations <N>
+    Set the total session iteration target explicitly.
+--move-cap <N>
+    Set the temporary hard cap on game length. Use 0 to disable.
+--target-gain <N>
+    Set the tanh gain used for value-target shaping. Lower is less slope-y.
+--tactical-shaping <on|off>
+    Toggle tactical tariff shaping for Trictrac classique.
+--tactical-horizon-own-turns <0|1|2|3>
+    Set the tactical shaping horizon in own turns.
+--tactical-reward-weight <N>
+    Set the delta-reward tactical shaping weight.
+--tactical-heuristic-weight <N>
+    Set the heuristic tactical shaping weight.
+--partie-length-repeats <auto|N>
+    For a ecrire/combine training, use N self-play games at each marque target.
+--game <classique|classique-margot|aecrire|aecrire-margot|combine|combine-margot|toc|toc-margot|toccategli|toccategli-margot>
+    Choose the training target. Default: classique.
+--help
+    Show this help and exit.
+```
+
+### Environment
+
+- `TRICTRAC_ZERO_CPU_POLICY`
+- `TRICTRAC_ZERO_CPU_THREADS`
+- `TRICTRAC_ZERO_SELF_PLAY_WORKERS`
+- `TRICTRAC_ZERO_ARENA_WORKERS`
+- `TRICTRAC_ZERO_NUM_ITERS`
+- `TRICTRAC_ZERO_TEMP_MAX_GAME_LENGTH`
+- `TRICTRAC_ZERO_VALUE_TARGET_GAIN`
+- `TRICTRAC_ZERO_TACTICAL_SHAPING`
+- `TRICTRAC_ZERO_TACTICAL_HORIZON_OWN_TURNS`
+- `TRICTRAC_ZERO_TACTICAL_REWARD_WEIGHT`
+- `TRICTRAC_ZERO_TACTICAL_HEURISTIC_WEIGHT`
+- `TRICTRAC_ZERO_PARTIE_LENGTH_REPEATS`
+- `TRICTRAC_ZERO_GAME`
+
+### Precedence
+
+  CLI values override environment variables; environment variables override defaults.
 
 ## Desktop Foundation
 
@@ -40,20 +167,51 @@ To assemble the local support tree used by the desktop shell:
   * The default output is `.desktop/bundle`
   * To run the bundled local runtime directly, use `scripts/desktop/run_local_runtime.sh`
 
-The shared desktop variant catalog is written to:
+The shared desktop variant catalogue is written to:
 
   * `shared/ui/generated/desktop-variant-catalog.json`
 
-Ready to deploy? Please [check Phoenix deployment guides](https://hexdocs.pm/phoenix/deployment.html).
+# Learn more
 
-## Learn more
+## How to Play
 
-  * Official website: https://www.phoenixframework.org/
+There are eight games in this collection. Among these, the most rule-dense are the Group A games and bräde. All of our supported games have been collected in the form of a parallel translation in our multilingual compilation, which can be found at `/gamedocs/multilingual/Das Trictrac- und Toccategli-Spiel.md`. The compilation does not include English; from the anglophone perspective, it is invaluable to consult [Wikipedia](https://en.wikipedia.org/wiki/Trictrac).
+
+### Trictrac
+
+There are two absolutely invaluable, semi-official rulebooks for the basic game of trictrac. Both were bound together in an anthology entitled *L'Académie universelle des jeux*, which is available [here](https://archive.org/details/academie-universelle-des-jeux-good-copy). [Danish](https://archive.org/details/nyeste-dansk-spillebog), [Swedish](https://archive.org/details/konsten-att-spela-kort-boll-tarnings-good-copy), and multiple German editions of the same rules exist (in different contexts, i.e. with different games included in the respective collections).
+
+The balance of probabilities, however, is that the original work was published in French and that the others are effectively verbatim translations.
+
+There are also two further Git repositories (also in French) [here](https://github.com/mmai/leJeuDeTrictracRenduFacile) and [here](https://github.com/mmai/traiteCompletTrictrac); these reproduce the work of Nicolas Guiton and Julien Lelasseux-Lafosse.
+
+### Trictrac à écrire
+
+The chief source for the rules for trictrac à écrire is [here](https://archive.org/details/joueur-parfait). The relevant rules were reprinted verbatim numerous times, the first time by Ján Tamás de Trattner in Vienna, other times in various anthologies of games. The source given here is called *Le Joueur parfait*; it is effectively the same as *L'Académie des jeux* with a few additional games and materially worse typography.
+
+This game is only historically described in French, but its mature, currently played form almost certainly originated in Austria.
+
+### Trictrac combiné
+
+There is as yet only one documented historical source for trictrac combiné. It can be found [here](https://gallica.bnf.fr/ark:/12148/bpt6k1915370v/f1.item.texteImage). This is an intellectually demanding game, with play time equivalent to trictrac à écrire but with far higher mental load.
+
+### Bräde
+
+Bräde is described, at least by its official governing body (the Swedish Tables Association, which meets regularly at the *Vasa* Museum), in two languages: [Swedish](https://www.vasamuseet.se/globalassets/vasamuseet/dokument/vasamuseets-vanner/t_nya-svenska-bradspelsregler.pdf) and [English](https://www.vasamuseet.se/globalassets/vasamuseet/dokument/vasamuseets-vanner/t_bradspelsregler-engelska.pdf). 
+
+Historical rules for bräde, under the name **révertier** or **førkæring**, are found in *L'Académie universelle des jeux* and *Le Joueur parfait*, as well as the translations noted above.
+
+### Tapa
+
+Tapa is described [here](https://skikrakra.wordpress.com/дейност-3/спортна-табла/видове-табла/) and [here](https://tabla.bg/blog/vidove-tabla/) (in Bulgarian). Its Arabic name is mahbousa and its Greek name is plakoto.
+
+### Jacquet (Pheuga) and Garanguet
+
+Jacquet is ubiquitous in France; it is also popular in Greece. Garanguet is more obscure. For those new to either game, though, published rules are available in [this](https://github.com/mmai/coursCompletdeTrictrac) Git repository, which contains a trictrac manual written by P. M. M. Lepeintre, to which they were added as appendices. **We do not recommend this manual for learning trictrac**; Lepeintre has an unfortunate habit of pointlessly bloviating about the moral panics of his day and age, about (occasionally imprecise) history, about politics, about literature...
+
+## Phoenix/Elixir
+
+  * Official website for Phoenix: https://www.phoenixframework.org/
   * Guides: https://hexdocs.pm/phoenix/overview.html
   * Docs: https://hexdocs.pm/phoenix
   * Source: https://github.com/phoenixframework/phoenix
-
-# Attribution
-
- * Dice Images: https://game-icons.net/tags/dice.html
- * Dice Favicon: https://www.favicon.cc/?action=icon&file_id=927484
