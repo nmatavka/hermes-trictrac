@@ -149,7 +149,7 @@ $ julia --project scripts/train.jl --cpu-policy max --iterations 200 --game clas
 ## Desktop Foundation
 
 The repo now includes a native desktop foundation under
-`/Users/nick/backgammon/haskell/hermes-desktop`.
+`haskell/hermes-desktop`.
 
 The intended desktop bundle has two parts:
 
