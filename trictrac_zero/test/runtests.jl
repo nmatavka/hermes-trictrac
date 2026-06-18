@@ -1956,6 +1956,56 @@ end
   end
 end
 
+@testset "Session Tolerates Missing Trailing Reports" begin
+  mktempdir() do dir
+    spec = classique_test_spec()
+    params = TricTracZero.build_params(smoke = false, use_gpu = false)
+    nn = TricTracSparseNet(spec, TricTracZero.netparams())
+    env = AlphaZero.Env(spec, params, nn, copy(nn), AlphaZero.TrainingSample{TricTracState}[], 3)
+    UserInterface.save_env(env, dir)
+
+    perfs = AlphaZero.Report.Perfs(0.0, 0, 0.0)
+    loss = AlphaZero.Report.Loss(0f0, 0f0, 0f0, 0f0, 0f0)
+    status = AlphaZero.Report.LearningStatus(loss, 0f0, 0f0)
+    samples = AlphaZero.Report.Samples(0, 0, 0f0, status)
+    memory = AlphaZero.Report.Memory(samples, samples, AlphaZero.Report.StageSamples[])
+    learning = AlphaZero.Report.Learning(0.0, 0.0, 0.0, 0.0, status, Float32[], AlphaZero.Report.Checkpoint[], false)
+    iteration = AlphaZero.Report.Iteration(
+      perfs,
+      perfs,
+      perfs,
+      AlphaZero.Report.SelfPlay(0.0, 0.0, 0, 0, 0),
+      memory,
+      learning
+    )
+
+    @test AlphaZero.UserInterface.valid_session_report(AlphaZero.UserInterface.SessionReport())
+
+    for it in 0:2
+      idir = joinpath(dir, UserInterface.ITERS_DIR, string(it))
+      mkpath(idir)
+      UserInterface.write_json_atomic(joinpath(idir, UserInterface.BENCHMARK_FILE), AlphaZero.Report.Benchmark())
+      if it > 0
+        UserInterface.write_json_atomic(joinpath(idir, UserInterface.REPORT_FILE), iteration)
+      end
+    end
+
+    experiment = AlphaZero.Experiments.Experiment(
+      "trictrac-classique",
+      spec,
+      params,
+      TricTracSparseNet,
+      TricTracZero.netparams(),
+      TricTracZero.BENCHMARKS
+    )
+
+    session = UserInterface.Session(experiment; dir = dir, autosave = false, nostdout = true)
+    @test session.env.itc == 3
+    @test length(session.report.iterations) == 2
+    @test length(session.report.benchmark) == 3
+  end
+end
+
 @testset "Checkpoint Evaluation Empty Results" begin
   arena = TricTracZero.build_params(smoke = true, use_gpu = false).arena
 

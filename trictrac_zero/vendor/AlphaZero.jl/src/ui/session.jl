@@ -23,6 +23,7 @@ struct SessionReport
 end
 
 function valid_session_report(r::SessionReport)
+  isempty(r.benchmark) && return isempty(r.iterations)
   if length(r.benchmark) == length(r.iterations) + 1
     nduels = length(r.benchmark[1])
     return all(length(b) == nduels for b in r.benchmark)
@@ -184,21 +185,36 @@ end
 ##### Save and load session reports
 #####
 
-function load_session_report(dir::String, niters)
+function load_session_report(dir::String, niters; logger=nothing)
   rep = SessionReport()
   for itc in 0:niters
     idir = iterdir(dir, itc)
     ifile = joinpath(idir, REPORT_FILE)
     bfile = joinpath(idir, BENCHMARK_FILE)
-    # Load the benchmark report
+    if itc == 0
+      if !isfile(bfile)
+        message = "Missing zeroth-iteration benchmark metadata at $(bfile); starting with an empty session report."
+        isnothing(logger) ? @warn(message) : Log.print(logger, Log.RED, message)
+        break
+      end
+      open(bfile, "r") do io
+        push!(rep.benchmark, JSON3.read(io, Report.Benchmark))
+      end
+      continue
+    end
+
+    if !isfile(bfile) || !isfile(ifile)
+      missing = !isfile(bfile) ? bfile : ifile
+      message = "Missing session report metadata at iteration $(itc) ($(missing)); loaded reports through iteration $(itc - 1) instead."
+      isnothing(logger) ? @warn(message) : Log.print(logger, Log.RED, message)
+      break
+    end
+
     open(bfile, "r") do io
       push!(rep.benchmark, JSON3.read(io, Report.Benchmark))
     end
-    # Load the iteration report
-    if itc > 0
-      open(ifile, "r") do io
-        push!(rep.iterations, JSON3.read(io, Report.Iteration))
-      end
+    open(ifile, "r") do io
+      push!(rep.iterations, JSON3.read(io, Report.Iteration))
     end
   end
   @assert valid_session_report(rep)
@@ -349,7 +365,7 @@ function Session(
     end
     @assert same_json(Network.hyperparams(env.bestnn), e.netparams)
     session = Session(env, dir, logger, autosave, save_intermediate, e.benchmark)
-    session.report = load_session_report(dir, env.itc)
+    session.report = load_session_report(dir, env.itc; logger)
   else
     network = e.mknet(e.gspec, e.netparams)
     env = Env(e.gspec, e.params, network)
