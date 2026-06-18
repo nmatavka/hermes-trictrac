@@ -852,13 +852,16 @@ function tactical_signature(gspec::TricTracGameSpec)
     "horizon_own_turns" => Int(get(config, "horizon_own_turns", 0)),
     "reward_weight" => Float64(get(config, "reward_weight", 0.0)),
     "heuristic_weight" => Float64(get(config, "heuristic_weight", 0.0)),
-    "version" => String(get(config, "version", "classique-tactical-v3"))
+    "version" => String(get(config, "version", DEFAULT_TACTICAL_VERSION))
   )
 end
 
+const TACTICAL_SIGNATURE_METADATA_KEY = "trictrac_tactical_signature"
+const LEGACY_CLASSIQUE_TACTICAL_SIGNATURE_METADATA_KEY = "classique_tactical_signature"
+
 function desired_session_runtime_metadata(gspec::TricTracGameSpec)
   return Dict{String, Any}(
-    "classique_tactical_signature" => tactical_signature(gspec)
+    TACTICAL_SIGNATURE_METADATA_KEY => tactical_signature(gspec)
   )
 end
 
@@ -900,13 +903,17 @@ function apply_session_runtime_metadata!(
   if AlphaZero.UserInterface.valid_session_dir(dir)
     rewrite_session_gspec!(dir, gspec)
     previous = load_session_runtime_metadata(dir)
-    old_signature = get(previous, "classique_tactical_signature", nothing)
-    new_signature = metadata["classique_tactical_signature"]
+    old_signature = get(
+      previous,
+      TACTICAL_SIGNATURE_METADATA_KEY,
+      get(previous, LEGACY_CLASSIQUE_TACTICAL_SIGNATURE_METADATA_KEY, nothing)
+    )
+    new_signature = metadata[TACTICAL_SIGNATURE_METADATA_KEY]
     signatures_match = !isnothing(old_signature) && old_signature == new_signature
-    if gspec.variant_id == "trictrac_classique" && !signatures_match
+    if tactical_variant(gspec) && !signatures_match
       reset_for_signature = !reset_memory && reset_session_memory!(dir)
       if reset_for_signature
-        @info "Reset replay buffer in $dir because the Classique tactical shaping signature changed."
+        @info "Reset replay buffer in $dir because the Trictrac tactical shaping signature changed."
       end
     end
   end

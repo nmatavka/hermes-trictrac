@@ -26,7 +26,7 @@
       </nav>
     </aside>
 
-    <article class="rules-article">
+    <article class={if(@chapter.route_path == @book.first_chapter_path, do: "rules-article rules-frontmatter", else: "rules-article")}>
       <header class="rules-article-header">
         <p class="rules-book-eyebrow"><%= @book.title %></p>
         <h2><%= @chapter.title %></h2>

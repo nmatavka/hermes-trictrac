@@ -2,6 +2,7 @@ defmodule HermesTrictrac.Training.TrictracBridge do
   alias HermesTrictrac.Rules.{Registry, TrictracCore}
   alias HermesTrictrac.Rules.Trictrac.Classique
   alias HermesTrictrac.Rules.Trictrac.Classique.{Branches, Events, Moves}
+  alias HermesTrictrac.Rules.Trictrac.Toc
 
   @default_variant_id "trictrac_classique"
   @default_match_options %{"margotEnabled" => false}
@@ -10,10 +11,10 @@ defmodule HermesTrictrac.Training.TrictracBridge do
     "horizon_own_turns" => 3,
     "reward_weight" => 1.0,
     "heuristic_weight" => 1.0,
-    "version" => "classique-tactical-v3"
+    "version" => "trictrac-tactical-v1"
   }
   @toc_default_options %{"holeTarget" => "7", "doublesMode" => "off"}
-  @score_normalizer 144.0
+  @classique_score_normalizer 144.0
   @dice_classes for(a <- 1..6, b <- a..6, do: {a, b, if(a == b, do: 1.0 / 36.0, else: 2.0 / 36.0)})
   @tactical_cache_table :trictrac_bridge_tactical_cache
   @step_cache_table :trictrac_bridge_step_cache
@@ -287,10 +288,14 @@ defmodule HermesTrictrac.Training.TrictracBridge do
     end)
   end
 
+  defp tactical_variant_supported?(variant_id) do
+    variant_id in ["trictrac_classique", "trictrac_aecrire", "trictrac_combine", "toccategli", "toc"]
+  end
+
   defp resolve_tactical_config(config, runtime) do
     configured = normalize_map(Map.get(normalize_map(config), "tactical_config", %{}))
     variant_id = get_in(runtime, [:match, :variant_id]) || @default_variant_id
-    enabled_default = variant_id == "trictrac_classique"
+    enabled_default = tactical_variant_supported?(variant_id)
 
     enabled =
       configured
@@ -303,7 +308,7 @@ defmodule HermesTrictrac.Training.TrictracBridge do
       |> to_int()
       |> clamp_int(0, 3)
 
-    if variant_id != "trictrac_classique" do
+    if !tactical_variant_supported?(variant_id) do
       %{@default_tactical_config | "enabled" => false, "horizon_own_turns" => 0}
     else
       %{
@@ -672,13 +677,14 @@ defmodule HermesTrictrac.Training.TrictracBridge do
   defp tactical_tariff_summary(runtime, config, runtime_term) do
     variant_id = get_in(runtime, [:match, :variant_id]) || @default_variant_id
 
-    if variant_id != "trictrac_classique" do
+    if !tactical_variant_supported?(variant_id) do
       nil
     else
       tactical = resolve_tactical_config(config, runtime)
 
-      if !tactical["enabled"] or tactical["horizon_own_turns"] <= 0 or terminal?(runtime) do
-        tactical_summary_payload(tactical, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+      if !tactical["enabled"] or tactical["horizon_own_turns"] <= 0 or terminal?(runtime) or
+           opening_roll_roll_phase?(runtime) do
+        tactical_summary_payload(variant_id, runtime, tactical, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
       else
         fetch_or_store_tactical_summary(runtime_term, tactical, fn ->
           {variant, _options} =
@@ -692,6 +698,10 @@ defmodule HermesTrictrac.Training.TrictracBridge do
         end)
       end
     end
+  end
+
+  defp opening_roll_roll_phase?(runtime) do
+    phase(runtime) == "roll" and is_nil(runtime.turn_color)
   end
 
   defp fetch_or_store_tactical_summary(runtime_term, tactical, compute) do
@@ -968,6 +978,8 @@ defmodule HermesTrictrac.Training.TrictracBridge do
   end
 
   defp build_tactical_summary(runtime, variant, tactical) do
+    variant_id = get_in(runtime, [:match, :variant_id]) || @default_variant_id
+
     with_request_tactical_context(fn context ->
       {white_h1, white_h2, white_h3} =
         profile_metric(:tactical_horizons_white, fn ->
@@ -984,6 +996,8 @@ defmodule HermesTrictrac.Training.TrictracBridge do
         end)
 
       tactical_summary_payload(
+        variant_id,
+        runtime,
         tactical,
         white_h1,
         white_h2,
@@ -1097,7 +1111,7 @@ defmodule HermesTrictrac.Training.TrictracBridge do
       moves_played = Map.get(runtime.dice || %{}, :moves_played, [])
 
       baseline_value =
-        turn_net_tariff_points(score_context, runtime.board)
+        turn_local_tactical_value(score_context, runtime.board)
 
       moves =
         runtime
@@ -1124,7 +1138,7 @@ defmodule HermesTrictrac.Training.TrictracBridge do
               next_board = Moves.apply_step_move(runtime.board, color, move)
 
               value =
-                turn_net_tariff_points(score_context, next_board)
+                turn_local_tactical_value(score_context, next_board)
 
               choose_better_step_value(best, {value, length(used), move_sort_key(move)})
             end)
@@ -1171,7 +1185,7 @@ defmodule HermesTrictrac.Training.TrictracBridge do
             color,
             fn leaf_runtime, _played ->
               value =
-                turn_net_tariff_points(score_context, leaf_runtime.board)
+                turn_local_tactical_value(score_context, leaf_runtime.board)
 
               next_runtime = Map.put(leaf_runtime, :legal_moves, [])
 
@@ -1187,7 +1201,7 @@ defmodule HermesTrictrac.Training.TrictracBridge do
             end,
             move_ranker: fn current_runtime, move ->
               next_board = Moves.apply_step_move(current_runtime.board, color, move)
-              turn_net_tariff_points(score_context, next_board)
+              turn_local_tactical_value(score_context, next_board)
             end
           )
         end)
@@ -1482,9 +1496,11 @@ defmodule HermesTrictrac.Training.TrictracBridge do
   end
 
   defp scoring_leaf_trictrac_key(trictrac) do
+    options = Map.get(trictrac, :options, %{})
+
     {
       Map.get(trictrac, :opening),
-      get_in(trictrac, [:options, "margotEnabled"]) || false,
+      options,
       Map.get(trictrac, :pending_impuissance_by_type, %{white: 0, black: 0}),
       Map.get(trictrac, :pile_misere_pending_by_type, %{white: false, black: false})
     }
@@ -1527,6 +1543,8 @@ defmodule HermesTrictrac.Training.TrictracBridge do
   end
 
   defp tactical_summary_payload(
+         variant_id,
+         runtime,
          tactical,
          white_h1,
          white_h2,
@@ -1539,19 +1557,25 @@ defmodule HermesTrictrac.Training.TrictracBridge do
       "enabled" => tactical["enabled"],
       "horizon_own_turns" => tactical["horizon_own_turns"],
       "white" => %{
-        "h1" => normalize_tariff_value(white_h1),
-        "h2" => normalize_tariff_value(white_h2),
-        "h3" => normalize_tariff_value(white_h3)
+        "h1" => normalize_tactical_value(variant_id, runtime, white_h1),
+        "h2" => normalize_tactical_value(variant_id, runtime, white_h2),
+        "h3" => normalize_tactical_value(variant_id, runtime, white_h3)
       },
       "black" => %{
-        "h1" => normalize_tariff_value(black_h1),
-        "h2" => normalize_tariff_value(black_h2),
-        "h3" => normalize_tariff_value(black_h3)
+        "h1" => normalize_tactical_value(variant_id, runtime, black_h1),
+        "h2" => normalize_tactical_value(variant_id, runtime, black_h2),
+        "h3" => normalize_tactical_value(variant_id, runtime, black_h3)
       }
     }
   end
 
-  defp normalize_tariff_value(value), do: value / @score_normalizer
+  defp normalize_tactical_value("toc", _runtime, value), do: value
+
+  defp normalize_tactical_value("trictrac_aecrire", runtime, value) do
+    value / max(12.0 * aecrire_partie_length(runtime), 12.0)
+  end
+
+  defp normalize_tactical_value(_variant_id, _runtime, value), do: value / @classique_score_normalizer
 
   defp dice_class(a, b) do
     moves = if(a == b, do: [a, a, a, a], else: [a, b])
@@ -1564,6 +1588,7 @@ defmodule HermesTrictrac.Training.TrictracBridge do
         start_board: start_board,
         variant: variant,
         color: color,
+        variant_id: Map.get(variant, :id),
         dice: dice,
         trictrac: trictrac,
         branches_info: Branches.best_end_branches(start_board, variant, color, dice)
@@ -1571,7 +1596,15 @@ defmodule HermesTrictrac.Training.TrictracBridge do
     end)
   end
 
-  defp turn_net_tariff_points(
+  defp turn_local_tactical_value(%{variant_id: "toc"} = context, end_board) do
+    turn_hole_outcome_value(context, end_board)
+  end
+
+  defp turn_local_tactical_value(context, end_board) do
+    turn_net_tariff_points(context, end_board)
+  end
+
+  defp turn_events(
          %{start_board: start_board, variant: variant, color: color, dice: dice, trictrac: trictrac,
            branches_info: branches_info},
          end_board
@@ -1581,11 +1614,64 @@ defmodule HermesTrictrac.Training.TrictracBridge do
       branches_info: branches_info
     )
     |> Map.get(:events, [])
+  end
+
+  defp turn_net_tariff_points(
+         %{color: color} = context,
+         end_board
+       ) do
+    context
+    |> turn_events(end_board)
     |> Enum.reduce(0.0, fn event, total ->
       points = Map.get(event, :points, 0)
       beneficiary = Map.get(event, :beneficiary)
       total + if(beneficiary == color, do: points, else: -points)
     end)
+  end
+
+  defp turn_hole_outcome_value(%{color: color, trictrac: trictrac, dice: dice} = context, end_board) do
+    events = turn_events(context, end_board)
+    options = Map.get(trictrac, :options, %{})
+    hole_target = hole_target(options)
+
+    case Toc.result(%{turn: %{events: events, dice: dice}}, color, options) do
+      %{beneficiary: beneficiary, holes: holes, points: points} ->
+        sign = if(beneficiary == color, do: 1.0, else: -1.0)
+        tie_break = 0.001 * points / (@classique_score_normalizer * hole_target)
+        sign * (holes / hole_target + tie_break)
+
+      nil ->
+        0.0
+    end
+  end
+
+  defp aecrire_partie_length(runtime) do
+    runtime
+    |> get_in([:trictrac, :track_aecrire, :partie_length])
+    |> case do
+      value when is_integer(value) and value > 0 -> value
+      value when is_binary(value) ->
+        case Integer.parse(value) do
+          {parsed, ""} when parsed > 0 -> parsed
+          _ -> 16
+        end
+
+      _ ->
+        16
+    end
+  end
+
+  defp hole_target(options) do
+    case Map.get(options, "holeTarget", "1") do
+      value when is_integer(value) and value > 0 ->
+        value * 1.0
+
+      value ->
+        case Integer.parse(to_string(value)) do
+          {parsed, ""} when parsed > 0 -> parsed * 1.0
+          _ -> 1.0
+        end
+    end
   end
 
   defp legal_actions(runtime) do

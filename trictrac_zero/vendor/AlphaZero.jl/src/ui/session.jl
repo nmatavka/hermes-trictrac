@@ -87,7 +87,6 @@ function valid_session_dir(dir)
   isfile(joinpath(dir, PARAMS_FILE)) &&
   isfile(joinpath(dir, BESTNN_FILE)) &&
   isfile(joinpath(dir, CURNN_FILE)) &&
-  isfile(joinpath(dir, MEM_FILE)) &&
   isfile(joinpath(dir, ITC_FILE))
 end
 
@@ -495,6 +494,13 @@ function print_report(
     report::Report.Evaluation;
     nn_replaced=false,
     ternary_outcome=false)
+
+  if !AlphaZero.evaluation_has_completed_games(report)
+    details = ["no completed checkpoint games"]
+    nn_replaced && push!(details, "network replaced")
+    Log.print(logger, "Average reward: N/A ($(join(details, ", "))), redundancy: N/A")
+    return
+  end
 
   r = pyfmt("+.2f", report.avgr)
   if ternary_outcome

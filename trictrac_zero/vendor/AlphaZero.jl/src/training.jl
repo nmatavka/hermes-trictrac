@@ -167,18 +167,38 @@ end
 
 # Compare two versions of a neural network (params::ArenaParams)
 # Works for both two-player and single-player games
+evaluation_average(values::AbstractVector{<:Number}) =
+  isempty(values) ? 0.0 : mean(values)
+
+evaluation_has_completed_games(report::Report.Evaluation) =
+  !isempty(report.rewards) &&
+  (isnothing(report.baseline_rewards) || !isempty(report.baseline_rewards))
+
+checkpoint_evaluation_succeeds(report::Report.Evaluation, threshold::Real) =
+  evaluation_has_completed_games(report) && report.avgr >= threshold
+
 function compare_networks(gspec, contender, baseline, params, handler)
   legend = "Most recent NN versus best NN so far"
   if GI.two_players(gspec)
     (rewards_c, red), t =
       @timed pit_networks(gspec, contender, baseline, params, handler)
-    avgr = mean(rewards_c)
+    if isempty(rewards_c)
+      @warn "Checkpoint evaluation produced no completed games; treating this checkpoint as a failed arena comparison."
+      avgr = 0.0
+    else
+      avgr = mean(rewards_c)
+    end
     rewards_b = nothing
   else
     (rewards_c, red_c), tc = @timed evaluate_network(gspec, contender, params, handler)
     (rewards_b, red_b), tb = @timed evaluate_network(gspec, baseline, params, handler)
-    avgr = mean(rewards_c) - mean(rewards_b)
-    red = mean([red_c, red_b])
+    if isempty(rewards_c) || isempty(rewards_b)
+      @warn "Checkpoint evaluation produced no completed games for at least one network; treating this checkpoint as a failed arena comparison."
+      avgr = 0.0
+    else
+      avgr = mean(rewards_c) - mean(rewards_b)
+    end
+    red = evaluation_average([red_c, red_b])
     t = tc + tb
   end
   return Report.Evaluation(legend, avgr, red, rewards_c, rewards_b, t)
@@ -250,7 +270,7 @@ function learning_step!(env::Env, handler)
         compare_networks(env.gspec, env.curnn, env.bestnn, ap, handler)
       teval += eval_report.time
       # If eval is good enough, replace network
-      success = (eval_report.avgr >= best_evalr)
+      success = checkpoint_evaluation_succeeds(eval_report, best_evalr)
       if success
         nn_replaced = true
         env.bestnn = copy(env.curnn)

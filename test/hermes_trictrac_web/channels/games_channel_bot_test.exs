@@ -112,6 +112,60 @@ defmodule HermesTrictracWeb.GamesChannelBotTest do
     def choose_action(_preset, serialized_state), do: choose_action(serialized_state)
   end
 
+  defmodule SlowReadyFakeTrictracBot do
+    def model_name, do: "SlowReadyFakeTricTracZero"
+    def model_name(_preset), do: "SlowReadyFakeTricTracZero"
+    def ready, do: ready("classique")
+
+    def ready(preset) do
+      case Application.get_env(:hermes_trictrac, :trictrac_model_bot_test_pid) do
+        pid when is_pid(pid) -> send(pid, {:slow_ready_called, self(), preset})
+        _ -> :ok
+      end
+
+      receive do
+        :continue_slow_ready -> :ok
+      after
+        5_000 -> {:error, "Slow ready should not be called during join."}
+      end
+    end
+
+    def choose_action(serialized_state) do
+      case serialized_state["legal_actions"] do
+        [action | _] -> {:ok, action}
+        _ -> {:error, "No legal actions available in slow-ready fake bot."}
+      end
+    end
+
+    def choose_action(_preset, serialized_state), do: choose_action(serialized_state)
+  end
+
+  defmodule PausedDecisionFakeTrictracBot do
+    def model_name, do: "PausedDecisionFakeTricTracZero"
+    def model_name(_preset), do: "PausedDecisionFakeTricTracZero"
+    def ready, do: :ok
+    def ready(_preset), do: :ok
+
+    def choose_action(serialized_state) do
+      notify(serialized_state)
+
+      receive do
+        :continue_paused_decision_bot -> {:error, "Paused decision bot resumed."}
+      after
+        5_000 -> {:error, "Timed out while waiting to resume the paused decision bot."}
+      end
+    end
+
+    def choose_action(_preset, serialized_state), do: choose_action(serialized_state)
+
+    defp notify(serialized_state) do
+      case Application.get_env(:hermes_trictrac, :trictrac_model_bot_test_pid) do
+        pid when is_pid(pid) -> send(pid, {:paused_decision_bot_started, serialized_state})
+        _ -> :ok
+      end
+    end
+  end
+
   setup do
     original = Application.get_env(:hermes_trictrac, :trictrac_model_bot_impl)
     Application.put_env(:hermes_trictrac, :trictrac_model_bot_impl, FakeTrictracBot)
@@ -246,6 +300,54 @@ defmodule HermesTrictracWeb.GamesChannelBotTest do
     assert host_reply.game["bot"]["enabled"] == true
   end
 
+  test "GameServer bot join does not wait for a blocking model ready ping" do
+    original_test_pid = Application.get_env(:hermes_trictrac, :trictrac_model_bot_test_pid)
+    Application.put_env(:hermes_trictrac, :trictrac_model_bot_impl, SlowReadyFakeTrictracBot)
+    Application.put_env(:hermes_trictrac, :trictrac_model_bot_test_pid, self())
+
+    on_exit(fn ->
+      if is_nil(original_test_pid) do
+        Application.delete_env(:hermes_trictrac, :trictrac_model_bot_test_pid)
+      else
+        Application.put_env(:hermes_trictrac, :trictrac_model_bot_test_pid, original_test_pid)
+      end
+    end)
+
+    lobby = "tt-bot-slow-ready-#{System.unique_integer([:positive])}"
+    GameServer.reg(lobby)
+    GameServer.start(lobby, "trictrac_classique")
+
+    task =
+      Task.async(fn ->
+        GameServer.join(lobby, "nick", "tt-bot-slow-ready-host", "trictrac_classique", %{
+          "bot" => "trictrac_zero",
+          "bot_margot" => "yes"
+        })
+      end)
+
+    result =
+      case Task.yield(task, 500) do
+        {:ok, {:ok, host_reply}} ->
+          host_reply
+
+        nil ->
+          receive do
+            {:slow_ready_called, game_server_pid, _preset} ->
+              send(game_server_pid, :continue_slow_ready)
+          after
+            0 -> :ok
+          end
+
+          Task.shutdown(task, :brutal_kill)
+          flunk("bot join waited for model ready before replying")
+      end
+
+    refute_received {:slow_ready_called, _pid, _preset}
+    assert result.game["status"] == "playing"
+    assert result.game["bot"]["name"] == "SlowReadyFakeTricTracZero"
+    assert result.game["opening_roll"]["pending"] == true
+  end
+
   test "joining with bot is exposed for toc and applies default match options" do
     lobby = "toc-bot-#{System.unique_integer([:positive])}"
 
@@ -300,6 +402,10 @@ defmodule HermesTrictracWeb.GamesChannelBotTest do
                "combine-bot-host"
              )
 
+    assert game["status"] == "awaiting_match_options"
+    assert get_in(game, ["pending_match_options", "responses", "white"]) == "20"
+
+    game = GameServer.peek(lobby)
     assert game["status"] == "playing"
     assert game["pending_match_options"] == nil
     assert game["match"]["options"]["aEcrirePartieLength"] == "20"
@@ -331,6 +437,10 @@ defmodule HermesTrictracWeb.GamesChannelBotTest do
                "aecrire-bot-host"
              )
 
+    assert game["status"] == "awaiting_match_options"
+    assert get_in(game, ["pending_match_options", "responses", "white"]) == "24"
+
+    game = GameServer.peek(lobby)
     assert game["status"] == "playing"
     assert game["pending_match_options"] == nil
     assert game["match"]["options"]["aEcrirePartieLength"] == "24"
@@ -521,9 +631,94 @@ defmodule HermesTrictracWeb.GamesChannelBotTest do
 
         assert snapshot["pending_turn_decision"] == nil
         assert snapshot["turn"]["color"] == "black"
+        assert :sys.get_state(pid).engine.turn_color == :black
       end)
 
     assert log =~ "Bot follow-up failed"
+  end
+
+  test "human turn decision replies before a slow bot follow-up completes" do
+    original_test_pid = Application.get_env(:hermes_trictrac, :trictrac_model_bot_test_pid)
+    Application.put_env(:hermes_trictrac, :trictrac_model_bot_test_pid, self())
+
+    on_exit(fn ->
+      if is_nil(original_test_pid) do
+        Application.delete_env(:hermes_trictrac, :trictrac_model_bot_test_pid)
+      else
+        Application.put_env(:hermes_trictrac, :trictrac_model_bot_test_pid, original_test_pid)
+      end
+    end)
+
+    lobby = "tt-bot-decision-async-#{System.unique_integer([:positive])}"
+    GameServer.reg(lobby)
+    GameServer.start(lobby, "trictrac_classique")
+
+    assert {:ok, %{game: _game, player: _player}} =
+             GameServer.join(lobby, "nick", "tt-bot-decision-async-host", "trictrac_classique", %{
+               "bot" => "trictrac_zero"
+             })
+
+    Application.put_env(:hermes_trictrac, :trictrac_model_bot_impl, PausedDecisionFakeTrictracBot)
+
+    pid = GenServer.whereis(GameServer.reg(lobby))
+
+    :sys.replace_state(pid, fn state ->
+      engine = state.engine
+
+      pending = %{
+        "key" => "reprise",
+        "prompt" => "Synthetic reprise",
+        "actorColor" => "white",
+        "choices" => ["tenir", "s'en aller"]
+      }
+
+      runtime =
+        engine
+        |> Engine.runtime_view()
+        |> Map.put(:turn_color, :white)
+        |> Map.put(:turn_number, 1)
+        |> Map.put(:dice, nil)
+        |> Map.put(:legal_moves, [])
+        |> Map.put(:pending_turn_decision, pending)
+
+      updated_engine = %{
+        engine
+        | runtime: runtime,
+          turn_color: :white,
+          turn_number: 1,
+          dice: nil,
+          legal_moves: [],
+          pending_turn_decision: pending
+      }
+
+      %{state | engine: updated_engine}
+    end)
+
+    task =
+      Task.async(fn ->
+        GameServer.submit_turn_decision(lobby, "tenir", "nick", "tt-bot-decision-async-host")
+      end)
+
+    snapshot =
+      case Task.yield(task, 500) do
+        {:ok, {:ok, snapshot}} ->
+          snapshot
+
+        nil ->
+          send(pid, :continue_paused_decision_bot)
+          Task.shutdown(task, :brutal_kill)
+          flunk("submit_turn_decision waited for the bot follow-up before replying")
+      end
+
+    assert snapshot["pending_turn_decision"] == nil
+    assert snapshot["turn"]["color"] == "black"
+    assert snapshot["viewer"]["seat_color"] == "white"
+
+    assert_receive {:paused_decision_bot_started, serialized_state}, 500
+    assert is_list(serialized_state["legal_actions"])
+
+    send(pid, :continue_paused_decision_bot)
+    assert :sys.get_state(pid).engine.turn_color == :black
   end
 
   test "peek advances a bot decision when actorColor is black even if turn_color is white" do
@@ -779,8 +974,97 @@ defmodule HermesTrictracWeb.GamesChannelBotTest do
     play_available_checker_moves(lobby, pid, "nick", "tt-bot-preset-host")
 
     assert {:ok, game} = GameServer.confirm(lobby, "nick", "tt-bot-preset-host")
+    assert game["turn"]["color"] == "black"
+
+    game = GameServer.peek(lobby)
     assert game["turn"]["color"] == "white"
     assert game["turn"]["number"] == 4
+  end
+
+  test "human move in a bot game does not wake TrictracZero while the turn remains human" do
+    original_impl = Application.get_env(:hermes_trictrac, :trictrac_model_bot_impl)
+    original_test_pid = Application.get_env(:hermes_trictrac, :trictrac_model_bot_test_pid)
+    Application.put_env(:hermes_trictrac, :trictrac_model_bot_impl, SpyFakeTrictracBot)
+    Application.put_env(:hermes_trictrac, :trictrac_model_bot_test_pid, self())
+
+    on_exit(fn ->
+      if is_nil(original_impl) do
+        Application.delete_env(:hermes_trictrac, :trictrac_model_bot_impl)
+      else
+        Application.put_env(:hermes_trictrac, :trictrac_model_bot_impl, original_impl)
+      end
+
+      if is_nil(original_test_pid) do
+        Application.delete_env(:hermes_trictrac, :trictrac_model_bot_test_pid)
+      else
+        Application.put_env(:hermes_trictrac, :trictrac_model_bot_test_pid, original_test_pid)
+      end
+    end)
+
+    lobby = "tt-bot-human-move-#{System.unique_integer([:positive])}"
+    GameServer.reg(lobby)
+    GameServer.start(lobby, "trictrac_classique")
+
+    assert {:ok, %{game: _game, player: _player}} =
+             GameServer.join(lobby, "nick", "tt-bot-human-move-host", "trictrac_classique", %{
+               "bot" => "trictrac_zero",
+               "bot_margot" => "yes"
+             })
+
+    pid = GenServer.whereis(GameServer.reg(lobby))
+
+    :sys.replace_state(pid, fn state ->
+      engine = state.engine
+
+      runtime =
+        engine
+        |> Engine.runtime_view()
+        |> Map.put(:turn_color, :white)
+        |> Map.put(:turn_number, 2)
+        |> Map.put(:dice, nil)
+        |> Map.put(:legal_moves, [])
+        |> Map.put(:pending_turn_decision, nil)
+
+      updated_engine = %{
+        engine
+        | runtime: runtime,
+          turn_color: :white,
+          turn_number: 2,
+          dice: nil,
+          legal_moves: [],
+          pending_turn_decision: nil
+      }
+
+      %{state | engine: updated_engine}
+    end)
+
+    assert {:ok, game} = GameServer.roll(lobby, "nick", "tt-bot-human-move-host")
+    assert game["turn"]["color"] == "white"
+
+    move_action =
+      pid
+      |> :sys.get_state()
+      |> then(fn state -> Engine.runtime_view(state.engine) end)
+      |> HermesTrictrac.Training.TrictracBridge.serialize_state()
+      |> Map.fetch!("legal_actions")
+      |> Enum.find(&(&1["type"] == "move"))
+
+    assert move_action
+
+    assert {:ok, game} =
+             GameServer.move(
+               lobby,
+               %{
+                 "from" => move_action["from"],
+                 "to" => move_action["to"],
+                 "sequence" => move_action["sequence"]
+               },
+               "nick",
+               "tt-bot-human-move-host"
+             )
+
+    assert game["turn"]["color"] == "white"
+    refute_received {:choose_action_called, _serialized_state}
   end
 
   test "channel subscribers receive an intermediate update with the bot dice before its turn finishes" do
@@ -847,7 +1131,9 @@ defmodule HermesTrictracWeb.GamesChannelBotTest do
 
     log =
       capture_log(fn ->
-        task = Task.async(fn -> GameServer.confirm(lobby, "nick", "tt-bot-visible-host") end)
+        assert {:ok, game} = GameServer.confirm(lobby, "nick", "tt-bot-visible-host")
+        assert game["turn"]["color"] == "black"
+        assert game["dice"] == nil
 
         assert_receive {:bot_paused_after_roll, serialized_state}
         assert is_list(serialized_state["legal_actions"])
@@ -863,9 +1149,7 @@ defmodule HermesTrictracWeb.GamesChannelBotTest do
         assert values != []
 
         send(pid, :continue_bot)
-        assert {:ok, game} = Task.await(task, 5_000)
-        assert game["turn"]["color"] == "black"
-        assert game["dice"] != nil
+        assert :sys.get_state(pid).engine.turn_color == :black
       end)
 
     assert log =~ "Paused after exposing the bot dice."

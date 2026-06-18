@@ -6,6 +6,10 @@ defmodule HermesTrictracWeb.RulesControllerTest do
 
     body = html_response(conn, 200)
     assert body =~ "Trictrac Rules Library"
+    assert body =~ ~s(class="rules-shell")
+    assert body =~ ~s(data-theme-cycle)
+    assert body =~ "Cycle Theme"
+    refute body =~ ~s(data-theme-select)
     assert body =~ "Traité complet du jeu de Trictrac"
     assert body =~ "Cours complet de Trictrac"
     assert body =~ "Le jeu de Trictrac rendu facile"
@@ -59,6 +63,15 @@ defmodule HermesTrictracWeb.RulesControllerTest do
 
     body = html_response(conn, 200)
     assert body =~ ~s(id="methode-decroissante")
+  end
+
+  test "GET /rules first chapter marks frontmatter content for shared reader styling", %{
+    conn: conn
+  } do
+    conn = get(conn, "/rules/traite-complet-trictrac/index")
+
+    body = html_response(conn, 200)
+    assert body =~ ~s(class="rules-article rules-frontmatter")
   end
 
   test "GET /rules-assets serves epub downloads", %{conn: conn} do

@@ -321,7 +321,10 @@ defmodule HermesTrictrac.GameServer do
 
   def handle_call({:submit_turn_decision, decision, user, client_id}, _from, state) do
     with :ok <- ensure_active_viewer(state, user, client_id) do
-      proxy(state, Engine.submit_turn_decision(state.engine, decision, user, client_id))
+      proxy(state, Engine.submit_turn_decision(state.engine, decision, user, client_id),
+        bot_followup: :async,
+        reply_to: {user, client_id}
+      )
     else
       {:error, msg} -> {:reply, {:error, msg}, state}
     end
@@ -402,18 +405,51 @@ defmodule HermesTrictrac.GameServer do
     end
   end
 
-  defp proxy(state, {:ok, engine}) do
+  def handle_info(:run_bot_followups, state) do
+    {:ok, updated} = maybe_run_bot_turns(state, broadcast: true)
+    persist(updated)
+    {:noreply, updated}
+  end
+
+  defp proxy(state, result, opts \\ [])
+
+  defp proxy(state, {:ok, engine}, opts) do
     updated =
       state
       |> Map.put(:engine, engine)
       |> maybe_advance_session()
 
-    {:ok, updated} = maybe_run_bot_turns(updated, broadcast: true)
-    persist(updated)
-    {:reply, {:ok, snapshot(updated)}, updated}
+    if async_bot_followup?(updated, opts) do
+      persist(updated)
+      maybe_schedule_bot_followup(updated)
+      {:reply, {:ok, reply_snapshot(updated, opts)}, updated}
+    else
+      {:ok, updated} = maybe_run_bot_turns(updated, broadcast: true)
+      persist(updated)
+      {:reply, {:ok, snapshot(updated)}, updated}
+    end
   end
 
-  defp proxy(state, {:error, msg}), do: {:reply, {:error, msg}, state}
+  defp proxy(state, {:error, msg}, _opts), do: {:reply, {:error, msg}, state}
+
+  defp async_bot_followup?(state, opts) do
+    Keyword.get(opts, :bot_followup) == :async or
+      (not is_nil(state.bot) and Keyword.get(opts, :bot_followup) != :sync)
+  end
+
+  defp reply_snapshot(state, opts) do
+    case Keyword.get(opts, :reply_to) do
+      {user, client_id} -> snapshot_for(state, user, client_id)
+      _ -> snapshot(state)
+    end
+  end
+
+  defp maybe_schedule_bot_followup(%{bot: nil}), do: :ok
+
+  defp maybe_schedule_bot_followup(_state) do
+    send(self(), :run_bot_followups)
+    :ok
+  end
 
   defp snapshot(state) do
     base_snapshot =
@@ -1065,36 +1101,33 @@ defmodule HermesTrictrac.GameServer do
         {:error, "Configured bot is missing the required interface."}
 
       true ->
-        case bot_ready(bot_module, requested_bot.preset) do
-          :ok ->
-            bot_name = bot_model_name(bot_module, requested_bot.preset)
+        with :ok <- bot_available?(bot_module, requested_bot.preset) do
+          bot_warmup(bot_module, requested_bot.preset)
+          bot_name = bot_model_name(bot_module, requested_bot.preset)
 
-            case Engine.join(
-                   state.engine,
-                   bot_name,
-                   bot_client_id(requested_bot.kind, state.name)
-                 ) do
-              {:ok, engine, _player} ->
-                {:ok,
-                 %{
-                   state
-                   | engine: engine,
-                     bot: %{
-                       kind: requested_bot.kind,
-                       name: bot_name,
-                       color: :black,
-                       client_id: bot_client_id(requested_bot.kind, state.name),
-                       preset: requested_bot.preset,
-                       margot_enabled: requested_bot.margot_enabled
-                     }
-                 }}
+          case Engine.join(
+                 state.engine,
+                 bot_name,
+                 bot_client_id(requested_bot.kind, state.name)
+               ) do
+            {:ok, engine, _player} ->
+              {:ok,
+               %{
+                 state
+                 | engine: engine,
+                   bot: %{
+                     kind: requested_bot.kind,
+                     name: bot_name,
+                     color: :black,
+                     client_id: bot_client_id(requested_bot.kind, state.name),
+                     preset: requested_bot.preset,
+                     margot_enabled: requested_bot.margot_enabled
+                   }
+               }}
 
-              {:error, msg} ->
-                {:error, msg}
-            end
-
-          {:error, msg} ->
-            {:error, msg}
+            {:error, msg} ->
+              {:error, msg}
+          end
         end
     end
   end
@@ -1253,7 +1286,7 @@ defmodule HermesTrictrac.GameServer do
 
   defp next_bot_step(%{bot: bot, engine: engine}) do
     responses = get_in(engine.pending_match_options || %{}, ["responses"]) || %{}
-    serialized_state = maybe_serialize_bot_state(engine, bot)
+    pending_turn_decision = current_engine_pending_turn_decision(engine)
 
     cond do
       engine.match.is_over ->
@@ -1280,14 +1313,24 @@ defmodule HermesTrictrac.GameServer do
           opening_roll_pending_for_bot?(engine, bot.color) ->
         {:roll}
 
-      pending_turn_decision_for_bot?(serialized_state, bot.color) ->
-        {:choose_action, serialized_state}
+      pending_turn_decision_for_bot?(pending_turn_decision, bot.color) ->
+        with serialized_state when is_map(serialized_state) <-
+               maybe_serialize_bot_state(engine, bot) do
+          {:choose_action, serialized_state}
+        else
+          _ -> nil
+        end
 
       bot_playable_variant?(bot.kind, engine.variant.id) &&
         engine.status == :playing &&
-        no_pending_turn_decision?(serialized_state) &&
+        is_nil(pending_turn_decision) &&
           engine.turn_color == bot.color ->
-        {:choose_action, serialized_state}
+        with serialized_state when is_map(serialized_state) <-
+               maybe_serialize_bot_state(engine, bot) do
+          {:choose_action, serialized_state}
+        else
+          _ -> nil
+        end
 
       true ->
         nil
@@ -1412,12 +1455,24 @@ defmodule HermesTrictrac.GameServer do
          function_exported?(bot_module, :model_name, 0))
   end
 
-  defp bot_ready(bot_module, preset) do
-    cond do
-      function_exported?(bot_module, :ready, 1) -> bot_module.ready(preset)
-      function_exported?(bot_module, :ready, 0) -> bot_module.ready()
-      true -> {:error, "Configured bot cannot be warmed."}
+  defp bot_available?(bot_module, preset) do
+    if function_exported?(bot_module, :available?, 1) do
+      if bot_module.available?(preset) do
+        :ok
+      else
+        {:error, "Configured bot model is not available for #{preset}."}
+      end
+    else
+      :ok
     end
+  end
+
+  defp bot_warmup(bot_module, preset) do
+    if function_exported?(bot_module, :warmup, 1) do
+      bot_module.warmup(preset)
+    end
+
+    :ok
   end
 
   defp bot_model_name(bot_module, preset) do
@@ -1479,29 +1534,34 @@ defmodule HermesTrictrac.GameServer do
     end
   end
 
-  defp pending_turn_decision_for_bot?(serialized_state, color) when is_map(serialized_state) do
-    serialized_state
-    |> serialized_pending_turn_decision()
-    |> case do
+  defp current_engine_pending_turn_decision(%{pending_turn_decision: pending})
+       when not is_nil(pending),
+       do: pending
+
+  defp current_engine_pending_turn_decision(%{
+         variant: %{family: :trictrac},
+         trictrac: trictrac
+       }) do
+    HermesTrictrac.Rules.Trictrac.Classique.current_pending_event(trictrac)
+  end
+
+  defp current_engine_pending_turn_decision(_engine), do: nil
+
+  defp pending_turn_decision_for_bot?(pending_turn_decision, color)
+       when is_map(pending_turn_decision) do
+    case pending_turn_decision do
       %{"actorColor" => actor_color} when is_binary(actor_color) ->
         actor_color == Atom.to_string(color)
+
+      %{actorColor: actor_color} when is_atom(actor_color) ->
+        actor_color == color
 
       _ ->
         false
     end
   end
 
-  defp pending_turn_decision_for_bot?(_serialized_state, _color), do: false
-
-  defp no_pending_turn_decision?(serialized_state) when is_map(serialized_state) do
-    is_nil(serialized_pending_turn_decision(serialized_state))
-  end
-
-  defp no_pending_turn_decision?(_serialized_state), do: true
-
-  defp serialized_pending_turn_decision(serialized_state) do
-    get_in(serialized_state, ["runtime", "pending_turn_decision"])
-  end
+  defp pending_turn_decision_for_bot?(_pending_turn_decision, _color), do: false
 
   defp opening_roll_pending_for_bot?(engine, color) do
     engine.status == :playing and

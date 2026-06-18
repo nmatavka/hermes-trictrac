@@ -18,7 +18,7 @@
 
         <div class="lobby-top-rail">
           <div class="lobby-control-stack">
-            <p class="rail-label" data-i18n="lobby.playMode">Table mode</p>
+            <p class="rail-label front-door-label" data-i18n="lobby.playMode">Table mode</p>
             <div class="segmented-control lobby-mode-tabs" role="radiogroup" aria-label="Table mode" data-i18n-aria-label="lobby.playMode">
               <label class="segment-option">
                 <input
@@ -46,7 +46,7 @@
           </div>
 
           <div class="lobby-control-stack lobby-language-stack">
-            <p class="rail-label" data-i18n="language">Language</p>
+            <p class="rail-label front-door-label" data-i18n="language">Language</p>
             <div class="language-button-group lobby-language-select" role="group" aria-label="Language" data-i18n-aria-label="language">
               <button type="button" class="language-flag-button" data-language-button="en" title="English" aria-label="English">&#x1F3F4;&#xE0067;&#xE0062;&#xE0065;&#xE006E;&#xE0067;&#xE007F;</button>
               <button type="button" class="language-flag-button" data-language-button="fr" title="Français" aria-label="Français">🇫🇷</button>
@@ -55,10 +55,12 @@
               <button type="button" class="language-flag-button" data-language-button="de" title="Deutsch" aria-label="Deutsch">🇩🇪</button>
             </div>
           </div>
+
+          <a class="button-link lobby-rules-link" href={~p"/rules"} data-i18n="game.rules">Rules</a>
         </div>
 
         <label>
-          <span data-i18n="lobby.lobbyName">Lobby Name:</span>
+          <span class="front-door-label" data-i18n="lobby.lobbyName">Lobby Name</span>
           <input type="text" name="game" />
         </label>
 
@@ -76,7 +78,7 @@
             </div>
           <% else %>
             <label>
-              <span data-i18n="lobby.blueskyHandle">Bluesky Handle:</span>
+              <span class="front-door-label" data-i18n="lobby.blueskyHandle">Bluesky Handle</span>
               <input type="text" data-bluesky-handle-input autocomplete="username" required />
             </label>
 
@@ -92,8 +94,8 @@
           <% end %>
         <% else %>
           <label>
-            <span data-i18n="lobby.userName">User Name:</span>
-            <input type="text" name="name" />
+            <span class="front-door-label" data-i18n="lobby.userName">User Name</span>
+            <input type="text" name="name" value={@manual_name || ""} />
           </label>
         <% end %>
 
@@ -164,30 +166,30 @@
           </div>
           <div class="multi-seat-config-grid" data-poule-growing-config>
             <label>
-              <span data-i18n="lobby.queueSize">Queue Size:</span>
+              <span class="front-door-label" data-i18n="lobby.queueSize">Queue Size</span>
               <input type="number" name="queue_size" min="1" step="1" value="1" inputmode="numeric" />
             </label>
 
             <label data-growing-pot-config>
-              <span data-i18n="lobby.ante">Ante:</span>
+              <span class="front-door-label" data-i18n="lobby.ante">Ante</span>
               <input type="number" name="ante" min="1" step="1" value="1" inputmode="numeric" />
             </label>
           </div>
 
           <div class="multi-seat-config-grid" data-plucked-pot-config hidden>
             <label data-plucked-pot-config>
-              <span data-i18n="lobby.stake">Stake:</span>
+              <span class="front-door-label" data-i18n="lobby.stake">Stake</span>
               <input type="number" name="stake" min="1" step="1" value="50" inputmode="numeric" />
             </label>
 
             <label data-plucked-pot-config>
-              <span data-i18n="lobby.holeValue">Hole value:</span>
+              <span class="front-door-label" data-i18n="lobby.holeValue">Hole value</span>
               <input type="number" name="hole_value" min="1" step="1" value="5" inputmode="numeric" />
             </label>
           </div>
 
           <div class="segmented-line" data-poule-margot-config>
-            <span class="segmented-label" data-i18n="lobby.margot">Margot</span>
+            <span class="segmented-label front-door-label" data-i18n="lobby.margot">Margot</span>
             <div class="segmented-control" role="radiogroup" aria-label="Margot" data-i18n-aria-label="lobby.margot">
               <label class="segment-option">
                 <input class="segment-choice" type="radio" name="margot_enabled" value="false" checked />
@@ -203,7 +205,7 @@
 
           <div class="multi-seat-config-grid" data-multiplayer-cash-config hidden>
             <label>
-              <span data-i18n="lobby.cashPerJeton">Cash per jeton:</span>
+              <span class="front-door-label" data-i18n="lobby.cashPerJeton">Cash per jeton</span>
               <input type="number" name="cash_per_jeton" min="0.01" step="0.01" value="1.00" inputmode="decimal" required />
             </label>
           </div>
@@ -219,7 +221,7 @@
           <input type="hidden" name="bot" value="" data-bot-input />
 
           <div class="segmented-line">
-            <span class="segmented-label" data-i18n="lobby.playAgainst">Play against</span>
+            <span class="segmented-label front-door-label" data-i18n="lobby.playAgainst">Play against</span>
             <div class="segmented-control" role="radiogroup" aria-label="Opponent" data-i18n-aria-label="lobby.opponent">
               <label class="segment-option">
                 <input
@@ -247,7 +249,7 @@
           </div>
 
           <div class="segmented-line margot-line" data-margot-options hidden>
-            <span class="segmented-label" data-i18n="lobby.margot">Margot</span>
+            <span class="segmented-label front-door-label" data-i18n="lobby.margot">Margot</span>
             <div class="segmented-control" role="radiogroup" aria-label="Margot" data-i18n-aria-label="lobby.margot">
               <label class="segment-option">
                 <input class="segment-choice" type="radio" name="bot_margot" value="no" checked />

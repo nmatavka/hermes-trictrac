@@ -1,13 +1,29 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="solarized-light">
   <head>
     <meta charset="utf-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title><%= assigns[:page_title] || "HERMES Trictrac" %></title>
     <link rel="icon" type="image/x-icon" href={~p"/favicon.ico"} />
+    <script>
+      (() => {
+        const root = document.documentElement;
+        const fallback = "solarized-light";
+        const allowed = new Set(["warm", "solarized-dark", "solarized-light"]);
+
+        try {
+          const stored = window.localStorage.getItem("hermes-trictrac:theme");
+          const theme = allowed.has(stored) ? stored : fallback;
+          root.dataset.theme = theme;
+          root.style.colorScheme = theme === "solarized-light" ? "light" : "dark";
+        } catch (_error) {
+          root.dataset.theme = fallback;
+          root.style.colorScheme = "light";
+        }
+      })();
+    </script>
     <link phx-track-static rel="stylesheet" href={~p"/assets/app.css"} />
-    <link href="https://fonts.googleapis.com/css?family=Roboto" rel="stylesheet" />
     <script>
       window.userToken = null;
     </script>

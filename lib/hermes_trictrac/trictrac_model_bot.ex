@@ -125,6 +125,17 @@ defmodule HermesTrictrac.TrictracModelBot do
     GenServer.call(__MODULE__, {:ready, normalize_preset(preset)}, @timeout)
   end
 
+  def warmup, do: warmup(@default_preset)
+
+  def warmup(preset) when is_binary(preset) do
+    GenServer.cast(__MODULE__, {:warmup, normalize_preset(preset)})
+  end
+
+  def available?(preset) when is_binary(preset) do
+    preset = normalize_preset(preset)
+    Map.has_key?(@preset_configs, preset) and File.dir?(session_dir(preset))
+  end
+
   def choose_action(serialized_state) when is_map(serialized_state) do
     choose_action(preset_for_state(serialized_state), serialized_state)
   end
@@ -166,15 +177,13 @@ defmodule HermesTrictrac.TrictracModelBot do
   end
 
   @impl true
-  def handle_info({:warmup, preset}, state) do
-    case ensure_port(state, preset) do
-      {:ok, state} ->
-        {:noreply, enqueue_request(state, preset, nil, %{"cmd" => "ping"}, :warmup)}
+  def handle_cast({:warmup, preset}, state) do
+    {:noreply, warmup_preset(state, preset)}
+  end
 
-      {:error, msg} ->
-        Logger.warning("Unable to warm TricTrac model bot at startup: #{msg}")
-        {:noreply, state}
-    end
+  @impl true
+  def handle_info({:warmup, preset}, state) do
+    {:noreply, warmup_preset(state, preset)}
   end
 
   def handle_info({port, {:data, {:noeol, chunk}}}, state) do
@@ -223,6 +232,17 @@ defmodule HermesTrictrac.TrictracModelBot do
   def handle_info(message, state) do
     Logger.debug("Ignoring unexpected TricTrac model bot message: #{inspect(message)}")
     {:noreply, state}
+  end
+
+  defp warmup_preset(state, preset) do
+    case ensure_port(state, preset) do
+      {:ok, state} ->
+        enqueue_request(state, preset, nil, %{"cmd" => "ping"}, :warmup)
+
+      {:error, msg} ->
+        Logger.warning("Unable to warm TricTrac model bot: #{msg}")
+        state
+    end
   end
 
   defp ensure_port(state, preset) do

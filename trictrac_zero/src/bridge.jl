@@ -150,6 +150,21 @@ function native_elixir_executable()
   return isempty(stripped) ? nothing : stripped
 end
 
+function container_bridge_runner_candidates(spec)
+  return [
+    joinpath(spec.repo_root, "trictrac_zero", "scripts", "bridge_container_runner.sh"),
+    joinpath(spec.repo_root, "scripts", "bridge_container_runner.sh"),
+  ]
+end
+
+function autodetected_bridge_executable(spec; native_executable = native_elixir_executable())
+  !isnothing(native_executable) && return nothing
+  for candidate in container_bridge_runner_candidates(spec)
+    isfile(candidate) && return candidate
+  end
+  return nothing
+end
+
 function native_elixir_bridge_command(
   spec,
   script::AbstractString,
@@ -215,8 +230,11 @@ function ensure_mix_compiled!(spec)
 end
 
 function bridge_stdio_command(spec)
-  bridge_executable = get(ENV, BRIDGE_EXECUTABLE_ENV, "")
-  if !isempty(strip(bridge_executable))
+  bridge_executable = strip(get(ENV, BRIDGE_EXECUTABLE_ENV, ""))
+  if isempty(bridge_executable)
+    bridge_executable = something(autodetected_bridge_executable(spec), "")
+  end
+  if !isempty(bridge_executable)
     ebin_paths = bridge_ebin_paths(bridge_ebin_root(spec))
     isempty(ebin_paths) &&
       error("Bridge executable override is set, but no compiled ebin paths were found under $(repr(bridge_ebin_root(spec))).")
@@ -240,9 +258,12 @@ function bridge_stdio_command(spec)
 end
 
 function bridge_daemon_command(spec, paths)
-  bridge_executable = get(ENV, BRIDGE_EXECUTABLE_ENV, "")
+  bridge_executable = strip(get(ENV, BRIDGE_EXECUTABLE_ENV, ""))
   script = daemon_script_path(spec)
-  if !isempty(strip(bridge_executable))
+  if isempty(bridge_executable)
+    bridge_executable = something(autodetected_bridge_executable(spec), "")
+  end
+  if !isempty(bridge_executable)
     ebin_paths = bridge_ebin_paths(bridge_ebin_root(spec))
     isempty(ebin_paths) &&
       error("Bridge executable override is set, but no compiled ebin paths were found under $(repr(bridge_ebin_root(spec))).")

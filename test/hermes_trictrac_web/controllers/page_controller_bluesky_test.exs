@@ -24,7 +24,7 @@ defmodule HermesTrictracWeb.PageControllerBlueskyTest do
     conn = get(conn, "/")
 
     body = html_response(conn, 200)
-    assert body =~ "Bluesky Handle:"
+    assert body =~ "Bluesky Handle"
     assert body =~ "Sign in with Bluesky"
     assert body =~ "Sign in before opening, joining, or watching a table."
     assert body =~ ~s(data-identity-mode="bluesky_oauth")
@@ -65,7 +65,10 @@ defmodule HermesTrictracWeb.PageControllerBlueskyTest do
   test "POST /game derives the rendered player name from the Bluesky handle", %{conn: conn} do
     conn =
       conn
-      |> init_test_session(%{atex_active_session: "session-alice"})
+      |> init_test_session(%{
+        atex_active_session: "session-alice",
+        manual_player_name: "session-name"
+      })
       |> post("/game", %{game: "test-table", name: "manual-name", variant: "backgammon"})
 
     body = html_response(conn, 200)

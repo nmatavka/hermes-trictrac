@@ -25,6 +25,7 @@ import {
   t,
   tx
 } from "./i18n";
+import { attachThemeControls, subscribeTheme, syncThemeControls } from "./theme";
 
 const MODEL_LAB_CHECKER_IMAGES = {
   white: CheckerGreen,
@@ -1158,9 +1159,11 @@ function renderJoinError(root, { title, detail, hint, retryable = true }) {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  attachThemeControls(document);
   attachLanguageControls(document);
   localizeStaticPage(document);
   subscribeLanguage(() => localizeStaticPage(document));
+  subscribeTheme(() => syncThemeControls(document));
   initLobbyForm();
   initModelLab();
 

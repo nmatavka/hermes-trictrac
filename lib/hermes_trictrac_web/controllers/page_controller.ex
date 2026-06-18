@@ -126,6 +126,7 @@ defmodule HermesTrictracWeb.PageController do
   @cash_per_jeton_variants for format <- @multi_seat_formats,
                                format.session_kind == "multiplayer",
                                do: format.id
+  @manual_name_session_key :manual_player_name
 
   def index(conn, params) do
     render(conn, :index,
@@ -133,6 +134,7 @@ defmodule HermesTrictracWeb.PageController do
       secondary_variants: @secondary_variants,
       computer_variant_bots: @computer_variant_bots,
       multi_seat_formats: @multi_seat_formats,
+      manual_name: get_session(conn, @manual_name_session_key),
       identity_mode: conn.assigns[:identity_mode] || Identity.mode(),
       current_identity: conn.assigns[:current_identity],
       bluesky_login_url: "/auth/bluesky/login",
@@ -149,11 +151,7 @@ defmodule HermesTrictracWeb.PageController do
     current_identity = conn.assigns[:current_identity]
     identity_mode = conn.assigns[:identity_mode] || Identity.mode()
 
-    name =
-      case current_identity do
-        %{handle: handle} when is_binary(handle) and handle != "" -> handle
-        _ -> Map.get(params, "name", "Player")
-      end
+    {conn, name} = resolve_player_name(conn, current_identity, params)
 
     variant =
       Map.get(params, "variant") ||
@@ -187,7 +185,7 @@ defmodule HermesTrictracWeb.PageController do
       margot_enabled: margot_enabled,
       a_ecrire_partie_length: a_ecrire_partie_length,
       cash_per_jeton_minor: cash_per_jeton_minor,
-      rules_url: rules_url_for_variant(game, variant),
+      rules_url: rules_url_for_variant(conn, game, variant),
       client_id_scope: Atom.to_string(client_id_scope),
       identity_mode: identity_mode,
       current_identity: current_identity
@@ -248,17 +246,38 @@ defmodule HermesTrictracWeb.PageController do
   defp normalize_a_ecrire_partie_length(_variant, params),
     do: Map.get(params, "aEcrirePartieLength")
 
-  defp rules_url_for_variant(game, variant) when is_binary(variant) do
+  defp resolve_player_name(conn, %{handle: handle}, _params)
+       when is_binary(handle) and handle != "" do
+    {conn, handle}
+  end
+
+  defp resolve_player_name(conn, _current_identity, params) do
+    case normalize_manual_name(Map.get(params, "name")) do
+      nil ->
+        {conn, get_session(conn, @manual_name_session_key) || "Player"}
+
+      name ->
+        {put_session(conn, @manual_name_session_key, name), name}
+    end
+  end
+
+  defp rules_url_for_variant(conn, game, variant) when is_binary(variant) do
     if String.starts_with?(variant, "trictrac_") do
       RulesLibrary.library_path(%{
-        return_to: "/game/#{game}",
+        return_to: game_return_to(conn, game),
         return_label: "Back to game",
         query: ""
       })
     end
   end
 
-  defp rules_url_for_variant(_game, _variant), do: nil
+  defp rules_url_for_variant(_conn, _game, _variant), do: nil
+
+  defp game_return_to(%Plug.Conn{method: "GET", request_path: request_path, query_string: query}, _game) do
+    request_path <> if(query in [nil, ""], do: "", else: "?#{query}")
+  end
+
+  defp game_return_to(_conn, game), do: "/game/#{game}"
 
   defp existing_table_variant(game) do
     case GenServer.whereis(GameServer.reg(game)) do
@@ -277,6 +296,19 @@ defmodule HermesTrictracWeb.PageController do
   defp to_string_or_nil(nil), do: nil
   defp to_string_or_nil(value) when is_binary(value), do: value
   defp to_string_or_nil(value), do: to_string(value)
+
+  defp normalize_manual_name(value) do
+    value
+    |> to_string_or_nil()
+    |> case do
+      nil ->
+        nil
+
+      name ->
+        name = String.trim(name)
+        if name == "", do: nil, else: name
+    end
+  end
 
   defp parse_cash_minor(nil), do: nil
 

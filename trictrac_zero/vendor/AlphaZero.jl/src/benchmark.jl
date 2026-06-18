@@ -94,8 +94,9 @@ function run(env::Env, eval::Evaluation, progress=nothing)
     game_simulated=(() -> next!(progress)))
   gamma = env.params.self_play.mcts.gamma
   rewards, redundancy = rewards_and_redundancy(samples, gamma=gamma)
+  avgr = isempty(rewards) ? 0.0 : mean(rewards)
   return Report.Evaluation(
-    name(eval), mean(rewards), redundancy, rewards, nothing, elapsed)
+    name(eval), avgr, redundancy, rewards, nothing, elapsed)
 end
 
 #####

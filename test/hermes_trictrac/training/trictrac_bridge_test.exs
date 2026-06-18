@@ -1,6 +1,7 @@
 defmodule HermesTrictrac.Training.TrictracBridgeTest do
   use ExUnit.Case, async: false
 
+  alias HermesTrictrac.Rules.Engine
   alias HermesTrictrac.Rules.Registry
   alias HermesTrictrac.Rules.Trictrac.Classique
   alias HermesTrictrac.Rules.Trictrac.Classique.Branches
@@ -42,6 +43,7 @@ defmodule HermesTrictrac.Training.TrictracBridgeTest do
     assert state["phase"] == "roll"
     assert get_in(state, ["runtime", "match", "variant_id"]) == "toccategli"
     assert get_in(state, ["runtime", "match", "options", "margotEnabled"]) == true
+    assert_tactical_shape(get_in(state, ["runtime", "tactical_tariffs"]))
   end
 
   test "new_game accepts toc options and preserves them in public state" do
@@ -62,6 +64,7 @@ defmodule HermesTrictrac.Training.TrictracBridgeTest do
     assert get_in(state, ["runtime", "match", "options", "holeTarget"]) == "7"
     assert get_in(state, ["runtime", "match", "options", "doublesMode"]) == "off"
     assert get_in(state, ["runtime", "match", "options", "margotEnabled"]) == true
+    assert_tactical_shape(get_in(state, ["runtime", "tactical_tariffs"]))
   end
 
   test "confirm is not legal while checker moves remain" do
@@ -277,7 +280,7 @@ defmodule HermesTrictrac.Training.TrictracBridgeTest do
           "horizon_own_turns" => 1,
           "reward_weight" => 1.0,
           "heuristic_weight" => 1.0,
-          "version" => "classique-tactical-v3"
+          "version" => "trictrac-tactical-v1"
         }
       })
 
@@ -286,6 +289,36 @@ defmodule HermesTrictrac.Training.TrictracBridgeTest do
     assert tactical["horizon_own_turns"] == 1
     assert get_in(tactical, ["white", "h1"]) == 0.0
     assert get_in(tactical, ["black", "h1"]) == 0.0
+  end
+
+  test "opening-roll engine states serialize without tactical projection crashes" do
+    engine =
+      Engine.new("bridge-opening-roll", "trictrac_classique")
+      |> then(fn engine ->
+        {:ok, engine, _player} = Engine.join(engine, "nick", "opening-roll-host")
+        {:ok, engine, _player} = Engine.join(engine, "bot", "opening-roll-guest")
+        {:ok, engine} =
+          Engine.submit_match_options(
+            engine,
+            %{"margotConsent" => "no"},
+            "nick",
+            "opening-roll-host"
+          )
+
+        engine
+      end)
+
+    assert engine.status == :playing
+    assert is_nil(engine.turn_color)
+    assert is_nil(engine.dice)
+
+    state = TrictracBridge.serialize_state(Engine.runtime_view(engine))
+
+    assert state["phase"] == "roll"
+    assert state["legal_actions"] == [%{"type" => "special", "id" => "ROLL"}]
+    assert_tactical_shape(get_in(state, ["runtime", "tactical_tariffs"]))
+    assert get_in(state, ["runtime", "tactical_tariffs", "white", "h1"]) == 0.0
+    assert get_in(state, ["runtime", "tactical_tariffs", "black", "h1"]) == 0.0
   end
 
   test "classique move-phase tactical payload is stable across equivalent dice ordering" do
@@ -367,9 +400,67 @@ defmodule HermesTrictrac.Training.TrictracBridgeTest do
     assert reused == direct
   end
 
-  test "non classique bridge state does not emit tactical tariffs" do
-    assert {:ok, response} = TrictracBridge.new_game(%{"variant_id" => "toccategli"})
+  test "supported non-classique tactical variants emit tactical tariffs" do
+    for {variant_id, match_options} <- [
+          {"trictrac_aecrire", %{"aEcrirePartieLength" => "16"}},
+          {"trictrac_combine", %{"aEcrirePartieLength" => "16"}},
+          {"toccategli", %{}},
+          {"toc", %{"holeTarget" => "7", "doublesMode" => "off"}}
+        ] do
+      assert {:ok, response} =
+               TrictracBridge.new_game(%{
+                 "variant_id" => variant_id,
+                 "match_options" => match_options
+               })
+
+      assert_tactical_shape(get_in(response, ["state", "runtime", "tactical_tariffs"]))
+    end
+  end
+
+  test "unsupported bridge variants still omit tactical tariffs" do
+    assert {:ok, response} = TrictracBridge.new_game(%{"variant_id" => "plein"})
     refute Map.has_key?(response["state"]["runtime"], "tactical_tariffs")
+  end
+
+  test "aecrire move-phase state keeps tactical payloads enabled across partie lengths" do
+    for partie_length <- ["6", "24"] do
+      runtime =
+        move_runtime_for_variant("trictrac_aecrire", %{"aEcrirePartieLength" => partie_length})
+
+      state = TrictracBridge.serialize_state(runtime)
+
+      assert get_in(state, ["runtime", "trictrac", "track_aecrire", "partie_length"]) ==
+               String.to_integer(partie_length)
+
+      assert_tactical_shape(get_in(state, ["runtime", "tactical_tariffs"]))
+    end
+  end
+
+  test "toccategli tactical scoring reflects variant tariff rules" do
+    {single_start, single_end, single_dice} = single_remplissage_setup()
+
+    classique_value =
+      turn_event_points(single_start, single_end, single_dice, %{"margotEnabled" => false}, "trictrac_classique")
+
+    toccategli_value =
+      turn_event_points(single_start, single_end, single_dice, %{"margotEnabled" => false}, "toccategli")
+
+    assert toccategli_value != classique_value
+  end
+
+  test "toc tactical payload is scaled in hole outcome space" do
+    runtime =
+      move_runtime_for_variant("toc", %{
+        "holeTarget" => "7",
+        "doublesMode" => "off",
+        "margotEnabled" => false
+      })
+
+    tactical = get_in(TrictracBridge.serialize_state(runtime), ["runtime", "tactical_tariffs"])
+
+    for color <- ["white", "black"], field <- ["h1", "h2", "h3"] do
+      assert abs(get_in(tactical, [color, field])) <= 2.0 / 7.0 + 0.01
+    end
   end
 
   defp find_confirmable_turn(runtime, variant, color, actions) do
@@ -460,8 +551,8 @@ defmodule HermesTrictrac.Training.TrictracBridgeTest do
     (white_after - white_before - (black_after - black_before)) * 1.0
   end
 
-  defp turn_event_points(start_board, end_board, dice, match_options) do
-    variant = Registry.fetch!("trictrac_classique")
+  defp turn_event_points(start_board, end_board, dice, match_options, variant_id \\ "trictrac_classique") do
+    variant = Registry.fetch!(variant_id)
 
     trictrac =
       %{}
@@ -494,10 +585,26 @@ defmodule HermesTrictrac.Training.TrictracBridgeTest do
     }
   end
 
-  defp classique_move_runtime(board, dice, match_options \\ %{"margotEnabled" => false}) do
-    variant = Registry.fetch!("trictrac_classique")
-    {:ok, initial} = TrictracBridge.new_game(%{"match_options" => match_options})
-    runtime = TrictracBridge.decode_runtime_term(initial["state"]["runtime_term"])
+  defp simple_classique_move_runtime do
+    dice = %{values: [1, 2], moves: [1, 2], moves_left: [1, 2], moves_played: []}
+    move_runtime_for_variant("trictrac_classique", %{}, nil, dice)
+  end
+
+  defp move_runtime_for_variant(
+         variant_id,
+         match_options,
+         board \\ nil,
+         dice \\ %{values: [1, 2], moves: [1, 2], moves_left: [1, 2], moves_played: []}
+       ) do
+    {:ok, initial} =
+      TrictracBridge.new_game(%{
+        "variant_id" => variant_id,
+        "match_options" => match_options
+      })
+
+    runtime = HermesTrictrac.Training.TrictracBridge.decode_runtime_term(initial["state"]["runtime_term"])
+    variant = Registry.fetch!(variant_id)
+    board = board || runtime.board
 
     runtime =
       runtime
@@ -515,13 +622,6 @@ defmodule HermesTrictrac.Training.TrictracBridgeTest do
 
     runtime = %{runtime | trictrac: trictrac}
     Map.put(runtime, :legal_moves, Classique.legal_moves(runtime, variant, :white))
-  end
-
-  defp simple_classique_move_runtime do
-    {:ok, initial} = TrictracBridge.new_game()
-    runtime = HermesTrictrac.Training.TrictracBridge.decode_runtime_term(initial["state"]["runtime_term"])
-    dice = %{values: [1, 2], moves: [1, 2], moves_left: [1, 2], moves_played: []}
-    classique_move_runtime(runtime.board, dice)
   end
 
   defp assert_tactical_shape(tactical_tariffs) do

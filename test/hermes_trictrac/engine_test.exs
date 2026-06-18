@@ -37,11 +37,20 @@ defmodule HermesTrictrac.EngineTest do
     }
   end
 
-  defp prepare_classique_reprise_engine(lobby) do
+  defp prepare_classique_reprise_engine(lobby, opts \\ []) do
     engine = Engine.new(lobby, "trictrac_classique")
     {:ok, engine, _} = Engine.join(engine, "nick", "tab-a")
     {:ok, engine, _} = Engine.join(engine, "jane", "tab-b")
-    {:ok, engine} = reject_margot(engine)
+
+    {:ok, engine} =
+      if Keyword.get(opts, :margot_enabled, false) do
+        with {:ok, engine} <-
+               Engine.submit_match_options(engine, %{"margotConsent" => "yes"}, "nick", "tab-a") do
+          Engine.submit_match_options(engine, %{"margotConsent" => "yes"}, "jane", "tab-b")
+        end
+      else
+        reject_margot(engine)
+      end
 
     start_points =
       Enum.map(0..23, fn index ->
@@ -1588,6 +1597,24 @@ defmodule HermesTrictrac.EngineTest do
     assert Enum.at(snapshot["board"]["points"], 17)["pieces"] == ["white", "white"]
   end
 
+  test "classique Margot-enabled reprise buttons submit ordinary tenir decisions" do
+    engine = prepare_classique_reprise_engine("tt-classique-margot-tenir", margot_enabled: true)
+
+    assert {:ok, engine} = Engine.confirm(engine, "nick", "tab-a")
+    snapshot = Engine.snapshot(engine)
+
+    assert snapshot["match"]["options"]["margotEnabled"] == true
+    assert snapshot["pending_turn_decision"]["key"] == "reprise"
+    assert snapshot["pending_turn_decision"]["actorColor"] == "white"
+
+    assert {:ok, engine} = Engine.submit_turn_decision(engine, "tenir", "nick", "tab-a")
+
+    snapshot = Engine.snapshot(engine)
+    assert snapshot["pending_turn_decision"] == nil
+    assert snapshot["turn"]["color"] == "black"
+    assert snapshot["turn"]["number"] == 2
+  end
+
   test "classique does not ask the same player for reprise twice in one turn" do
     engine = prepare_classique_reprise_engine("tt-classique-single-reprise")
 
@@ -1672,6 +1699,81 @@ defmodule HermesTrictrac.EngineTest do
     assert get_in(snapshot, ["trictrac", "score_history"]) |> length() == 1
     assert Enum.at(snapshot["board"]["points"], 23)["pieces"] == List.duplicate("white", 15)
     assert Enum.at(snapshot["board"]["points"], 0)["pieces"] == List.duplicate("black", 15)
+  end
+
+  test "classique Margot reprise belongs to the scoring beneficiary" do
+    engine = Engine.new("tt-classique-margot-reprise", "trictrac_classique")
+    assert {:ok, engine, _} = Engine.join(engine, "nick", "tab-a")
+    assert {:ok, engine, _} = Engine.join(engine, "jane", "tab-b")
+
+    start_points =
+      Enum.map(0..23, fn index ->
+        cond do
+          index == 6 -> %{white: 0, black: 1}
+          index in [9, 11] -> %{white: 1, black: 0}
+          true -> %{white: 0, black: 0}
+        end
+      end)
+
+    end_points =
+      Enum.map(0..23, fn index ->
+        cond do
+          index == 10 -> %{white: 0, black: 1}
+          index in [9, 11] -> %{white: 1, black: 0}
+          true -> %{white: 0, black: 0}
+        end
+      end)
+
+    start_board = %{engine.board | points: start_points, outside: %{white: 0, black: 0}}
+    end_board = %{engine.board | points: end_points, outside: %{white: 0, black: 0}}
+    dice = %{values: [4, 2], moves: [4, 2], moves_left: [], moves_played: [4]}
+
+    trictrac =
+      HermesTrictrac.Rules.Trictrac.Classique.begin_turn(
+        %{
+          engine.trictrac
+          | score: [%{points: 10, trous: 0}, %{points: 0, trous: 0}],
+            options: %{"margotEnabled" => true}
+        },
+        start_board,
+        engine.variant,
+        :black,
+        dice
+      )
+
+    runtime =
+      engine.runtime
+      |> Map.put(:trictrac, trictrac)
+      |> Map.put(:board, end_board)
+      |> Map.put(:dice, dice)
+      |> Map.put(:turn_number, 1)
+
+    engine = %{
+      engine
+      | runtime: runtime,
+        trictrac: trictrac,
+        board: end_board,
+        turn_color: :black,
+        turn_number: 1,
+        dice: dice
+    }
+
+    assert {:ok, engine} = Engine.confirm(engine, "jane", "tab-b")
+    snapshot = Engine.snapshot(engine)
+
+    assert snapshot["pending_turn_decision"]["key"] == "reprise"
+    assert snapshot["pending_turn_decision"]["actorColor"] == "white"
+    assert get_in(snapshot, ["trictrac", "score", Access.at(0), "trous"]) > 0
+    assert get_in(snapshot, ["trictrac", "score", Access.at(1), "trous"]) == 0
+
+    assert {:error, "Not your turn."} =
+             Engine.submit_turn_decision(engine, "tenir", "jane", "tab-b")
+
+    assert {:ok, engine} = Engine.submit_turn_decision(engine, "tenir", "nick", "tab-a")
+
+    snapshot = Engine.snapshot(engine)
+    assert snapshot["pending_turn_decision"] == nil
+    assert snapshot["turn"]["color"] == "white"
   end
 
   test "classique plucked poule does not offer reprise before six trous" do

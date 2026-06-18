@@ -234,7 +234,7 @@ defmodule HermesTrictracWeb.GamesChannel do
          ) do
       {:ok, game} ->
         set_game_and_notify(socket, game)
-        {:reply, {:ok, %{}}, socket}
+        {:reply, {:ok, %{game: game, viewer: game["viewer"]}}, socket}
 
       {:error, msg} ->
         {:reply, {:error, error_payload(msg)}, socket}
@@ -398,6 +398,7 @@ defmodule HermesTrictracWeb.GamesChannel do
 
   defp error_code("Only the host can submit match options."), do: "only_host_options"
   defp error_code("Only an active player can do that."), do: "inactive_viewer"
+
   defp error_code("Only a rostered competitor can participate in the order draw."),
     do: "inactive_viewer"
 

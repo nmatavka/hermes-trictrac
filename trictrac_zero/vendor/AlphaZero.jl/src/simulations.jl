@@ -404,6 +404,7 @@ function simulate_distributed(
 end
 
 function compute_redundancy(states)
+  isempty(states) && return 0.0
   unique = Set(states)
   return 1. - length(unique) / length(states)
 end

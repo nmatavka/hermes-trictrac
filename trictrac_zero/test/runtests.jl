@@ -13,7 +13,7 @@ function tactical_off_config()
     "horizon_own_turns" => 0,
     "reward_weight" => 0.0,
     "heuristic_weight" => 0.0,
-    "version" => "classique-tactical-v3"
+    "version" => TricTracZero.DEFAULT_TACTICAL_VERSION
   )
 end
 
@@ -56,6 +56,9 @@ end
 
 struct ForcedChainSpec <: GI.AbstractGameSpec end
 
+struct EmptyArenaTwoPlayerSpec <: GI.AbstractGameSpec end
+struct EmptyArenaSinglePlayerSpec <: GI.AbstractGameSpec end
+
 mutable struct ForcedChainEnv <: GI.AbstractGameEnv
   spec::ForcedChainSpec
   state::Int
@@ -63,6 +66,8 @@ mutable struct ForcedChainEnv <: GI.AbstractGameEnv
 end
 
 GI.two_players(::ForcedChainSpec) = false
+GI.two_players(::EmptyArenaTwoPlayerSpec) = true
+GI.two_players(::EmptyArenaSinglePlayerSpec) = false
 GI.actions(::ForcedChainSpec) = [1, 2]
 GI.vectorize_state(::ForcedChainSpec, _state) = zeros(Float32, 1, 1, 1)
 GI.init(spec::ForcedChainSpec) = ForcedChainEnv(spec, 0, 0.0)
@@ -97,6 +102,12 @@ function GI.play!(game::ForcedChainEnv, action)
 end
 GI.white_reward(game::ForcedChainEnv) = game.last_reward
 GI.heuristic_value(::ForcedChainEnv) = 0.0
+
+AlphaZero.pit_networks(::EmptyArenaTwoPlayerSpec, _contender, _baseline, _params, _handler) =
+  (Float64[], 0.0)
+
+AlphaZero.evaluate_network(::EmptyArenaSinglePlayerSpec, _net, _params, _handler) =
+  (Float64[], 0.0)
 
 function find_duplicate_move_state(spec; max_states::Int = 1_000, seed::Int = 7)
   Random.seed!(seed)
@@ -833,7 +844,7 @@ end
     variant_id = "toc",
     match_options = Dict("holeTarget" => "7", "doublesMode" => "off", "margotEnabled" => false),
     tactical_config = Dict("enabled" => true, "horizon_own_turns" => 3)
-  )) == false
+  )) == true
 
   heuristic_off = GI.heuristic_value(GI.init(spec_off, current))
   heuristic_on = GI.heuristic_value(GI.init(spec_on, current))
@@ -966,6 +977,22 @@ end
       @test !("mix" in stdio_cmd.exec)
       @test !("mix" in daemon_cmd.exec)
     end
+  finally
+    isnothing(original_executable) ? delete!(ENV, "TRICTRAC_ZERO_BRIDGE_EXECUTABLE") : (ENV["TRICTRAC_ZERO_BRIDGE_EXECUTABLE"] = original_executable)
+  end
+end
+
+@testset "Autodetected Container Bridge Runner" begin
+  spec = classique_test_spec()
+  original_executable = get(ENV, "TRICTRAC_ZERO_BRIDGE_EXECUTABLE", nothing)
+  try
+    delete!(ENV, "TRICTRAC_ZERO_BRIDGE_EXECUTABLE")
+    detected = TricTracZero.autodetected_bridge_executable(spec; native_executable = nothing)
+    @test detected == joinpath(spec.repo_root, "trictrac_zero", "scripts", "bridge_container_runner.sh")
+
+    empty_root = mktempdir()
+    empty_spec = TricTracGameSpec(repo_root = empty_root)
+    @test isnothing(TricTracZero.autodetected_bridge_executable(empty_spec; native_executable = nothing))
   finally
     isnothing(original_executable) ? delete!(ENV, "TRICTRAC_ZERO_BRIDGE_EXECUTABLE") : (ENV["TRICTRAC_ZERO_BRIDGE_EXECUTABLE"] = original_executable)
   end
@@ -1364,6 +1391,25 @@ end
     @test recovered.curnn isa TricTracSparseNet
   end
 
+  mktempdir() do dir
+    spec = classique_test_spec()
+    params = TricTracZero.build_params(smoke = true, use_gpu = false)
+    nn = TricTracSparseNet(spec, TricTracZero.netparams())
+    samples = sample_training_examples(spec; n = 2, seed = 29)
+    env = AlphaZero.Env(spec, params, nn, copy(nn), samples, 11)
+
+    UserInterface.save_env(env, dir)
+    rm(joinpath(dir, UserInterface.MEM_FILE))
+
+    @test UserInterface.valid_session_dir(dir)
+
+    recovered = UserInterface.load_env(dir)
+    @test recovered.itc == 11
+    @test isempty(AlphaZero.get_experience(recovered))
+    @test isfile(joinpath(dir, UserInterface.MEM_FILE))
+    @test isempty(AlphaZero.get_experience(UserInterface.load_env(dir)))
+  end
+
   @test !TricTracZero.reset_session_memory!("/tmp/definitely-not-a-valid-trictrac-session")
 end
 
@@ -1482,9 +1528,7 @@ end
     )
   ))
   expected_combine =
-    2.0 +
-    TricTracZero.DEFAULT_COMBINE_HONNEUR_WEIGHT * 1.0 +
-    TricTracZero.DEFAULT_COMBINE_PARTIE_WEIGHT * ((4 / 12 + 0.25) - (2 / 12))
+    2.0
   @test isapprox(
     TricTracZero.transition_white_reward(combine_spec, combine_before, combine_after),
     expected_combine;
@@ -1497,6 +1541,128 @@ end
   AlphaZero.push_trace!(mem, trace, 1.0)
   sample = only(AlphaZero.get_experience(mem))
   @test isapprox(sample.z, tanh(20.0 / (4 * 16)); atol = 1e-6)
+end
+
+@testset "Extended Tactical Variant Semantics" begin
+  aecrire_base_runtime = Dict(
+    "turn_number" => 7,
+    "trictrac" => Dict(
+      "settlement_ledger" => Dict(
+        "white" => Dict("final_total" => 14),
+        "black" => Dict("final_total" => 10)
+      ),
+      "track_aecrire" => Dict(
+        "partie_length" => 6,
+        "current_coup" => Dict(
+          "trous" => Dict("white" => 2, "black" => 0),
+          "run_trous" => Dict("white" => 2, "black" => 0),
+          "legal_exit_by" => Dict("white" => false, "black" => false)
+        )
+      )
+    )
+  )
+  aecrire_short_runtime = deepcopy(aecrire_base_runtime)
+  aecrire_short_runtime["tactical_tariffs"] = Dict(
+    "white" => Dict("h1" => 4.0 / 72.0, "h2" => 0.0, "h3" => 0.0),
+    "black" => Dict("h1" => 0.0, "h2" => 0.0, "h3" => 0.0)
+  )
+  aecrire_long_runtime = deepcopy(aecrire_base_runtime)
+  aecrire_long_runtime["trictrac"]["track_aecrire"]["partie_length"] = 24
+  aecrire_long_runtime["tactical_tariffs"] = Dict(
+    "white" => Dict("h1" => 4.0 / 288.0, "h2" => 0.0, "h3" => 0.0),
+    "black" => Dict("h1" => 0.0, "h2" => 0.0, "h3" => 0.0)
+  )
+
+  aecrire_short = synthetic_state(aecrire_short_runtime; runtime_term = "aecrire-short")
+  aecrire_long = synthetic_state(aecrire_long_runtime; runtime_term = "aecrire-long")
+  aecrire_off = TricTracGameSpec(variant_id = "trictrac_aecrire", tactical_config = tactical_off_config())
+  aecrire_on = TricTracGameSpec(variant_id = "trictrac_aecrire")
+
+  short_gain = GI.heuristic_value(GI.init(aecrire_on, aecrire_short)) - GI.heuristic_value(GI.init(aecrire_off, aecrire_short))
+  long_gain = GI.heuristic_value(GI.init(aecrire_on, aecrire_long)) - GI.heuristic_value(GI.init(aecrire_off, aecrire_long))
+  @test short_gain > long_gain > 0.0
+
+  aecrire_before = synthetic_state(deepcopy(aecrire_short_runtime); runtime_term = "aecrire-before")
+  aecrire_after_runtime = deepcopy(aecrire_short_runtime)
+  aecrire_after_runtime["trictrac"]["settlement_ledger"]["white"]["final_total"] = 16
+  aecrire_after_runtime["trictrac"]["track_aecrire"]["current_coup"]["trous"]["white"] = 3
+  aecrire_after_runtime["trictrac"]["track_aecrire"]["current_coup"]["run_trous"]["white"] = 3
+  aecrire_after_runtime["trictrac"]["track_aecrire"]["current_coup"]["legal_exit_by"]["white"] = true
+  aecrire_after_runtime["tactical_tariffs"] = Dict(
+    "white" => Dict("h1" => 8.0 / 72.0, "h2" => 0.0, "h3" => 0.0),
+    "black" => Dict("h1" => 0.0, "h2" => 0.0, "h3" => 0.0)
+  )
+  aecrire_after = synthetic_state(aecrire_after_runtime; runtime_term = "aecrire-after")
+  @test TricTracZero.transition_white_reward(aecrire_on, aecrire_before, aecrire_after) ==
+        TricTracZero.transition_white_reward(aecrire_off, aecrire_before, aecrire_after)
+
+  combine_runtime = Dict(
+    "turn_number" => 11,
+    "trictrac" => Dict(
+      "settlement_ledger" => Dict(
+        "white" => Dict("final_total" => 18),
+        "black" => Dict("final_total" => 12)
+      ),
+      "track_aecrire" => Dict("partie_length" => 16),
+      "track_classique_honneurs" => Dict(
+        "honneurs" => Dict("white" => 2, "black" => 1),
+        "current_partie" => Dict(
+          "trous" => Dict("white" => 2, "black" => 0),
+          "uninterrupted_by" => Dict("white" => false, "black" => false)
+        )
+      )
+    ),
+    "tactical_tariffs" => Dict(
+      "white" => Dict("h1" => 6.0 / 144.0, "h2" => 0.0, "h3" => 0.0),
+      "black" => Dict("h1" => 0.0, "h2" => 0.0, "h3" => 0.0)
+    )
+  )
+  combine_other_partie = deepcopy(combine_runtime)
+  combine_other_partie["trictrac"]["track_classique_honneurs"]["current_partie"] = Dict(
+    "trous" => Dict("white" => 11, "black" => 5),
+    "uninterrupted_by" => Dict("white" => true, "black" => false)
+  )
+  combine_spec = TricTracGameSpec(variant_id = "trictrac_combine")
+  combine_state_a = synthetic_state(combine_runtime; runtime_term = "combine-a")
+  combine_state_b = synthetic_state(combine_other_partie; runtime_term = "combine-b")
+  @test isapprox(GI.heuristic_value(GI.init(combine_spec, combine_state_a)), GI.heuristic_value(GI.init(combine_spec, combine_state_b)); atol = 1e-8)
+
+  toc_spec = TricTracGameSpec(
+    variant_id = "toc",
+    match_options = Dict("holeTarget" => "7", "doublesMode" => "off", "margotEnabled" => false)
+  )
+  toc_off = TricTracGameSpec(
+    variant_id = "toc",
+    match_options = Dict("holeTarget" => "7", "doublesMode" => "off", "margotEnabled" => false),
+    tactical_config = tactical_off_config()
+  )
+  toc_before_runtime = Dict(
+    "turn_number" => 3,
+    "match" => Dict(
+      "score" => Dict("white" => 1, "black" => 0),
+      "length" => 7,
+      "options" => Dict("holeTarget" => "7", "doublesMode" => "off")
+    ),
+    "tactical_tariffs" => Dict(
+      "white" => Dict("h1" => 2.0 / 7.0, "h2" => 0.0, "h3" => 0.0),
+      "black" => Dict("h1" => 0.0, "h2" => 0.0, "h3" => 0.0)
+    )
+  )
+  toc_after_runtime = deepcopy(toc_before_runtime)
+  toc_after_runtime["match"]["score"]["white"] = 2
+  toc_after_runtime["tactical_tariffs"] = Dict(
+    "white" => Dict("h1" => 1.0 / 7.0, "h2" => 0.0, "h3" => 0.0),
+    "black" => Dict("h1" => 0.0, "h2" => 0.0, "h3" => 0.0)
+  )
+  toc_before = synthetic_state(toc_before_runtime; runtime_term = "toc-before")
+  toc_after = synthetic_state(toc_after_runtime; runtime_term = "toc-after")
+
+  @test GI.heuristic_value(GI.init(toc_spec, toc_before)) > GI.heuristic_value(GI.init(toc_off, toc_before))
+  @test TricTracZero.transition_white_reward(toc_spec, toc_before, toc_after) ==
+        TricTracZero.transition_white_reward(toc_off, toc_before, toc_after)
+
+  toccategli_spec = TricTracGameSpec(variant_id = "toccategli")
+  @test TricTracZero.tactical_shaping_enabled(toccategli_spec)
 end
 
 @testset "Runtime Worker Resolution" begin
@@ -1591,8 +1757,8 @@ end
   @test aecrire.name == "trictrac-aecrire"
   @test aecrire.gspec.variant_id == "trictrac_aecrire"
   @test aecrire.gspec.match_options["margotEnabled"] == false
-  @test aecrire.gspec.tactical_config["enabled"] == false
-  @test aecrire.gspec.tactical_config["horizon_own_turns"] == 0
+  @test aecrire.gspec.tactical_config["enabled"] == true
+  @test aecrire.gspec.tactical_config["horizon_own_turns"] == 3
 
   aecrire_yes = TricTracZero.default_experiment(preset = "aecrire-margot")
   @test aecrire_yes.name == "trictrac-aecrire-margot"
@@ -1602,6 +1768,8 @@ end
   @test combine.name == "trictrac-combine"
   @test combine.gspec.variant_id == "trictrac_combine"
   @test combine.gspec.match_options["margotEnabled"] == false
+  @test combine.gspec.tactical_config["enabled"] == true
+  @test combine.gspec.tactical_config["horizon_own_turns"] == 3
 
   combine_yes = TricTracZero.default_experiment(preset = "combine-margot")
   @test combine_yes.name == "trictrac-combine-margot"
@@ -1613,7 +1781,8 @@ end
   @test toc.gspec.match_options["margotEnabled"] == false
   @test toc.gspec.match_options["holeTarget"] == "7"
   @test toc.gspec.match_options["doublesMode"] == "off"
-  @test toc.gspec.tactical_config["enabled"] == false
+  @test toc.gspec.tactical_config["enabled"] == true
+  @test toc.gspec.tactical_config["horizon_own_turns"] == 3
 
   toc_yes = TricTracZero.default_experiment(preset = :toc_margot)
   @test toc_yes.name == "toc-margot"
@@ -1623,6 +1792,8 @@ end
   @test tocc.name == "toccategli-smoke"
   @test tocc.gspec.variant_id == "toccategli"
   @test tocc.gspec.match_options["margotEnabled"] == false
+  @test tocc.gspec.tactical_config["enabled"] == true
+  @test tocc.gspec.tactical_config["horizon_own_turns"] == 3
 
   @test TricTracZero.source_session_dir_for_preset("classique") === nothing
   @test TricTracZero.source_session_dir_for_preset("aecrire") === nothing
@@ -1636,14 +1807,14 @@ end
   )
 end
 
-@testset "Classique Tactical Replay Reset" begin
+@testset "TricTrac Tactical Replay Reset" begin
   mktempdir() do dir
     old_spec = TricTracGameSpec(tactical_config = Dict(
       "enabled" => false,
       "horizon_own_turns" => 0,
       "reward_weight" => 0.0,
       "heuristic_weight" => 0.0,
-      "version" => "classique-tactical-v0"
+      "version" => "trictrac-tactical-v0"
     ))
     params = TricTracZero.build_params(smoke = true, use_gpu = false)
     nn = TricTracSparseNet(old_spec, TricTracZero.netparams())
@@ -1669,7 +1840,7 @@ end
     @test isfile(TricTracZero.session_runtime_metadata_path(dir))
 
     metadata = TricTracZero.load_session_runtime_metadata(dir)
-    @test metadata["classique_tactical_signature"]["enabled"] == true
+    @test metadata[TricTracZero.TACTICAL_SIGNATURE_METADATA_KEY]["enabled"] == true
     @test !TricTracZero.apply_session_runtime_metadata!(dir, new_spec)
 
     changed_spec = TricTracGameSpec(tactical_config = Dict(
@@ -1682,6 +1853,33 @@ end
     repopulated = AlphaZero.Env(changed_spec, params, recovered.curnn, recovered.bestnn, samples, recovered.itc)
     UserInterface.save_env(repopulated, dir)
     @test TricTracZero.apply_session_runtime_metadata!(dir, changed_spec)
+    @test isempty(AlphaZero.get_experience(UserInterface.load_env(dir)))
+  end
+
+  mktempdir() do dir
+    old_spec = TricTracGameSpec(
+      variant_id = "toc",
+      match_options = Dict("holeTarget" => "7", "doublesMode" => "off", "margotEnabled" => false),
+      tactical_config = Dict(
+        "enabled" => false,
+        "horizon_own_turns" => 0,
+        "reward_weight" => 0.0,
+        "heuristic_weight" => 0.0,
+        "version" => "trictrac-tactical-v0"
+      )
+    )
+    params = TricTracZero.build_params(smoke = true, use_gpu = false)
+    nn = TricTracSparseNet(old_spec, TricTracZero.netparams())
+    samples = sample_training_examples(old_spec; n = 2, seed = 31)
+    env = AlphaZero.Env(old_spec, params, nn, copy(nn), samples, 3)
+    UserInterface.save_env(env, dir)
+
+    new_spec = TricTracGameSpec(
+      variant_id = "toc",
+      match_options = Dict("holeTarget" => "7", "doublesMode" => "off", "margotEnabled" => false)
+    )
+
+    @test TricTracZero.apply_session_runtime_metadata!(dir, new_spec)
     @test isempty(AlphaZero.get_experience(UserInterface.load_env(dir)))
   end
 end
@@ -1756,4 +1954,46 @@ end
     session = UserInterface.Session(experiment; dir = dir, autosave = false, nostdout = true)
     @test session.env.params.num_iters == updated_params.num_iters
   end
+end
+
+@testset "Checkpoint Evaluation Empty Results" begin
+  arena = TricTracZero.build_params(smoke = true, use_gpu = false).arena
+
+  two_player = AlphaZero.compare_networks(
+    EmptyArenaTwoPlayerSpec(),
+    nothing,
+    nothing,
+    arena,
+    nothing
+  )
+  @test two_player.avgr == 0.0
+  @test two_player.redundancy == 0.0
+  @test isempty(two_player.rewards)
+  @test isnothing(two_player.baseline_rewards)
+  @test !AlphaZero.evaluation_has_completed_games(two_player)
+  @test !AlphaZero.checkpoint_evaluation_succeeds(two_player, 0.0)
+
+  single_player = AlphaZero.compare_networks(
+    EmptyArenaSinglePlayerSpec(),
+    nothing,
+    nothing,
+    arena,
+    nothing
+  )
+  @test single_player.avgr == 0.0
+  @test single_player.redundancy == 0.0
+  @test isempty(single_player.rewards)
+  @test single_player.baseline_rewards == Float64[]
+  @test !AlphaZero.evaluation_has_completed_games(single_player)
+  @test !AlphaZero.checkpoint_evaluation_succeeds(single_player, 0.0)
+
+  io = IOBuffer()
+  logfile = IOBuffer()
+  logger = AlphaZero.UserInterface.Logger(io; logfile = logfile)
+  AlphaZero.UserInterface.print_report(logger, two_player)
+  rendered = String(take!(io))
+  @test occursin("Average reward: N/A", rendered)
+  @test occursin("no completed checkpoint games", rendered)
+
+  @test AlphaZero.compute_redundancy(Any[]) == 0.0
 end

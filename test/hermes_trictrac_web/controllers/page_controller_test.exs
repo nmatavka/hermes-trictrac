@@ -6,8 +6,15 @@ defmodule HermesTrictracWeb.PageControllerTest do
 
     body = html_response(conn, 200)
     assert body =~ "Start or Join a Table"
+    assert body =~ ~s(data-theme="solarized-light")
+    assert body =~ ~s(const fallback = "solarized-light")
+    assert body =~ ~s(root.style.colorScheme = "light")
     assert body =~ ~s(name="play_mode")
     assert body =~ "Table mode"
+    assert body =~ ~s(href="/rules")
+    assert body =~ ">Rules<"
+    assert body =~ "Lobby Name"
+    assert body =~ "User Name"
     assert body =~ "Head-to-head"
     assert body =~ "Multi-seat"
     assert body =~ ~s(name="variant")
@@ -65,15 +72,15 @@ defmodule HermesTrictracWeb.PageControllerTest do
              "Some multi-seat tables rotate a queue, while others use fixed roles."
 
     assert body =~ ~s(name="queue_size")
-    assert body =~ "Queue Size:"
+    assert body =~ "Queue Size"
     assert body =~ ~s(name="ante")
-    assert body =~ "Ante:"
+    assert body =~ "Ante"
     assert body =~ ~s(name="stake")
-    assert body =~ "Stake:"
+    assert body =~ "Stake"
     assert body =~ ~s(name="hole_value")
-    assert body =~ "Hole value:"
+    assert body =~ "Hole value"
     assert body =~ ~s(name="cash_per_jeton")
-    assert body =~ "Cash per jeton:"
+    assert body =~ "Cash per jeton"
     assert body =~ ~s(name="margot_enabled")
 
     assert body =~
@@ -94,6 +101,10 @@ defmodule HermesTrictracWeb.PageControllerTest do
     assert body =~ "More games are not available for computer play yet."
     assert body =~ "Computer play uses BackgammonAI for English backgammon"
     assert body =~ "the current TricTrac model for Trictrac classique"
+    refute body =~ ~s(data-theme-select)
+    refute body =~ ~s(data-theme-cycle)
+    refute body =~ "Lobby Name:"
+    refute body =~ "User Name:"
   end
 
   test "POST /game renders the game root", %{conn: conn} do
@@ -101,8 +112,46 @@ defmodule HermesTrictracWeb.PageControllerTest do
 
     body = html_response(conn, 200)
     assert body =~ ~s(data-join-topic="games:lobby")
+    assert body =~ ~s(data-user="nick")
     assert body =~ ~s(data-variant="tapa")
     assert body =~ ~s(data-client-id-scope="tab")
+  end
+
+  test "manual player name persists in session across game navigation", %{conn: conn} do
+    conn =
+      post(conn, "/game", %{game: "session-lobby", name: "nick", variant: "trictrac_classique"})
+
+    assert html_response(conn, 200) =~ ~s(data-user="nick")
+
+    conn = recycle(conn)
+    conn = get(conn, "/game/session-lobby", %{variant: "trictrac_classique"})
+
+    body = html_response(conn, 200)
+    assert body =~ ~s(data-user="nick")
+  end
+
+  test "blank manual player name does not overwrite the session value", %{conn: conn} do
+    conn =
+      post(conn, "/game", %{game: "session-lobby", name: "nick", variant: "trictrac_classique"})
+
+    assert html_response(conn, 200) =~ ~s(data-user="nick")
+
+    conn = recycle(conn)
+
+    conn =
+      post(conn, "/game", %{game: "session-lobby", name: "   ", variant: "trictrac_classique"})
+
+    body = html_response(conn, 200)
+    assert body =~ ~s(data-user="nick")
+  end
+
+  test "GET / pre-fills the manual user name from the session", %{conn: conn} do
+    conn = init_test_session(conn, %{manual_player_name: "nick"})
+    conn = get(conn, "/")
+
+    body = html_response(conn, 200)
+    assert body =~ ~s(name="name")
+    assert body =~ ~s(value="nick")
   end
 
   test "POST /game preserves multi-seat poule config", %{conn: conn} do
@@ -175,6 +224,20 @@ defmodule HermesTrictracWeb.PageControllerTest do
 
     assert body =~
              ~s(data-rules-url="/rules?return_label=Back+to+game&amp;return_to=%2Fgame%2Fcombine-bot")
+  end
+
+  test "GET /game preserves the full current location in the rules return target", %{conn: conn} do
+    conn =
+      get(conn, "/game/combine-bot", %{
+        variant: "trictrac_combine",
+        name: "nick",
+        view: "analysis"
+      })
+
+    body = html_response(conn, 200)
+
+    assert body =~
+             ~s(data-rules-url="/rules?return_label=Back+to+game&amp;return_to=%2Fgame%2Fcombine-bot%3Fname%3Dnick%26variant%3Dtrictrac_combine%26view%3Danalysis")
   end
 
   test "POST /game preserves BackgammonAI for English backgammon", %{conn: conn} do

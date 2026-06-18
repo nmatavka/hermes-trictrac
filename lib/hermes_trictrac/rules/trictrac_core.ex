@@ -267,6 +267,13 @@ defmodule HermesTrictrac.Rules.TrictracCore do
       variant.id == "toc" and is_nil(current_pending(runtime)) and is_nil(runtime.dice) ->
         clear_keep_turn(runtime)
 
+      is_nil(current_pending(runtime)) and is_nil(runtime.turn_color) ->
+        runtime
+        |> Map.put(:dice, nil)
+        |> Map.put(:legal_moves, [])
+        |> Map.put(:history, [])
+        |> clear_keep_turn()
+
       is_nil(current_pending(runtime)) ->
         runtime
         |> Map.put(:dice, nil)

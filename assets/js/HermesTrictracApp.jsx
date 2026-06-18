@@ -16,6 +16,7 @@ import {
   variantTitle
 } from "./i18n";
 import { SOUND_PACK_OPTIONS, createSoundController } from "./sound";
+import { cycleTheme, getTheme, subscribeTheme } from "./theme";
 import BoardWood from "../static/images/6besh/board-wood.jpg";
 import CheckerGreen from "../static/images/6besh/checker-green.png";
 import CheckerRed from "../static/images/6besh/checker-red.png";
@@ -192,11 +193,40 @@ function scoreEventDetail(event) {
   return fallback;
 }
 
+function scoreEventTone(event) {
+  switch (scoreEventTranslationKey(event)) {
+    case "jan_recompense":
+      return "positive";
+    case "jan_qui_ne_peut":
+    case "margot":
+      return "negative";
+    case "jan_de_meseas":
+    case "contre_jan_de_meseas":
+    case "jan_de_deux_tables":
+    case "contre_jan_de_deux_tables":
+    case "jan_de_six_tables":
+      return "rare";
+    case "remplissage_petit":
+    case "remplissage_grand":
+    case "remplissage_retour":
+    case "conservation_petit":
+    case "conservation_grand":
+    case "conservation_retour":
+    case "pile_misere":
+      return "plein";
+    case "sortie":
+      return "sortie";
+    default:
+      return null;
+  }
+}
+
 function buildTrictracToast(event) {
   const beneficiary = event?.beneficiary === "black" ? "black" : "white";
   const points = Number(event?.points ?? 0);
 
   return {
+    tone: scoreEventTone(event),
     title: t("score.wins", { color: colorLabel(beneficiary), points }),
     detail: scoreEventDetail(event)
   };
@@ -1186,6 +1216,7 @@ function HermesTrictracApp({ channel, initialGame, player, viewer: initialViewer
 
   const [game, setGame] = useState(initialGame);
   const [language, setLanguageState] = useState(getLanguage());
+  const [theme, setThemeState] = useState(getTheme());
   const [soundState, setSoundState] = useState(() => soundControllerRef.current.getSnapshot());
   const [selectedFrom, setSelectedFrom] = useState(null);
   const [errorMessage, setErrorMessage] = useState("");
@@ -1278,6 +1309,7 @@ function HermesTrictracApp({ channel, initialGame, player, viewer: initialViewer
   };
 
   useEffect(() => subscribeLanguage(setLanguageState), []);
+  useEffect(() => subscribeTheme(setThemeState), []);
 
   useEffect(() => {
     const controller = soundControllerRef.current;
@@ -1450,6 +1482,19 @@ function HermesTrictracApp({ channel, initialGame, player, viewer: initialViewer
 
     channel
       .push(event, payload)
+      .receive("ok", (resp) => {
+        if (!resp?.game) {
+          return;
+        }
+
+        pendingActionRef.current = null;
+        setPendingAction(null);
+        setErrorMessage("");
+        latestGameRef.current = resp.game;
+        gameSoundSignatureRef.current = gameSoundSignature(resp.game);
+        setGame(resp.game);
+        setSelectedFrom(null);
+      })
       .receive("error", (resp) => {
         pendingActionRef.current = null;
         setPendingAction(null);
@@ -1550,13 +1595,16 @@ function HermesTrictracApp({ channel, initialGame, player, viewer: initialViewer
   const selectLanguage = (locale) => {
     setLanguageState(setLanguage(locale));
   };
+  const cycleThemeSelection = () => {
+    setThemeState(cycleTheme());
+  };
 
   return (
     <div className="app-shell">
       {toasts.length > 0 ? <ToastStack toasts={toasts} /> : null}
       <section className="hero-panel">
         <div>
-          <p className="eyebrow">{variantTitle(game.variant?.id, game.variant?.title || t("game.tableGame"))}</p>
+          <p className="eyebrow game-variant-eyebrow">{variantTitle(game.variant?.id, game.variant?.title || t("game.tableGame"))}</p>
           <h1>{lobbyName}</h1>
           <p className="hero-copy">{heroCopy}</p>
         </div>
@@ -1571,6 +1619,7 @@ function HermesTrictracApp({ channel, initialGame, player, viewer: initialViewer
           ) : null}
           <SoundToggle state={soundState} onToggle={toggleSound} />
           <SoundPackSelect state={soundState} onChange={selectSoundPack} />
+          <ThemeCycleButton theme={theme} onCycle={cycleThemeSelection} />
           <LanguageSelect language={language} onChange={selectLanguage} />
         </div>
       </section>
@@ -1763,6 +1812,21 @@ function SoundPackSelect({ state, onChange }) {
   );
 }
 
+function ThemeCycleButton({ theme, onCycle }) {
+  return (
+    <button
+      type="button"
+      className="sound-toggle theme-cycle-button"
+      onClick={onCycle}
+      title={t("themeCycle")}
+      aria-label={t("themeCycle")}
+      data-theme-current={theme}
+    >
+      {t("themeCycle")}
+    </button>
+  );
+}
+
 function LanguageSelect({ language, onChange }) {
   const optionsById = new Map(languageSelectOptions().map((option) => [option.id, option]));
 
@@ -1855,7 +1919,7 @@ function StatusCard({ game, playerColor, playerName, viewer }) {
   return (
     <section className="rail-card">
       <p className="rail-label">{t("game.seat")}</p>
-      <h2>{playerName}</h2>
+      <h2 className="entity-title status-card-player-name">{playerName}</h2>
       <p className="seat-tag">{seatTag}</p>
       <p className="status-line">{whoseTurn}</p>
       {lastMove ? <p className="muted-copy">{lastMove}</p> : null}
@@ -1929,7 +1993,7 @@ function OpeningRollCard({ payload, playerColor }) {
   return (
     <section className="rail-card">
       <p className="rail-label">{t("game.openingRoll")}</p>
-      <h2>{t("game.rollToStart")}</h2>
+      <h2 className="entity-title opening-roll-title">{t("game.rollToStart")}</h2>
       <div className="trictrac-grid">
         <div className="opening-roll-entry">
           <strong>{colorLabel(playerColor)}</strong>
@@ -2340,7 +2404,7 @@ function PregameChoiceCard({ payload, playerColor, viewer, onChoose }) {
   return (
     <section className="rail-card">
       <p className="rail-label">{t("game.pregame")}</p>
-      <h2>{pendingPrompt(payload)}</h2>
+      <h2 className="entity-title pregame-question-title">{pendingPrompt(payload)}</h2>
       <div className={multiplayerConsent ? "poule-ledger" : "trictrac-grid"}>
         {responseRows.map((row) => (
           <div key={row.label} className={multiplayerConsent ? "poule-ledger-row" : undefined}>
@@ -2412,10 +2476,12 @@ function PartieLengthConsentSlider({ payload, responseKey, onChoose }) {
 }
 
 function TurnDecisionCard({ payload, onChoose }) {
+  const headingClassName = payload?.key === "reprise" ? "entity-title turn-decision-title" : undefined;
+
   return (
     <section className="rail-card">
       <p className="rail-label">{t("game.decision")}</p>
-      <h2>{decisionPrompt(payload)}</h2>
+      <h2 className={headingClassName}>{decisionPrompt(payload)}</h2>
       <div className="button-grid">
         {(payload.choices || []).map((choice) => (
           <button key={choice} type="button" onClick={() => onChoose(choice)}>
@@ -2431,7 +2497,7 @@ function ToastStack({ toasts }) {
   return (
     <div className="toast-stack" aria-live="polite" aria-atomic="false">
       {toasts.map((toast) => (
-        <article key={toast.id} className="toast-card">
+        <article key={toast.id} className={`toast-card${toast.tone ? ` toast-card-${toast.tone}` : ""}`}>
           <strong>{toast.title}</strong>
           <p>{toast.detail}</p>
         </article>
@@ -2453,7 +2519,7 @@ function TrictracCard({ game }) {
       <div className="trictrac-grid">
         {cards.map((card) => (
           <div key={card.title}>
-            <strong>{card.title}</strong>
+            <strong className="entity-title trictrac-track-title">{card.title}</strong>
             {card.lines.map((line) => (
               <span key={line}>{line}</span>
             ))}

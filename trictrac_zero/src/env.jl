@@ -64,6 +64,7 @@ const DEFAULT_VALUE_TARGET_GAIN = 2.0
 const DEFAULT_TACTICAL_HORIZON_OWN_TURNS = 3
 const DEFAULT_TACTICAL_REWARD_WEIGHT = 1.0
 const DEFAULT_TACTICAL_HEURISTIC_WEIGHT = 1.0
+const DEFAULT_TACTICAL_VERSION = "trictrac-tactical-v1"
 const DEFAULT_AECRIRE_SHAPING_WEIGHT = 0.15
 const DEFAULT_COMBINE_HONNEUR_WEIGHT = 0.10
 const DEFAULT_COMBINE_PARTIE_WEIGHT = 0.05
@@ -124,8 +125,32 @@ function classique_variant(variant_id::AbstractString)
   return String(variant_id) == "trictrac_classique"
 end
 
+function toccategli_variant(variant_id::AbstractString)
+  return String(variant_id) == "toccategli"
+end
+
+function toc_variant(variant_id::AbstractString)
+  return String(variant_id) == "toc"
+end
+
+function aecrire_variant(variant_id::AbstractString)
+  return String(variant_id) == "trictrac_aecrire"
+end
+
+function combine_variant(variant_id::AbstractString)
+  return String(variant_id) == "trictrac_combine"
+end
+
+function tactical_variant(variant_id::AbstractString)
+  return classique_variant(variant_id) ||
+         toccategli_variant(variant_id) ||
+         toc_variant(variant_id) ||
+         aecrire_variant(variant_id) ||
+         combine_variant(variant_id)
+end
+
 function default_tactical_shaping_enabled(variant_id::AbstractString, match_options)
-  return classique_variant(variant_id)
+  return tactical_variant(variant_id)
 end
 
 function default_tactical_config(variant_id::AbstractString, match_options)
@@ -134,7 +159,7 @@ function default_tactical_config(variant_id::AbstractString, match_options)
   horizon = configured_tactical_horizon_own_turns()
   reward_weight = configured_tactical_reward_weight()
   heuristic_weight = configured_tactical_heuristic_weight()
-  if !classique_variant(variant_id)
+  if !tactical_variant(variant_id)
     enabled = false
     horizon = 0
   end
@@ -143,7 +168,7 @@ function default_tactical_config(variant_id::AbstractString, match_options)
     "horizon_own_turns" => enabled ? horizon : 0,
     "reward_weight" => reward_weight,
     "heuristic_weight" => heuristic_weight,
-    "version" => "classique-tactical-v2"
+    "version" => DEFAULT_TACTICAL_VERSION
   )
 end
 
@@ -186,7 +211,7 @@ function normalize_tactical_config(
     get(tactical_config, :version, config["version"])
   ))
 
-  if !classique_variant(variant_id)
+  if !tactical_variant(variant_id)
     enabled = false
     horizon = 0
   end
@@ -294,10 +319,14 @@ mutable struct TricTracGameEnv <: GI.AbstractGameEnv
 end
 
 function variant_family(variant_id::AbstractString)
-  if variant_id == "trictrac_aecrire"
+  if aecrire_variant(variant_id)
     return :aecrire
-  elseif variant_id == "trictrac_combine"
+  elseif combine_variant(variant_id)
     return :combine
+  elseif toc_variant(variant_id)
+    return :toc
+  elseif toccategli_variant(variant_id)
+    return :toccategli
   else
     return :classical
   end
@@ -305,7 +334,11 @@ end
 
 variant_family(gspec::TricTracGameSpec) = variant_family(gspec.variant_id)
 aecrire_like_variant(gspec::TricTracGameSpec) = variant_family(gspec) in (:aecrire, :combine)
-combine_variant(gspec::TricTracGameSpec) = variant_family(gspec) == :combine
+combine_variant(gspec::TricTracGameSpec) = combine_variant(gspec.variant_id)
+aecrire_variant(gspec::TricTracGameSpec) = aecrire_variant(gspec.variant_id)
+toc_variant(gspec::TricTracGameSpec) = toc_variant(gspec.variant_id)
+toccategli_variant(gspec::TricTracGameSpec) = toccategli_variant(gspec.variant_id)
+tactical_variant(gspec::TricTracGameSpec) = tactical_variant(gspec.variant_id)
 
 partie_length_schedule_key(gspec::TricTracGameSpec) = gspec.storage
 
@@ -504,12 +537,18 @@ function GI.heuristic_value(game::TricTracGameEnv)
   if aecrire_like_variant(game.spec)
     raw =
       if combine_variant(game.spec)
-        combine_scalar_utility(runtime, myself, opponent)
+        combine_scalar_utility(game.spec, game.state, runtime, myself, opponent)
       else
         official_margin(runtime, myself, opponent) +
-        configured_aecrire_shaping_weight() * aecrire_potential(runtime, myself, opponent)
+        tactical_heuristic_weight(game.spec) * perspective_tactical_equity(game.spec, game.state, myself)
       end
     return aecrire_like_value_target(raw, runtime)
+  elseif toc_variant(game.spec)
+    value = toc_global_utility(runtime, myself, opponent)
+    if tactical_shaping_enabled(game.spec)
+      value += tactical_heuristic_weight(game.spec) * perspective_tactical_equity(game.spec, game.state, myself)
+    end
+    return clamp(value, -1.0, 1.0)
   end
 
   value = shape_margin_value(score_margin_unit(score_total(runtime, myself) - score_total(runtime, opponent)))
@@ -838,6 +877,8 @@ function transition_white_reward(
     return aecrire_step_reward(state_runtime(previous_state), state_runtime(next_state))
   elseif family == :combine
     return combine_step_reward(state_runtime(previous_state), state_runtime(next_state))
+  elseif family == :toc
+    return toc_step_reward(state_runtime(previous_state), state_runtime(next_state))
   else
     reward = terminal_white_reward(gspec, next_state; fallback)
     if tactical_shaping_enabled(gspec)
@@ -1007,6 +1048,7 @@ function terminal_white_reward(
   runtime = state_runtime(state)
   isempty(runtime) && return clamp(fallback, -1.0, 1.0)
   aecrire_like_variant(gspec) && return clamp(fallback, -1.0, 1.0)
+  toc_variant(gspec) && return toc_global_utility(runtime, "white", "black")
   return shape_margin_value(score_margin_unit(white_score_margin(runtime)))
 end
 
@@ -1014,7 +1056,7 @@ tactical_config(gspec::TricTracGameSpec) = gspec.tactical_config
 
 function tactical_shaping_enabled(gspec::TricTracGameSpec)
   config = tactical_config(gspec)
-  return classique_variant(gspec.variant_id) && Bool(get(config, "enabled", false))
+  return tactical_variant(gspec.variant_id) && Bool(get(config, "enabled", false))
 end
 
 function tactical_horizon_own_turns(gspec::TricTracGameSpec)
@@ -1076,10 +1118,16 @@ function side_to_move_tactical_equity(gspec::TricTracGameSpec, state::TricTracSt
   return state_white_to_play(state) ? margin : -margin
 end
 
+function perspective_tactical_equity(gspec::TricTracGameSpec, state::TricTracState, color::String)
+  margin = white_tactical_equity(gspec, state)
+  return color == "white" ? margin : -margin
+end
+
 points_for(runtime, color::String) = get(score_entry(runtime, color), "points", 0)
 trous_for(runtime, color::String) = get(score_entry(runtime, color), "trous", 0)
 score_flag(runtime, color::String, key::String) = get(score_entry(runtime, color), key, false)
 normalize_color_name(value) = value in ("white", :white) ? "white" : value in ("black", :black) ? "black" : nothing
+match_state(runtime) = get(runtime, "match", Dict{String, Any}())
 
 function color_map_get(container, key::String, color::String, default = 0)
   mapping = get(container, key, Dict{String, Any}())
@@ -1132,6 +1180,32 @@ function aecrire_step_reward(before_runtime, after_runtime)
   return Float64(Δofficial) + configured_aecrire_shaping_weight() * Δphi
 end
 
+function toc_hole_target(runtime)
+  match = match_state(runtime)
+  length_value = get(match, "length", 0)
+  if length_value isa Number
+    return max(1.0, Float64(length_value))
+  end
+  raw = get(get(match, "options", Dict{String, Any}()), "holeTarget", "1")
+  try
+    return max(1.0, Float64(parse(Int, String(raw))))
+  catch
+    return 1.0
+  end
+end
+
+toc_holes(runtime, color::String) = Float64(get(get(match_state(runtime), "score", Dict{String, Any}()), color, 0))
+toc_hole_margin(runtime, myself::String, opponent::String) = toc_holes(runtime, myself) - toc_holes(runtime, opponent)
+
+function toc_global_utility(runtime, myself::String, opponent::String)
+  ratio = clamp(toc_hole_margin(runtime, myself, opponent) / toc_hole_target(runtime), -1.0, 1.0)
+  return shape_margin_value(ratio)
+end
+
+function toc_step_reward(before_runtime, after_runtime)
+  return toc_global_utility(after_runtime, "white", "black") - toc_global_utility(before_runtime, "white", "black")
+end
+
 function combine_honneurs(runtime, color::String)
   track = get(trictrac_state(runtime), "track_classique_honneurs", Dict{String, Any}())
   return color_map_get(track, "honneurs", color)
@@ -1150,26 +1224,22 @@ function combine_partie_progress(runtime, myself::String, opponent::String)
   return trous_margin + 0.25 * uninterrupted_margin
 end
 
-function combine_scalar_utility(runtime, myself::String, opponent::String)
+function combine_scalar_utility(
+  gspec::TricTracGameSpec,
+  state::TricTracState,
+  runtime,
+  myself::String,
+  opponent::String
+)
   official = official_margin(runtime, myself, opponent)
   honneurs = combine_honneurs(runtime, myself) - combine_honneurs(runtime, opponent)
-  partie = combine_partie_progress(runtime, myself, opponent)
   return Float64(official) +
          configured_combine_honneur_weight() * Float64(honneurs) +
-         configured_combine_partie_weight() * Float64(partie)
+         tactical_heuristic_weight(gspec) * perspective_tactical_equity(gspec, state, myself)
 end
 
 function combine_step_reward(before_runtime, after_runtime)
-  Δofficial = official_margin(after_runtime) - official_margin(before_runtime)
-  Δhonneurs =
-    (combine_honneurs(after_runtime, "white") - combine_honneurs(after_runtime, "black")) -
-    (combine_honneurs(before_runtime, "white") - combine_honneurs(before_runtime, "black"))
-  Δpartie =
-    combine_partie_progress(after_runtime, "white", "black") -
-    combine_partie_progress(before_runtime, "white", "black")
-  return Float64(Δofficial) +
-         configured_combine_honneur_weight() * Float64(Δhonneurs) +
-         configured_combine_partie_weight() * Float64(Δpartie)
+  return Float64(official_margin(after_runtime) - official_margin(before_runtime))
 end
 
 function aecrire_like_value_target(value, runtime)

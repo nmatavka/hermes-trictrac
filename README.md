@@ -6,7 +6,7 @@ This is a monorepository that contains essentially everything you need to start 
 
 **List B** contains tapa, jacquet, bräde, garanguet, tavli (a repeating loop of backgammon, tapa, and jacquet), sbaraglio, sbaraglino, plein, tourne-case, and dames rabattues. *Not all of these have been fully implemented.* In terms of rule-complexity, it is likely that bräde is heaviest; not coincidentally, bräde is next to be fully audited and, if by chance it hasn't fully been implemented, it will be.
 
-If you're not quite sure what a tables game is, this class includes all, and only, those stochastic games that can be played on a backgammon board. Be warned that this does **not necessarily** mean they are even remotely similar as a class; the name refers to the *equipment* only (fifteen black and fifteen white pieces, all identical, one board with twelve points, and two or three dice).
+If you're not quite sure what a tables game is, this class includes all, and only, those stochastic games that can be played on a backgammon board. Be warned that this does **not necessarily** mean they are even remotely similar as a class; the name refers to the *equipment* only (fifteen black and fifteen white pieces, all identical, one board with twelve points per side, and two or three dice).
 
 Most of this is a Web service. If you are **not** a Web developer, we instead invite you to play at [trictrac.hermes.cx](https://trictrac.hermes.cx); honestly, this applies even if you **are** a Web developer.
 
@@ -46,7 +46,7 @@ This repository includes an artificial intelligence trainer written in Julia tha
 
 In fact, it is a hybrid of both. The problem it was designed to solve is that, in event-driven games, it is conceivable (in actuality, it is true) that the primary scoring engines include the pre-positioning and the maintenance *in situ* of **complex structures**. The deliberately narrow definition we'll use is a structure that takes multiple turns to set up, and distributes rewards in a form akin to `[0, 0, 0.0417]`. (The prototypical complex structure is a capture in the game of go.)
 
-Given infinite time, an AlphaZero-class trainer with a non-binary reward structure (with the reward term being the anticipated score differential between player and opponent, put through the traditional tanh wringer) would almost surely derive a reward function for such a game, irrespective of how weak and how delayed the tactical signal. Even odds on whether this would occur before or after an infinite number of simians would reproduce the complete literary works of one Wm Shakespeare, Esq.
+Given infinite time, an AlphaZero-class trainer with a non-binary reward structure (with the reward term being the anticipated score differential between player and opponent, put through the traditional `tanh` wringer) would almost surely derive a reward function for such a game, irrespective of how weak and how delayed the tactical signal. Even odds on whether this would occur before or after an infinite number of simians would reproduce the complete literary works of one Wm Shakespeare, Esq.
 
 Needless to say, we do not have infinite time for stochasticity to do the work for us. The solution chosen was to have a sort of finite-horizon tactical oracle that could highlight locally-promising lines of play. This is hard CPU work.
 

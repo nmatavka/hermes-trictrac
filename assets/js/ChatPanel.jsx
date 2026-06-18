@@ -18,7 +18,7 @@ function ChatPanel({ messages, onSendMessage, t }) {
 
   return (
     <section className="chat-panel">
-      <h2>{t("chat.title")}</h2>
+      <p className="rail-label">{t("chat.title")}</p>
       <div className="chat-messages">
         {messages.length === 0 ? (
           <p className="chat-empty">{t("chat.empty")}</p>
