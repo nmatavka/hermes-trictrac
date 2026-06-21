@@ -170,12 +170,12 @@
   --accent-fill-muted: rgba(216, 178, 119, 0.1);
   --success-tint: rgba(92, 182, 128, 0.18);
   --danger-tint: rgba(212, 107, 85, 0.18);
-  --toast-positive-bg: rgba(20, 54, 34, 0.96);
-  --toast-positive-border: rgba(92, 182, 128, 0.34);
-  --toast-positive-ink: #e5f8ea;
-  --toast-negative-bg: rgba(58, 15, 10, 0.96);
-  --toast-negative-border: rgba(242, 141, 123, 0.34);
-  --toast-negative-ink: #ffe1d9;
+  --toast-reward-bg: rgba(20, 54, 34, 0.96);
+  --toast-reward-border: rgba(92, 182, 128, 0.34);
+  --toast-reward-ink: #e5f8ea;
+  --toast-conceded-bg: rgba(58, 15, 10, 0.96);
+  --toast-conceded-border: rgba(242, 141, 123, 0.34);
+  --toast-conceded-ink: #ffe1d9;
   --toast-rare-bg: rgba(48, 30, 73, 0.96);
   --toast-rare-border: rgba(160, 145, 214, 0.34);
   --toast-rare-ink: #f1ebff;
@@ -309,12 +309,12 @@ html[data-theme="solarized-dark"] {
   --accent-fill-muted: rgba(38, 139, 210, 0.18);
   --success-tint: rgba(133, 153, 0, 0.2);
   --danger-tint: rgba(220, 50, 47, 0.2);
-  --toast-positive-bg: rgba(31, 56, 17, 0.97);
-  --toast-positive-border: rgba(133, 153, 0, 0.46);
-  --toast-positive-ink: #eee8d5;
-  --toast-negative-bg: rgba(64, 27, 28, 0.97);
-  --toast-negative-border: rgba(220, 50, 47, 0.45);
-  --toast-negative-ink: #eee8d5;
+  --toast-reward-bg: rgba(31, 56, 17, 0.97);
+  --toast-reward-border: rgba(133, 153, 0, 0.46);
+  --toast-reward-ink: #eee8d5;
+  --toast-conceded-bg: rgba(64, 27, 28, 0.97);
+  --toast-conceded-border: rgba(220, 50, 47, 0.45);
+  --toast-conceded-ink: #eee8d5;
   --toast-rare-bg: rgba(43, 47, 88, 0.97);
   --toast-rare-border: rgba(108, 113, 196, 0.48);
   --toast-rare-ink: #f3f0ff;
@@ -464,12 +464,12 @@ html[data-theme="solarized-light"] {
   --accent-fill-muted: rgba(38, 139, 210, 0.1);
   --success-tint: rgba(133, 153, 0, 0.16);
   --danger-tint: rgba(220, 50, 47, 0.14);
-  --toast-positive-bg: rgba(238, 245, 219, 0.98);
-  --toast-positive-border: rgba(133, 153, 0, 0.38);
-  --toast-positive-ink: #4f6400;
-  --toast-negative-bg: rgba(252, 237, 232, 0.98);
-  --toast-negative-border: rgba(220, 50, 47, 0.34);
-  --toast-negative-ink: #b02c25;
+  --toast-reward-bg: rgba(238, 245, 219, 0.98);
+  --toast-reward-border: rgba(133, 153, 0, 0.38);
+  --toast-reward-ink: #4f6400;
+  --toast-conceded-bg: rgba(252, 237, 232, 0.98);
+  --toast-conceded-border: rgba(220, 50, 47, 0.34);
+  --toast-conceded-ink: #b02c25;
   --toast-rare-bg: rgba(236, 238, 252, 0.98);
   --toast-rare-border: rgba(108, 113, 196, 0.38);
   --toast-rare-ink: #565ba8;
@@ -1662,27 +1662,27 @@ button:disabled {
 .toast-card.toast-card-error strong {
   color: var(--toast-error-ink);
 }
-html[data-theme="solarized-dark"] .toast-card.toast-card-positive,
-html[data-theme="solarized-light"] .toast-card.toast-card-positive {
-  border-color: var(--toast-positive-border);
-  background: var(--toast-positive-bg);
+html[data-theme="solarized-dark"] .toast-card.toast-card-reward,
+html[data-theme="solarized-light"] .toast-card.toast-card-reward {
+  border-color: var(--toast-reward-border);
+  background: var(--toast-reward-bg);
 }
-html[data-theme="solarized-dark"] .toast-card.toast-card-positive strong,
-html[data-theme="solarized-dark"] .toast-card.toast-card-positive p,
-html[data-theme="solarized-light"] .toast-card.toast-card-positive strong,
-html[data-theme="solarized-light"] .toast-card.toast-card-positive p {
-  color: var(--toast-positive-ink);
+html[data-theme="solarized-dark"] .toast-card.toast-card-reward strong,
+html[data-theme="solarized-dark"] .toast-card.toast-card-reward p,
+html[data-theme="solarized-light"] .toast-card.toast-card-reward strong,
+html[data-theme="solarized-light"] .toast-card.toast-card-reward p {
+  color: var(--toast-reward-ink);
 }
-html[data-theme="solarized-dark"] .toast-card.toast-card-negative,
-html[data-theme="solarized-light"] .toast-card.toast-card-negative {
-  border-color: var(--toast-negative-border);
-  background: var(--toast-negative-bg);
+html[data-theme="solarized-dark"] .toast-card.toast-card-conceded,
+html[data-theme="solarized-light"] .toast-card.toast-card-conceded {
+  border-color: var(--toast-conceded-border);
+  background: var(--toast-conceded-bg);
 }
-html[data-theme="solarized-dark"] .toast-card.toast-card-negative strong,
-html[data-theme="solarized-dark"] .toast-card.toast-card-negative p,
-html[data-theme="solarized-light"] .toast-card.toast-card-negative strong,
-html[data-theme="solarized-light"] .toast-card.toast-card-negative p {
-  color: var(--toast-negative-ink);
+html[data-theme="solarized-dark"] .toast-card.toast-card-conceded strong,
+html[data-theme="solarized-dark"] .toast-card.toast-card-conceded p,
+html[data-theme="solarized-light"] .toast-card.toast-card-conceded strong,
+html[data-theme="solarized-light"] .toast-card.toast-card-conceded p {
+  color: var(--toast-conceded-ink);
 }
 html[data-theme="solarized-dark"] .toast-card.toast-card-rare,
 html[data-theme="solarized-light"] .toast-card.toast-card-rare {

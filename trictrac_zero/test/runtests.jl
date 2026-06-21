@@ -336,6 +336,7 @@ end
   spec = classique_test_spec()
   aecrire_spec = TricTracGameSpec(variant_id = "trictrac_aecrire")
   combine_spec = TricTracGameSpec(variant_id = "trictrac_combine")
+  toccategli_spec = TricTracGameSpec(variant_id = "toccategli")
   policy = AlphaZero.self_play_straggler_policy(spec)
   @test !isnothing(policy)
   @test policy.timeout_seconds == TricTracZero.DEFAULT_STRAGGLER_TIMEOUT_SECONDS
@@ -351,17 +352,53 @@ end
   @test isnothing(AlphaZero.self_play_straggler_policy(combine_spec))
   @test isnothing(AlphaZero.checkpoint_straggler_policy(combine_spec))
   @test isnothing(AlphaZero.max_game_length(combine_spec))
+  @test isnothing(AlphaZero.self_play_straggler_policy(toccategli_spec))
+  @test isnothing(AlphaZero.checkpoint_straggler_policy(toccategli_spec))
+  @test isnothing(AlphaZero.max_game_length(toccategli_spec))
 
   original_cap = get(ENV, TricTracZero.TEMP_MAX_GAME_LENGTH_ENV, nothing)
+  original_self_play_timeout = get(ENV, TricTracZero.STRAGGLER_TIMEOUT_SECONDS_ENV, nothing)
+  original_self_play_remaining = get(ENV, TricTracZero.STRAGGLER_REMAINING_GAMES_ENV, nothing)
+  original_checkpoint_timeout = get(ENV, TricTracZero.CHECKPOINT_STRAGGLER_TIMEOUT_SECONDS_ENV, nothing)
+  original_checkpoint_remaining = get(ENV, TricTracZero.CHECKPOINT_STRAGGLER_REMAINING_GAMES_ENV, nothing)
   try
     ENV[TricTracZero.TEMP_MAX_GAME_LENGTH_ENV] = "620"
+    ENV[TricTracZero.STRAGGLER_TIMEOUT_SECONDS_ENV] = "12"
+    ENV[TricTracZero.STRAGGLER_REMAINING_GAMES_ENV] = "2"
+    ENV[TricTracZero.CHECKPOINT_STRAGGLER_TIMEOUT_SECONDS_ENV] = "33"
+    ENV[TricTracZero.CHECKPOINT_STRAGGLER_REMAINING_GAMES_ENV] = "3"
     @test AlphaZero.max_game_length(spec) == 620
     @test AlphaZero.max_game_length(aecrire_spec) == 620
     @test AlphaZero.max_game_length(combine_spec) == 620
+    @test isnothing(AlphaZero.max_game_length(toccategli_spec))
+    explicit_toccategli_cap = TricTracGameSpec(variant_id = "toccategli", temp_max_game_length = 620)
+    disabled_toccategli_cap = TricTracGameSpec(variant_id = "toccategli", temp_max_game_length = 0)
+    @test AlphaZero.max_game_length(explicit_toccategli_cap) == 620
+    @test isnothing(AlphaZero.max_game_length(disabled_toccategli_cap))
+    policy = AlphaZero.self_play_straggler_policy(toccategli_spec)
+    @test !isnothing(policy)
+    @test policy.timeout_seconds == 12.0
+    @test policy.remaining_games == 2
+    checkpoint_policy = AlphaZero.checkpoint_straggler_policy(toccategli_spec)
+    @test !isnothing(checkpoint_policy)
+    @test checkpoint_policy.timeout_seconds == 33.0
+    @test checkpoint_policy.remaining_games == 3
   finally
     isnothing(original_cap) ?
       delete!(ENV, TricTracZero.TEMP_MAX_GAME_LENGTH_ENV) :
       (ENV[TricTracZero.TEMP_MAX_GAME_LENGTH_ENV] = original_cap)
+    isnothing(original_self_play_timeout) ?
+      delete!(ENV, TricTracZero.STRAGGLER_TIMEOUT_SECONDS_ENV) :
+      (ENV[TricTracZero.STRAGGLER_TIMEOUT_SECONDS_ENV] = original_self_play_timeout)
+    isnothing(original_self_play_remaining) ?
+      delete!(ENV, TricTracZero.STRAGGLER_REMAINING_GAMES_ENV) :
+      (ENV[TricTracZero.STRAGGLER_REMAINING_GAMES_ENV] = original_self_play_remaining)
+    isnothing(original_checkpoint_timeout) ?
+      delete!(ENV, TricTracZero.CHECKPOINT_STRAGGLER_TIMEOUT_SECONDS_ENV) :
+      (ENV[TricTracZero.CHECKPOINT_STRAGGLER_TIMEOUT_SECONDS_ENV] = original_checkpoint_timeout)
+    isnothing(original_checkpoint_remaining) ?
+      delete!(ENV, TricTracZero.CHECKPOINT_STRAGGLER_REMAINING_GAMES_ENV) :
+      (ENV[TricTracZero.CHECKPOINT_STRAGGLER_REMAINING_GAMES_ENV] = original_checkpoint_remaining)
   end
 
   control = AlphaZero.make_self_play_straggler_control(
@@ -719,6 +756,15 @@ end
   off_cfg = TricTracScriptCPU.parse_startup(:train, ["--cpu-policy=off"]; env = Dict{String, String}())
   @test TricTracScriptCPU.resolve_target_threads(off_cfg; visible_cpu_threads = 8, current_threads = 1) == 1
   @test TricTracScriptCPU.relaunch_status(off_cfg; visible_cpu_threads = 8, current_threads = 1, env = Dict{String, String}()) == :none
+
+  plain_exit = run(ignorestatus(Cmd(["sh", "-c", "exit 7"])))
+  @test TricTracScriptCPU.child_process_exit_status(plain_exit) == 7
+
+  killed = run(ignorestatus(Cmd(["sh", "-c", "kill -9 \$\$"])))
+  @test killed.exitcode == 0
+  @test hasproperty(killed, :termsignal) ? getproperty(killed, :termsignal) == 9 : true
+  @test !success(killed)
+  @test TricTracScriptCPU.child_process_exit_status(killed) == 137
 
   help_text = TricTracScriptCPU.usage_text(:train, "/Users/nick/hermes_trictrac/trictrac_zero/scripts/train.jl")
   @test occursin("--device", help_text)
@@ -1794,6 +1840,11 @@ end
   @test tocc.gspec.match_options["margotEnabled"] == false
   @test tocc.gspec.tactical_config["enabled"] == true
   @test tocc.gspec.tactical_config["horizon_own_turns"] == 3
+  @test isnothing(tocc.gspec.temp_max_game_length)
+
+  tocc_with_cap = TricTracZero.game_spec_for_preset(preset = "toccategli", move_cap = 620)
+  @test tocc_with_cap.temp_max_game_length == 620
+  @test AlphaZero.max_game_length(tocc_with_cap) == 620
 
   @test TricTracZero.source_session_dir_for_preset("classique") === nothing
   @test TricTracZero.source_session_dir_for_preset("aecrire") === nothing

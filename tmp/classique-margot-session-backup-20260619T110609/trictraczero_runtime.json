@@ -1,0 +1,11 @@
+{
+    "classique_tactical_signature": {
+        "margotEnabled": true,
+        "horizon_own_turns": 2,
+        "variant_id": "trictrac_classique",
+        "enabled": true,
+        "heuristic_weight": 1,
+        "version": "classique-tactical-v2",
+        "reward_weight": 1
+    }
+}

@@ -340,6 +340,28 @@ function build_relaunch_cmd(script_path::AbstractString, args::Vector{String}, t
   return Cmd(words)
 end
 
+function child_process_exit_status(process::Base.Process)
+  signum = hasproperty(process, :termsignal) ? getproperty(process, :termsignal) : 0
+  signum == 0 || return 128 + signum
+  return process.exitcode
+end
+
+function report_child_process_failure(process::Base.Process)
+  signum = hasproperty(process, :termsignal) ? getproperty(process, :termsignal) : 0
+  if signum != 0
+    print(stderr, "Relaunched Julia child terminated by signal $(signum)")
+    if Sys.islinux() && signum == 9
+      print(stderr, " (possible OOM kill; inspect journalctl or dmesg)")
+    end
+    println(stderr, ".")
+    return nothing
+  end
+
+  process.exitcode == 0 && return nothing
+  println(stderr, "Relaunched Julia child exited with code $(process.exitcode).")
+  return nothing
+end
+
 function maybe_relaunch!(config::StartupConfig, script_path::AbstractString, args::Vector{String})
   status = relaunch_status(config)
   status == :would_relaunch || return status
@@ -354,7 +376,9 @@ function maybe_relaunch!(config::StartupConfig, script_path::AbstractString, arg
 
   cmd = addenv(build_relaunch_cmd(script_path, args, config.target_threads), passthrough...)
   process = run(ignorestatus(cmd))
-  exit(process.exitcode)
+  status = child_process_exit_status(process)
+  status == 0 || report_child_process_failure(process)
+  exit(status)
 end
 
 function source_label(source::Symbol)

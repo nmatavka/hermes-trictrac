@@ -238,8 +238,12 @@ function encode_gspec_storage(;
   bridge_script::String,
   variant_id::AbstractString,
   match_options,
-  tactical_config
+  tactical_config,
+  temp_max_game_length::Union{Nothing, Int}
 )
+  if !isnothing(temp_max_game_length) && temp_max_game_length < 0
+    error("temp_max_game_length must be non-negative when provided.")
+  end
   payload = Dict{String, Any}(
     "repo_root" => repo_root,
     "bridge_script" => bridge_script,
@@ -247,6 +251,9 @@ function encode_gspec_storage(;
     "match_options" => normalize_match_options(match_options),
     "tactical_config" => normalize_tactical_config(variant_id, match_options, tactical_config)
   )
+  if !isnothing(temp_max_game_length)
+    payload["temp_max_game_length"] = temp_max_game_length
+  end
   return GSPEC_STORAGE_PREFIX * JSON3.write(payload)
 end
 
@@ -262,7 +269,10 @@ function decode_gspec_storage(storage::String)
         String(get(payload, "variant_id", "trictrac_classique")),
         normalize_match_options(get(payload, "match_options", Dict{String, Any}())),
         get(payload, "tactical_config", nothing)
-      )
+      ),
+      temp_max_game_length = haskey(payload, "temp_max_game_length") ?
+        Int(get(payload, "temp_max_game_length", 0)) :
+        nothing
     )
   end
 
@@ -275,7 +285,8 @@ function decode_gspec_storage(storage::String)
     tactical_config = default_tactical_config(
       "trictrac_classique",
       Dict{String, Any}("margotEnabled" => false)
-    )
+    ),
+    temp_max_game_length = nothing
   )
 end
 
@@ -283,7 +294,7 @@ function Base.getproperty(gspec::TricTracGameSpec, name::Symbol)
   if name === :storage
     return getfield(gspec, :storage)
   elseif name === :repo_root || name === :bridge_script || name === :variant_id ||
-         name === :match_options || name === :tactical_config
+         name === :match_options || name === :tactical_config || name === :temp_max_game_length
     return getproperty(decode_gspec_storage(getfield(gspec, :storage)), name)
   end
 
@@ -291,7 +302,7 @@ function Base.getproperty(gspec::TricTracGameSpec, name::Symbol)
 end
 
 function Base.propertynames(::TricTracGameSpec, private::Bool = false)
-  names = (:repo_root, :bridge_script, :variant_id, :match_options, :tactical_config)
+  names = (:repo_root, :bridge_script, :variant_id, :match_options, :tactical_config, :temp_max_game_length)
   return private ? (:storage, names...) : names
 end
 
@@ -300,14 +311,16 @@ function TricTracGameSpec(;
   bridge_script::String = BRIDGE_SCRIPT,
   variant_id::AbstractString = "trictrac_classique",
   match_options = Dict{String, Any}("margotEnabled" => false),
-  tactical_config = default_tactical_config(variant_id, match_options)
+  tactical_config = default_tactical_config(variant_id, match_options),
+  temp_max_game_length::Union{Nothing, Int} = nothing
 )
   return TricTracGameSpec(encode_gspec_storage(
     repo_root = repo_root,
     bridge_script = bridge_script,
     variant_id = variant_id,
     match_options = match_options,
-    tactical_config = tactical_config
+    tactical_config = tactical_config,
+    temp_max_game_length = temp_max_game_length
   ))
 end
 
@@ -559,7 +572,7 @@ function GI.heuristic_value(game::TricTracGameEnv)
 end
 
 function AlphaZero.self_play_straggler_policy(gspec::TricTracGameSpec)
-  if aecrire_like_variant(gspec) &&
+  if (aecrire_like_variant(gspec) || toccategli_variant(gspec)) &&
      !any(haskey(ENV, name) for name in (STRAGGLER_TIMEOUT_SECONDS_ENV, STRAGGLER_REMAINING_GAMES_ENV))
     return nothing
   end
@@ -575,7 +588,7 @@ function AlphaZero.self_play_straggler_policy(gspec::TricTracGameSpec)
 end
 
 function AlphaZero.checkpoint_straggler_policy(gspec::TricTracGameSpec)
-  if aecrire_like_variant(gspec) &&
+  if (aecrire_like_variant(gspec) || toccategli_variant(gspec)) &&
      !any(haskey(ENV, name) for name in (CHECKPOINT_STRAGGLER_TIMEOUT_SECONDS_ENV, CHECKPOINT_STRAGGLER_REMAINING_GAMES_ENV))
     return nothing
   end
@@ -591,6 +604,12 @@ function AlphaZero.checkpoint_straggler_policy(gspec::TricTracGameSpec)
 end
 
 function AlphaZero.max_game_length(gspec::TricTracGameSpec)
+  explicit_cap = gspec.temp_max_game_length
+  if !isnothing(explicit_cap)
+    explicit_cap > 0 || return nothing
+    return explicit_cap
+  end
+  toccategli_variant(gspec) && return nothing
   cap = configured_temp_max_game_length()
   isnothing(cap) && return nothing
   cap > 0 || return nothing

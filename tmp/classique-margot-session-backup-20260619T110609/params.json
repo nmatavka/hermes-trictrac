@@ -1,0 +1,92 @@
+{
+    "self_play": {
+        "mcts": {
+            "gamma": 1,
+            "cpuct": 1.5,
+            "num_iters_per_turn": 32,
+            "temperature": {
+                "xs": [
+                    0,
+                    6,
+                    12
+                ],
+                "ys": [
+                    1,
+                    0.7,
+                    0.3
+                ]
+            },
+            "dirichlet_noise_ϵ": 0.2,
+            "dirichlet_noise_α": 0.35,
+            "prior_temperature": 1
+        },
+        "sim": {
+            "num_games": 96,
+            "num_workers": 28,
+            "batch_size": 1,
+            "use_gpu": false,
+            "fill_batches": false,
+            "reset_every": 1,
+            "flip_probability": 0,
+            "alternate_colors": false
+        }
+    },
+    "memory_analysis": null,
+    "learning": {
+        "use_gpu": false,
+        "use_position_averaging": true,
+        "samples_weighing_policy": "LOG_WEIGHT",
+        "optimiser": {
+            "lr": 0.0008
+        },
+        "l2_regularization": 0.0001,
+        "rewards_renormalization": 1,
+        "nonvalidity_penalty": 1,
+        "batch_size": 64,
+        "loss_computation_batch_size": 64,
+        "min_checkpoints_per_epoch": 1,
+        "max_batches_per_checkpoint": 32,
+        "num_checkpoints": 1
+    },
+    "arena": {
+        "mcts": {
+            "gamma": 1,
+            "cpuct": 1.5,
+            "num_iters_per_turn": 96,
+            "temperature": {
+                "value": 0.05
+            },
+            "dirichlet_noise_ϵ": 0,
+            "dirichlet_noise_α": 0.35,
+            "prior_temperature": 1
+        },
+        "sim": {
+            "num_games": 8,
+            "num_workers": 8,
+            "batch_size": 1,
+            "use_gpu": false,
+            "fill_batches": false,
+            "reset_every": 1,
+            "flip_probability": 0,
+            "alternate_colors": true
+        },
+        "update_threshold": 0
+    },
+    "num_iters": 200,
+    "use_symmetries": false,
+    "ternary_outcome": false,
+    "mem_buffer_size": {
+        "xs": [
+            0,
+            1,
+            2,
+            3
+        ],
+        "ys": [
+            25000,
+            50000,
+            75000,
+            100000
+        ]
+    }
+}

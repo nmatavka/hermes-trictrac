@@ -193,13 +193,15 @@ function scoreEventDetail(event) {
   return fallback;
 }
 
-function scoreEventTone(event) {
+function scoreEventToastFamily(event) {
   switch (scoreEventTranslationKey(event)) {
     case "jan_recompense":
-      return "positive";
+    case "coin_battu":
+      return "reward";
     case "jan_qui_ne_peut":
+    case "impuissance":
     case "margot":
-      return "negative";
+      return "conceded";
     case "jan_de_meseas":
     case "contre_jan_de_meseas":
     case "jan_de_deux_tables":
@@ -226,7 +228,7 @@ function buildTrictracToast(event) {
   const points = Number(event?.points ?? 0);
 
   return {
-    tone: scoreEventTone(event),
+    family: scoreEventToastFamily(event),
     title: t("score.wins", { color: colorLabel(beneficiary), points }),
     detail: scoreEventDetail(event)
   };
@@ -2497,7 +2499,7 @@ function ToastStack({ toasts }) {
   return (
     <div className="toast-stack" aria-live="polite" aria-atomic="false">
       {toasts.map((toast) => (
-        <article key={toast.id} className={`toast-card${toast.tone ? ` toast-card-${toast.tone}` : ""}`}>
+        <article key={toast.id} className={`toast-card${toast.family ? ` toast-card-${toast.family}` : ""}`}>
           <strong>{toast.title}</strong>
           <p>{toast.detail}</p>
         </article>

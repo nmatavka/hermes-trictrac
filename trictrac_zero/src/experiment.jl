@@ -659,6 +659,7 @@ function default_experiment(;
   preset::Union{String, Symbol} = DEFAULT_PRESET,
   device::Union{Symbol, AbstractString} = DEFAULT_DEVICE,
   use_gpu::Bool = false,
+  move_cap::Union{Nothing, Int} = nothing,
   num_iters::Union{Nothing, Int} = nothing,
   self_play_workers::Union{Nothing, Int} = nothing,
   arena_workers::Union{Nothing, Int} = nothing,
@@ -675,6 +676,7 @@ function default_experiment(;
   gspec = game_spec_for_preset(
     repo_root = repo_root,
     preset = preset,
+    move_cap = move_cap,
     tactical_shaping = tactical_shaping,
     tactical_horizon_own_turns = tactical_horizon_own_turns,
     tactical_reward_weight = tactical_reward_weight,
@@ -711,6 +713,7 @@ function smoke_experiment(;
   preset::Union{String, Symbol} = DEFAULT_PRESET,
   device::Union{Symbol, AbstractString} = DEFAULT_DEVICE,
   use_gpu::Bool = false,
+  move_cap::Union{Nothing, Int} = nothing,
   num_iters::Union{Nothing, Int} = nothing,
   self_play_workers::Union{Nothing, Int} = nothing,
   arena_workers::Union{Nothing, Int} = nothing,
@@ -727,6 +730,7 @@ function smoke_experiment(;
   gspec = game_spec_for_preset(
     repo_root = repo_root,
     preset = preset,
+    move_cap = move_cap,
     tactical_shaping = tactical_shaping,
     tactical_horizon_own_turns = tactical_horizon_own_turns,
     tactical_reward_weight = tactical_reward_weight,
@@ -761,6 +765,7 @@ end
 function game_spec_for_preset(;
   repo_root::String = REPO_ROOT,
   preset::Union{String, Symbol} = DEFAULT_PRESET,
+  move_cap::Union{Nothing, Int} = nothing,
   tactical_shaping::Union{Nothing, Bool} = nothing,
   tactical_horizon_own_turns::Union{Nothing, Int} = nothing,
   tactical_reward_weight::Union{Nothing, Float64} = nothing,
@@ -782,7 +787,8 @@ function game_spec_for_preset(;
     repo_root = repo_root,
     variant_id = config.variant_id,
     match_options = config.match_options,
-    tactical_config = tactical
+    tactical_config = tactical,
+    temp_max_game_length = move_cap
   )
 end
 
@@ -1007,6 +1013,7 @@ function run_train(;
   device::Union{Symbol, AbstractString} = DEFAULT_DEVICE,
   use_gpu::Bool = false,
   reset_memory::Bool = false,
+  move_cap::Union{Nothing, Int} = nothing,
   num_iters::Union{Nothing, Int} = nothing,
   self_play_workers::Union{Nothing, Int} = nothing,
   arena_workers::Union{Nothing, Int} = nothing,
@@ -1037,6 +1044,7 @@ function run_train(;
           preset = preset,
           device = resolved_device,
           use_gpu = use_gpu,
+          move_cap = move_cap,
           num_iters = num_iters,
           self_play_workers = self_play_workers,
           arena_workers = arena_workers,
@@ -1050,6 +1058,7 @@ function run_train(;
           preset = preset,
           device = resolved_device,
           use_gpu = use_gpu,
+          move_cap = move_cap,
           num_iters = num_iters,
           self_play_workers = self_play_workers,
           arena_workers = arena_workers,
@@ -1106,6 +1115,7 @@ function run_smoke(;
   device::Union{Symbol, AbstractString} = DEFAULT_DEVICE,
   use_gpu::Bool = false,
   reset_memory::Bool = false,
+  move_cap::Union{Nothing, Int} = nothing,
   num_iters::Union{Nothing, Int} = nothing,
   self_play_workers::Union{Nothing, Int} = nothing,
   arena_workers::Union{Nothing, Int} = nothing,
@@ -1122,6 +1132,7 @@ function run_smoke(;
           preset = preset,
           device = device,
           use_gpu = use_gpu,
+          move_cap = move_cap,
           num_iters = num_iters,
           self_play_workers = self_play_workers,
           arena_workers = arena_workers,
@@ -1141,6 +1152,7 @@ function run_smoke(;
     device = device,
     use_gpu = use_gpu,
     reset_memory = reset_memory,
+    move_cap = move_cap,
     num_iters = num_iters,
     self_play_workers = self_play_workers,
     arena_workers = arena_workers,

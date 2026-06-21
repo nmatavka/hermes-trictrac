@@ -42,6 +42,9 @@ ENV HERMES_TRICTRAC_BOT_JULIA=/usr/local/bin/julia
 ENV HERMES_TRICTRAC_BOT_SESSION_DIR=/app/trictrac_zero/sessions/trictrac-classique-sparse-v4-arena96x16
 ENV TRICTRAC_ZERO_SKIP_BOOTSTRAP=1
 ENV JULIA_DEPOT_PATH=/app/.julia
+ENV JULIA_CPU_TARGET=generic
+ENV JULIA_NUM_PRECOMPILE_TASKS=2
+ENV JULIA_NUM_THREADS=1
 ENV JULIA_PKG_PRECOMPILE_AUTO=0
 
 COPY mix.exs mix.lock ./
@@ -58,10 +61,23 @@ RUN test -d /app/gamedocs/sources
 RUN mix local.hex --force && \
     mix local.rebar --force && \
     mix deps.get --only prod && \
-    mix deps.compile && \
-    mix assets.deploy && \
-    julia --project=/app/trictrac_zero -e 'using Pkg; Pkg.develop(path="/app/trictrac_zero/vendor/AlphaZero.jl"); Pkg.instantiate()' && \
-    mix compile && \
+    mix deps.compile
+
+RUN mix assets.deploy
+
+RUN julia --startup-file=no --project=/app/trictrac_zero -e 'using Pkg; Pkg.develop(path="/app/trictrac_zero/vendor/AlphaZero.jl"); Pkg.instantiate(); Pkg.precompile()'
+
+RUN mix compile
+
+RUN SECRET_KEY_BASE=hermes-trictrac-build-time-secret-not-used-at-runtime-00000000000000000000000000000000 \
+    HERMES_TRICTRAC_BOT_WARMUP_DIR=/tmp/trictrac_bot_warmup \
+    mix run --no-start priv/scripts/trictrac_bot_warmup_request.exs && \
+    while IFS='|' read -r preset session_dir request_path; do \
+      echo "Prewarming TricTracZero preset ${preset} from ${session_dir}"; \
+      julia --startup-file=no --project=/app/trictrac_zero /app/trictrac_zero/scripts/frontend_bot.jl "${session_dir}" < "${request_path}"; \
+    done < /tmp/trictrac_bot_warmup/sessions.list
+
+RUN SECRET_KEY_BASE=hermes-trictrac-build-time-secret-not-used-at-runtime-00000000000000000000000000000000 \
     mix phx.digest
 
 EXPOSE 4000

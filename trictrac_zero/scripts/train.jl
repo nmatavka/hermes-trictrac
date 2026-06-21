@@ -85,6 +85,7 @@ function main(config::TricTracScriptCPU.StartupConfig)
     dir = dir,
     device = config.device.value,
     reset_memory = config.reset_memory,
+    move_cap = TricTracScriptCPU.move_cap_override(config.move_cap),
     num_iters = num_iters,
     self_play_workers = self_play_workers,
     arena_workers = arena_workers,

@@ -112,6 +112,21 @@ defmodule HermesTrictracWeb.GamesChannelBotTest do
     def choose_action(_preset, serialized_state), do: choose_action(serialized_state)
   end
 
+  defmodule TimeoutExitFakeTrictracBot do
+    def model_name, do: "TimeoutExitFakeTricTracZero"
+    def model_name(_preset), do: "TimeoutExitFakeTricTracZero"
+    def ready, do: :ok
+    def ready(_preset), do: :ok
+
+    def choose_action(_serialized_state) do
+      exit(
+        {:timeout, {GenServer, :call, [HermesTrictrac.TrictracModelBot, :choose_action, 120_000]}}
+      )
+    end
+
+    def choose_action(_preset, serialized_state), do: choose_action(serialized_state)
+  end
+
   defmodule SlowReadyFakeTrictracBot do
     def model_name, do: "SlowReadyFakeTricTracZero"
     def model_name(_preset), do: "SlowReadyFakeTricTracZero"
@@ -637,6 +652,55 @@ defmodule HermesTrictracWeb.GamesChannelBotTest do
     assert log =~ "Bot follow-up failed"
   end
 
+  test "bot action timeout is logged without terminating the table" do
+    Application.put_env(:hermes_trictrac, :trictrac_model_bot_impl, TimeoutExitFakeTrictracBot)
+
+    lobby = "tt-bot-timeout-#{System.unique_integer([:positive])}"
+    GameServer.reg(lobby)
+    GameServer.start(lobby, "trictrac_classique")
+
+    assert {:ok, %{game: _game, player: _player}} =
+             GameServer.join(lobby, "nick", "tt-bot-timeout-host", "trictrac_classique", %{
+               "bot" => "trictrac_zero"
+             })
+
+    pid = GenServer.whereis(GameServer.reg(lobby))
+
+    :sys.replace_state(pid, fn state ->
+      engine = state.engine
+
+      runtime =
+        engine
+        |> Engine.runtime_view()
+        |> Map.put(:turn_color, :black)
+        |> Map.put(:turn_number, 2)
+        |> Map.put(:dice, nil)
+        |> Map.put(:legal_moves, [])
+        |> Map.put(:pending_turn_decision, nil)
+
+      updated_engine = %{
+        engine
+        | runtime: runtime,
+          turn_color: :black,
+          turn_number: 2,
+          dice: nil,
+          legal_moves: [],
+          pending_turn_decision: nil
+      }
+
+      %{state | engine: updated_engine}
+    end)
+
+    log =
+      capture_log(fn ->
+        snapshot = GameServer.peek(lobby)
+        assert snapshot["turn"]["color"] == "black"
+      end)
+
+    assert log =~ "Timed out waiting for the bot to choose an action."
+    assert Process.alive?(pid)
+  end
+
   test "human turn decision replies before a slow bot follow-up completes" do
     original_test_pid = Application.get_env(:hermes_trictrac, :trictrac_model_bot_test_pid)
     Application.put_env(:hermes_trictrac, :trictrac_model_bot_test_pid, self())
@@ -716,6 +780,7 @@ defmodule HermesTrictracWeb.GamesChannelBotTest do
 
     assert_receive {:paused_decision_bot_started, serialized_state}, 500
     assert is_list(serialized_state["legal_actions"])
+    refute get_in(serialized_state, ["runtime", "tactical_tariffs"])
 
     send(pid, :continue_paused_decision_bot)
     assert :sys.get_state(pid).engine.turn_color == :black
@@ -1137,6 +1202,7 @@ defmodule HermesTrictracWeb.GamesChannelBotTest do
 
         assert_receive {:bot_paused_after_roll, serialized_state}
         assert is_list(serialized_state["legal_actions"])
+        refute get_in(serialized_state, ["runtime", "tactical_tariffs"])
 
         assert_broadcast "update", %{
           game: %{

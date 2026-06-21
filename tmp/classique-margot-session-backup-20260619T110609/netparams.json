@@ -1,0 +1,12 @@
+{
+    "num_blocks": 2,
+    "num_filters": 32,
+    "conv_kernel_size": [
+        3,
+        1
+    ],
+    "num_policy_head_filters": 16,
+    "num_value_head_filters": 16,
+    "policy_hidden_dim": 64,
+    "batch_norm_momentum": 0.1
+}

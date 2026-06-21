@@ -4,6 +4,8 @@ defmodule HermesTrictrac.Training.TrictracBridge do
   alias HermesTrictrac.Rules.Trictrac.Classique.{Branches, Events, Moves}
   alias HermesTrictrac.Rules.Trictrac.Toc
 
+  require Logger
+
   @default_variant_id "trictrac_classique"
   @default_match_options %{"margotEnabled" => false}
   @default_tactical_config %{
@@ -15,7 +17,11 @@ defmodule HermesTrictrac.Training.TrictracBridge do
   }
   @toc_default_options %{"holeTarget" => "7", "doublesMode" => "off"}
   @classique_score_normalizer 144.0
-  @dice_classes for(a <- 1..6, b <- a..6, do: {a, b, if(a == b, do: 1.0 / 36.0, else: 2.0 / 36.0)})
+  @dice_classes for(
+                  a <- 1..6,
+                  b <- a..6,
+                  do: {a, b, if(a == b, do: 1.0 / 36.0, else: 2.0 / 36.0)}
+                )
   @tactical_cache_table :trictrac_bridge_tactical_cache
   @step_cache_table :trictrac_bridge_step_cache
   @current_turn_leaf_cache_table :trictrac_bridge_current_turn_leaf_cache
@@ -24,6 +30,9 @@ defmodule HermesTrictrac.Training.TrictracBridge do
   @stats_enabled_key {__MODULE__, :stats_enabled}
   @shared_max_tactical_parallelism 24
   @worker_max_tactical_parallelism 4
+  @default_step_cache_max_entries 1_024
+  @default_tactical_cache_max_entries 128
+  @default_current_turn_leaf_cache_max_entries 512
   @current_turn_branch_width 1
   @worker_turn_branch_width 1
   @roll_action %{"type" => "special", "id" => "ROLL"}
@@ -70,6 +79,7 @@ defmodule HermesTrictrac.Training.TrictracBridge do
     ensure_step_cache_table()
     ensure_tactical_cache_table()
     ensure_current_turn_leaf_cache_table()
+
     if bridge_stats_enabled?() do
       ensure_stats_table()
     end
@@ -190,21 +200,21 @@ defmodule HermesTrictrac.Training.TrictracBridge do
     runtime =
       runtime
       |> Map.take([
-      :board,
-      :trictrac,
-      :variant_state,
-      :pending_turn_decision,
-      :match,
-      :turn_color,
-      :turn_number,
-      :dice,
-      :legal_moves
-    ])
+        :board,
+        :trictrac,
+        :variant_state,
+        :pending_turn_decision,
+        :match,
+        :turn_color,
+        :turn_number,
+        :dice,
+        :legal_moves
+      ])
       |> Map.put(:pending_turn_decision, pending_turn_decision(runtime))
       |> update_in([:legal_moves], fn moves ->
-      moves
-      |> Kernel.||([])
-      |> Enum.sort_by(&move_sort_key/1)
+        moves
+        |> Kernel.||([])
+        |> Enum.sort_by(&move_sort_key/1)
       end)
 
     runtime =
@@ -289,7 +299,13 @@ defmodule HermesTrictrac.Training.TrictracBridge do
   end
 
   defp tactical_variant_supported?(variant_id) do
-    variant_id in ["trictrac_classique", "trictrac_aecrire", "trictrac_combine", "toccategli", "toc"]
+    variant_id in [
+      "trictrac_classique",
+      "trictrac_aecrire",
+      "trictrac_combine",
+      "toccategli",
+      "toc"
+    ]
   end
 
   defp resolve_tactical_config(config, runtime) do
@@ -362,7 +378,9 @@ defmodule HermesTrictrac.Training.TrictracBridge do
     result(state(state, Map.get(request, "config", %{})), id)
   end
 
-  defp dispatch_rpc(%{"id" => id, "cmd" => "step", "state" => state, "action" => action} = request) do
+  defp dispatch_rpc(
+         %{"id" => id, "cmd" => "step", "state" => state, "action" => action} = request
+       ) do
     result(step(state, action, Map.get(request, "config", %{})), id)
   end
 
@@ -509,6 +527,7 @@ defmodule HermesTrictrac.Training.TrictracBridge do
 
   defp execute_step_payload(%{"runtime_term" => runtime_term}, action, config) do
     {variant, _options} = variant_and_options(config)
+
     case safe_decode_runtime_term(runtime_term) do
       {:ok, runtime} ->
         current_color = runtime.turn_color
@@ -516,10 +535,14 @@ defmodule HermesTrictrac.Training.TrictracBridge do
         with {:ok, next_runtime} <- apply_action(runtime, variant, current_color, action) do
           next_runtime = clear_history(next_runtime)
           reward = trous_reward(runtime, next_runtime)
+
           response_payload =
-            timed_debug("step_response phase=#{phase(next_runtime)} action=#{Map.get(action, "id", "move")}", fn ->
-              response(next_runtime, reward, config)
-            end)
+            timed_debug(
+              "step_response phase=#{phase(next_runtime)} action=#{Map.get(action, "id", "move")}",
+              fn ->
+                response(next_runtime, reward, config)
+              end
+            )
 
           {:ok, response_payload}
         end
@@ -561,6 +584,8 @@ defmodule HermesTrictrac.Training.TrictracBridge do
   defp maybe_store_step_response(_table, nil, _payload), do: false
 
   defp maybe_store_step_response(table, key, payload) do
+    maybe_reset_cache_before_insert(table)
+
     true =
       named_table_operation(table, &ensure_step_cache_table/0, fn ->
         :ets.insert(table, {key, payload})
@@ -570,7 +595,8 @@ defmodule HermesTrictrac.Training.TrictracBridge do
     true
   end
 
-  defp step_cache_key(%{"runtime_term" => runtime_term}, action, config) when is_binary(runtime_term) do
+  defp step_cache_key(%{"runtime_term" => runtime_term}, action, config)
+       when is_binary(runtime_term) do
     {runtime_term, deterministic_binary(action), step_cache_signature(config)}
   end
 
@@ -719,6 +745,8 @@ defmodule HermesTrictrac.Training.TrictracBridge do
         stats_add(:tactical_cache_misses, 1)
         summary = compute.()
 
+        maybe_reset_cache_before_insert(table)
+
         true =
           named_table_operation(table, &ensure_tactical_cache_table/0, fn ->
             :ets.insert(table, {key, summary})
@@ -864,8 +892,7 @@ defmodule HermesTrictrac.Training.TrictracBridge do
     if bridge_stats_enabled?() do
       base_specs ++
         [
-          {@stats_table,
-           [:named_table, :public, read_concurrency: true, write_concurrency: true]}
+          {@stats_table, [:named_table, :public, read_concurrency: true, write_concurrency: true]}
         ]
     else
       base_specs
@@ -983,16 +1010,22 @@ defmodule HermesTrictrac.Training.TrictracBridge do
     with_request_tactical_context(fn context ->
       {white_h1, white_h2, white_h3} =
         profile_metric(:tactical_horizons_white, fn ->
-          timed_debug("tactical_horizons color=white phase=#{phase(runtime)} horizon=#{tactical["horizon_own_turns"]}", fn ->
-            tactical_horizons(runtime, variant, :white, tactical, context)
-          end)
+          timed_debug(
+            "tactical_horizons color=white phase=#{phase(runtime)} horizon=#{tactical["horizon_own_turns"]}",
+            fn ->
+              tactical_horizons(runtime, variant, :white, tactical, context)
+            end
+          )
         end)
 
       {black_h1, black_h2, black_h3} =
         profile_metric(:tactical_horizons_black, fn ->
-          timed_debug("tactical_horizons color=black phase=#{phase(runtime)} horizon=#{tactical["horizon_own_turns"]}", fn ->
-            tactical_horizons(runtime, variant, :black, tactical, context)
-          end)
+          timed_debug(
+            "tactical_horizons color=black phase=#{phase(runtime)} horizon=#{tactical["horizon_own_turns"]}",
+            fn ->
+              tactical_horizons(runtime, variant, :black, tactical, context)
+            end
+          )
         end)
 
       tactical_summary_payload(
@@ -1017,6 +1050,7 @@ defmodule HermesTrictrac.Training.TrictracBridge do
         read_concurrency: true,
         write_concurrency: true
       ])
+
     context = %{memo: table, async_depth: 0}
 
     try do
@@ -1105,8 +1139,10 @@ defmodule HermesTrictrac.Training.TrictracBridge do
       turn = runtime.trictrac.turn || %{}
       start_board = Map.get(turn, :start_board, runtime.board)
       full_dice = Map.get(turn, :dice, runtime.dice)
+
       score_context =
         turn_score_context(start_board, variant, color, full_dice, runtime.trictrac, context)
+
       moves_left = Map.get(runtime.dice || %{}, :moves_left, [])
       moves_played = Map.get(runtime.dice || %{}, :moves_played, [])
 
@@ -1152,9 +1188,14 @@ defmodule HermesTrictrac.Training.TrictracBridge do
     profile_metric(:projected_roll_runtime, fn ->
       runtime
       |> dice_class_results(context, fn {a, b, weight}, child_context ->
-        rolled_runtime = runtime_for_dice(runtime, variant, color, dice_class(a, b), child_context)
+        rolled_runtime =
+          runtime_for_dice(runtime, variant, color, dice_class(a, b), child_context)
+
         value = current_turn_value(rolled_runtime, variant, color, child_context)
-        projected_runtime = current_turn_completed_runtime(rolled_runtime, variant, color, child_context)
+
+        projected_runtime =
+          current_turn_completed_runtime(rolled_runtime, variant, color, child_context)
+
         {weight * value, {value, weight, runtime_sort_key(projected_runtime)}, projected_runtime}
       end)
       |> Enum.reduce(nil, fn {score, sort_key, projected_runtime}, best ->
@@ -1163,7 +1204,9 @@ defmodule HermesTrictrac.Training.TrictracBridge do
       |> case do
         {_score, _sort_key, projected_runtime} ->
           projected_runtime
-        nil -> runtime
+
+        nil ->
+          runtime
       end
     end)
   end
@@ -1175,8 +1218,10 @@ defmodule HermesTrictrac.Training.TrictracBridge do
           turn = runtime.trictrac.turn || %{}
           start_board = Map.get(turn, :start_board, runtime.board)
           full_dice = Map.get(turn, :dice, runtime.dice)
+
           score_context =
             turn_score_context(start_board, variant, color, full_dice, runtime.trictrac, context)
+
           search_runtime = %{board: runtime.board, dice: runtime.dice}
 
           Branches.best_end_state_by(
@@ -1285,7 +1330,9 @@ defmodule HermesTrictrac.Training.TrictracBridge do
               end
             end)
             |> Enum.reject(&is_nil/1)
-            |> Enum.reduce(nil, fn candidate, best -> choose_better_projection(best, candidate) end)
+            |> Enum.reduce(nil, fn candidate, best ->
+              choose_better_projection(best, candidate)
+            end)
             |> case do
               {_value, _sort_key, next_runtime} -> next_runtime
               nil -> runtime
@@ -1317,7 +1364,10 @@ defmodule HermesTrictrac.Training.TrictracBridge do
 
   defp choose_better_projection(nil, candidate), do: candidate
 
-  defp choose_better_projection({best_value, best_sort_key, _} = best, {value, sort_key, _} = candidate) do
+  defp choose_better_projection(
+         {best_value, best_sort_key, _} = best,
+         {value, sort_key, _} = candidate
+       ) do
     cond do
       value > best_value -> candidate
       value < best_value -> best
@@ -1326,7 +1376,10 @@ defmodule HermesTrictrac.Training.TrictracBridge do
     end
   end
 
-  defp choose_better_step_value({best_value, best_used, best_sort_key} = best, {value, used, sort_key} = candidate) do
+  defp choose_better_step_value(
+         {best_value, best_used, best_sort_key} = best,
+         {value, used, sort_key} = candidate
+       ) do
     cond do
       value > best_value -> candidate
       value < best_value -> best
@@ -1406,7 +1459,6 @@ defmodule HermesTrictrac.Training.TrictracBridge do
     |> :erlang.term_to_binary([:deterministic])
   end
 
-
   defp canonicalize_runtime_dice(%{dice: dice} = runtime) when is_map(dice) do
     Map.put(runtime, :dice, canonicalize_dice(dice))
   end
@@ -1462,6 +1514,7 @@ defmodule HermesTrictrac.Training.TrictracBridge do
           [] ->
             stats_add(:current_turn_leaf_cache_misses, 1)
             leaf = compute.()
+            maybe_reset_cache_before_insert(table)
             true = :ets.insert(table, {key, leaf})
             leaf
         end
@@ -1506,7 +1559,6 @@ defmodule HermesTrictrac.Training.TrictracBridge do
     }
   end
 
-
   defp with_current_turn_leaf_cache_retry(fun, attempts \\ 2)
 
   defp with_current_turn_leaf_cache_retry(fun, attempts) when attempts > 0 do
@@ -1521,11 +1573,89 @@ defmodule HermesTrictrac.Training.TrictracBridge do
       end
   end
 
+  defp maybe_reset_cache_before_insert(table) do
+    max_entries = cache_max_entries(table)
+
+    cond do
+      max_entries == :infinity ->
+        :ok
+
+      not is_integer(max_entries) or max_entries <= 0 ->
+        :ok
+
+      true ->
+        size = :ets.info(table, :size) || 0
+
+        if size >= max_entries do
+          Logger.warning(
+            "Clearing TricTrac bridge cache #{inspect(table)} after #{size} entries to protect runtime memory."
+          )
+
+          :ets.delete_all_objects(table)
+        end
+
+        :ok
+    end
+  rescue
+    ArgumentError ->
+      :ok
+  end
+
+  defp cache_max_entries(@step_cache_table) do
+    configured_cache_limit(
+      "TRICTRAC_ZERO_BRIDGE_STEP_CACHE_MAX_ENTRIES",
+      @default_step_cache_max_entries
+    )
+  end
+
+  defp cache_max_entries(@tactical_cache_table) do
+    configured_cache_limit(
+      "TRICTRAC_ZERO_BRIDGE_TACTICAL_CACHE_MAX_ENTRIES",
+      @default_tactical_cache_max_entries
+    )
+  end
+
+  defp cache_max_entries(@current_turn_leaf_cache_table) do
+    configured_cache_limit(
+      "TRICTRAC_ZERO_BRIDGE_CURRENT_TURN_LEAF_CACHE_MAX_ENTRIES",
+      @default_current_turn_leaf_cache_max_entries
+    )
+  end
+
+  defp cache_max_entries(_table), do: :infinity
+
+  defp configured_cache_limit(env_name, default) do
+    case System.get_env(env_name) do
+      nil ->
+        default
+
+      value ->
+        normalized =
+          value
+          |> String.trim()
+          |> String.downcase()
+
+        case normalized do
+          value when value in ["", "none", "off", "false", "infinity", "unbounded"] ->
+            :infinity
+
+          value ->
+            case Integer.parse(value) do
+              {parsed, ""} when parsed > 0 -> parsed
+              _ -> default
+            end
+        end
+    end
+  end
+
   defp timed_debug(label, fun) do
     if System.get_env("TRICTRAC_ZERO_BRIDGE_DEBUG_TIMINGS") == "1" do
       started = System.monotonic_time()
       result = fun.()
-      elapsed_ms = System.convert_time_unit(System.monotonic_time() - started, :native, :millisecond)
+
+      elapsed_ms =
+        System.convert_time_unit(System.monotonic_time() - started, :native, :millisecond)
+
       IO.puts(:stderr, "[trictrac-bridge] #{label} elapsed_ms=#{elapsed_ms}")
       result
     else
@@ -1536,7 +1666,10 @@ defmodule HermesTrictrac.Training.TrictracBridge do
   defp profile_metric(metric, fun) do
     started = System.monotonic_time()
     result = fun.()
-    elapsed_ms = System.convert_time_unit(System.monotonic_time() - started, :native, :millisecond)
+
+    elapsed_ms =
+      System.convert_time_unit(System.monotonic_time() - started, :native, :millisecond)
+
     stats_add(:"#{metric}_count", 1)
     stats_add(:"#{metric}_ms", elapsed_ms)
     result
@@ -1575,7 +1708,8 @@ defmodule HermesTrictrac.Training.TrictracBridge do
     value / max(12.0 * aecrire_partie_length(runtime), 12.0)
   end
 
-  defp normalize_tactical_value(_variant_id, _runtime, value), do: value / @classique_score_normalizer
+  defp normalize_tactical_value(_variant_id, _runtime, value),
+    do: value / @classique_score_normalizer
 
   defp dice_class(a, b) do
     moves = if(a == b, do: [a, a, a, a], else: [a, b])
@@ -1605,8 +1739,14 @@ defmodule HermesTrictrac.Training.TrictracBridge do
   end
 
   defp turn_events(
-         %{start_board: start_board, variant: variant, color: color, dice: dice, trictrac: trictrac,
-           branches_info: branches_info},
+         %{
+           start_board: start_board,
+           variant: variant,
+           color: color,
+           dice: dice,
+           trictrac: trictrac,
+           branches_info: branches_info
+         },
          end_board
        ) do
     start_board
@@ -1629,7 +1769,10 @@ defmodule HermesTrictrac.Training.TrictracBridge do
     end)
   end
 
-  defp turn_hole_outcome_value(%{color: color, trictrac: trictrac, dice: dice} = context, end_board) do
+  defp turn_hole_outcome_value(
+         %{color: color, trictrac: trictrac, dice: dice} = context,
+         end_board
+       ) do
     events = turn_events(context, end_board)
     options = Map.get(trictrac, :options, %{})
     hole_target = hole_target(options)
@@ -1649,7 +1792,9 @@ defmodule HermesTrictrac.Training.TrictracBridge do
     runtime
     |> get_in([:trictrac, :track_aecrire, :partie_length])
     |> case do
-      value when is_integer(value) and value > 0 -> value
+      value when is_integer(value) and value > 0 ->
+        value
+
       value when is_binary(value) ->
         case Integer.parse(value) do
           {parsed, ""} when parsed > 0 -> parsed

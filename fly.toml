@@ -4,7 +4,7 @@
 #
 
 app = 'wistful-wildflower-7138'
-primary_region = 'yyz'
+primary_region = 'iad'
 
 [build]
   dockerfile = 'Dockerfile.fly'
@@ -37,7 +37,7 @@ primary_region = 'yyz'
     path = '/'
 
 [[vm]]
-  memory = '4gb'
+  memory = '12gb'
   cpu_kind = 'shared'
-  cpus = 2
-  memory_mb = 4096
+  cpus = 6
+  memory_mb = 12288

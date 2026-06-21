@@ -1484,21 +1484,32 @@ defmodule HermesTrictrac.GameServer do
   end
 
   defp bot_choose_action(bot_module, preset, serialized_state) do
-    cond do
-      function_exported?(bot_module, :choose_action, 2) ->
-        bot_module.choose_action(preset, serialized_state)
+    try do
+      cond do
+        function_exported?(bot_module, :choose_action, 2) ->
+          bot_module.choose_action(preset, serialized_state)
 
-      function_exported?(bot_module, :choose_action, 1) ->
-        bot_module.choose_action(serialized_state)
+        function_exported?(bot_module, :choose_action, 1) ->
+          bot_module.choose_action(serialized_state)
 
-      true ->
-        {:error, "Configured bot cannot choose an action."}
+        true ->
+          {:error, "Configured bot cannot choose an action."}
+      end
+    catch
+      :exit, {:timeout, _call} ->
+        {:error, "Timed out waiting for the bot to choose an action."}
+
+      :exit, reason ->
+        {:error, "Bot action process exited: #{Exception.format_exit(reason)}"}
     end
   end
 
   defp maybe_serialize_bot_state(engine, %{kind: @trictrac_bot}) do
     if bot_playable_variant?(@trictrac_bot, engine.variant.id) do
-      TrictracBridge.serialize_state(Engine.runtime_view(engine))
+      TrictracBridge.serialize_state(
+        Engine.runtime_view(engine),
+        %{"include_tactical_summary" => false}
+      )
     else
       nil
     end
