@@ -9,6 +9,8 @@ defmodule HermesTrictracWeb.RulesHTML do
   attr :query, :string, default: ""
   attr :title, :string, required: true
   attr :subtitle, :string, default: nil
+  attr :language_options, :list, default: []
+  attr :variant_options, :list, default: []
   slot :inner_block, required: true
 
   def shell(assigns) do
@@ -37,10 +39,47 @@ defmodule HermesTrictracWeb.RulesHTML do
               All books
             </a>
 
+            <form class="rules-filter-form" action="/rules" method="get" data-rules-filter-form>
+              <%= if @return_context.return_to do %>
+                <input type="hidden" name="return_to" value={@return_context.return_to} />
+                <input type="hidden" name="return_label" value={@return_context.return_label || "Back to game"} />
+              <% end %>
+              <%= if @query != "" do %>
+                <input type="hidden" name="q" value={@query} />
+              <% end %>
+
+              <label class="rules-filter-field">
+                <span>Language</span>
+                <select name="lang" aria-label="Rules language">
+                  <%= for option <- @language_options do %>
+                    <option value={option.id} selected={@return_context.language == option.id}>
+                      <%= option.label %>
+                    </option>
+                  <% end %>
+                </select>
+              </label>
+
+              <label class="rules-filter-field">
+                <span>Game type</span>
+                <select name="variant_id" aria-label="Rulebook game type">
+                  <option value="" selected={is_nil(@return_context.variant_id)}>All games</option>
+                  <%= for option <- @variant_options do %>
+                    <option value={option.id} selected={@return_context.variant_id == option.id}>
+                      <%= option.label %>
+                    </option>
+                  <% end %>
+                </select>
+              </label>
+            </form>
+
             <form class="rules-search-form" action="/rules" method="get">
               <%= if @return_context.return_to do %>
                 <input type="hidden" name="return_to" value={@return_context.return_to} />
                 <input type="hidden" name="return_label" value={@return_context.return_label || "Back to game"} />
+              <% end %>
+              <input type="hidden" name="lang" value={@return_context.language} />
+              <%= if @return_context.variant_id do %>
+                <input type="hidden" name="variant_id" value={@return_context.variant_id} />
               <% end %>
 
               <input

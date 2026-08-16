@@ -1,20 +1,239 @@
 {
-  "schema_version": 1,
+  "lobby": {
+    "multi_seat_formats": [
+      {
+        "id": "trictrac_en_poule",
+        "join_fields": [
+          {
+            "default": 1,
+            "min": 1,
+            "type": "integer",
+            "step": 1,
+            "id": "queue_size"
+          },
+          {
+            "default": 1,
+            "min": 1,
+            "type": "integer",
+            "step": 1,
+            "id": "ante"
+          },
+          {
+            "default": false,
+            "type": "boolean",
+            "id": "margot_enabled"
+          }
+        ],
+        "meta": "2 active seats · rotating queue",
+        "meta_key": "lobby.multiSeatTrictracPouleMeta",
+        "session_kind": "poule",
+        "style": "growing_pot",
+        "title": "Trictrac en poule",
+        "title_key": "lobby.multiSeatTrictracPouleTitle"
+      },
+      {
+        "id": "toccategli_en_poule",
+        "join_fields": [
+          {
+            "default": 1,
+            "min": 1,
+            "type": "integer",
+            "step": 1,
+            "id": "queue_size"
+          },
+          {
+            "default": 1,
+            "min": 1,
+            "type": "integer",
+            "step": 1,
+            "id": "ante"
+          },
+          {
+            "default": false,
+            "type": "boolean",
+            "id": "margot_enabled"
+          }
+        ],
+        "meta": "2 active seats · rotating queue",
+        "meta_key": "lobby.multiSeatToccategliPouleMeta",
+        "session_kind": "poule",
+        "style": "growing_pot",
+        "title": "Toccategli en poule",
+        "title_key": "lobby.multiSeatToccategliPouleTitle"
+      },
+      {
+        "id": "trictrac_en_poule_plumee",
+        "join_fields": [
+          {
+            "default": 50,
+            "min": 1,
+            "type": "integer",
+            "step": 1,
+            "id": "stake"
+          },
+          {
+            "default": 5,
+            "min": 1,
+            "type": "integer",
+            "step": 1,
+            "id": "hole_value"
+          },
+          {
+            "default": false,
+            "type": "boolean",
+            "id": "margot_enabled"
+          }
+        ],
+        "meta": "fixed ring · common fund",
+        "meta_key": "lobby.multiSeatTrictracPoulePlumeeMeta",
+        "session_kind": "poule",
+        "style": "plucked_pot",
+        "title": "Trictrac en poule (plumée)",
+        "title_key": "lobby.multiSeatTrictracPoulePlumeeTitle"
+      },
+      {
+        "id": "toccategli_en_poule_plumee",
+        "join_fields": [
+          {
+            "default": 50,
+            "min": 1,
+            "type": "integer",
+            "step": 1,
+            "id": "stake"
+          },
+          {
+            "default": 5,
+            "min": 1,
+            "type": "integer",
+            "step": 1,
+            "id": "hole_value"
+          },
+          {
+            "default": false,
+            "type": "boolean",
+            "id": "margot_enabled"
+          }
+        ],
+        "meta": "fixed ring · common fund",
+        "meta_key": "lobby.multiSeatToccategliPoulePlumeeMeta",
+        "session_kind": "poule",
+        "style": "plucked_pot",
+        "title": "Toccategli en poule (plumée)",
+        "title_key": "lobby.multiSeatToccategliPoulePlumeeTitle"
+      },
+      {
+        "id": "trictrac_aecrire_a_tourner",
+        "join_fields": [
+          {
+            "default": 1.0,
+            "min": 0.01,
+            "type": "decimal",
+            "step": 0.01,
+            "id": "cash_per_jeton"
+          }
+        ],
+        "meta": "3 players · round robin",
+        "meta_key": "lobby.multiSeatAecrireTournerMeta",
+        "multiplayer_mode": "a_tourner",
+        "session_kind": "multiplayer",
+        "title": "Trictrac à écrire à tourner",
+        "title_key": "lobby.multiSeatAecrireTournerTitle"
+      },
+      {
+        "id": "trictrac_aecrire_chouette",
+        "join_fields": [
+          {
+            "default": 1.0,
+            "min": 0.01,
+            "type": "decimal",
+            "step": 0.01,
+            "id": "cash_per_jeton"
+          }
+        ],
+        "meta": "3 players · chouette",
+        "meta_key": "lobby.multiSeatAecrireChouetteMeta",
+        "multiplayer_mode": "chouette",
+        "session_kind": "multiplayer",
+        "title": "Trictrac à écrire chouette",
+        "title_key": "lobby.multiSeatAecrireChouetteTitle"
+      },
+      {
+        "id": "trictrac_aecrire_deux_contre_deux",
+        "join_fields": [
+          {
+            "default": 1.0,
+            "min": 0.01,
+            "type": "decimal",
+            "step": 0.01,
+            "id": "cash_per_jeton"
+          }
+        ],
+        "meta": "4 players · two sides",
+        "meta_key": "lobby.multiSeatAecrireTeamsMeta",
+        "multiplayer_mode": "deux_contre_deux",
+        "session_kind": "multiplayer",
+        "title": "Trictrac à écrire deux contre deux",
+        "title_key": "lobby.multiSeatAecrireTeamsTitle"
+      },
+      {
+        "id": "trictrac_combine_chouette",
+        "join_fields": [
+          {
+            "default": 1.0,
+            "min": 0.01,
+            "type": "decimal",
+            "step": 0.01,
+            "id": "cash_per_jeton"
+          }
+        ],
+        "meta": "3 players · combined chouette",
+        "meta_key": "lobby.multiSeatCombineChouetteMeta",
+        "multiplayer_mode": "combine_chouette",
+        "session_kind": "multiplayer",
+        "title": "Trictrac combiné chouette",
+        "title_key": "lobby.multiSeatCombineChouetteTitle"
+      },
+      {
+        "id": "trictrac_combine_deux_contre_deux",
+        "join_fields": [
+          {
+            "default": 1.0,
+            "min": 0.01,
+            "type": "decimal",
+            "step": 0.01,
+            "id": "cash_per_jeton"
+          }
+        ],
+        "meta": "4 players · combined teams",
+        "meta_key": "lobby.multiSeatCombineTeamsMeta",
+        "multiplayer_mode": "combine_deux_contre_deux",
+        "session_kind": "multiplayer",
+        "title": "Trictrac combiné deux contre deux",
+        "title_key": "lobby.multiSeatCombineTeamsTitle"
+      }
+    ]
+  },
+  "schema_version": 3,
   "variants": [
     {
       "base_variant_id": null,
       "family": "race",
       "id": "backgammon",
       "local_ai": {
-        "available": true,
-        "kind": "backgammon_ai",
-        "label": "BackgammonAI",
+        "available": false,
+        "kind": "backgammon_zero",
+        "label": "Backgammon Zero",
         "presets": [
           "backgammon"
         ]
       },
       "local_playable": true,
+      "members": [],
+      "menu_label": "Backgammon",
+      "menu_rank": 0,
+      "menu_section": "primary",
       "online_playable": true,
+      "selection_mode": "single",
       "session_mode": null,
       "session_style": null,
       "title": "Backgammon"
@@ -22,95 +241,22 @@
     {
       "base_variant_id": null,
       "family": "race",
-      "id": "brade",
-      "local_ai": {
-        "available": false,
-        "kind": null,
-        "label": null,
-        "presets": []
-      },
-      "local_playable": true,
-      "online_playable": true,
-      "session_mode": null,
-      "session_style": null,
-      "title": "Brade Suedois"
-    },
-    {
-      "base_variant_id": null,
-      "family": "race",
-      "id": "garanguet",
-      "local_ai": {
-        "available": false,
-        "kind": null,
-        "label": null,
-        "presets": []
-      },
-      "local_playable": true,
-      "online_playable": true,
-      "session_mode": null,
-      "session_style": null,
-      "title": "Garanguet"
-    },
-    {
-      "base_variant_id": null,
-      "family": "race",
-      "id": "jacquet",
-      "local_ai": {
-        "available": false,
-        "kind": null,
-        "label": null,
-        "presets": []
-      },
-      "local_playable": true,
-      "online_playable": true,
-      "session_mode": null,
-      "session_style": null,
-      "title": "Jacquet / Pheuga"
-    },
-    {
-      "base_variant_id": null,
-      "family": "race",
-      "id": "sbaraglino",
-      "local_ai": {
-        "available": false,
-        "kind": null,
-        "label": null,
-        "presets": []
-      },
-      "local_playable": true,
-      "online_playable": true,
-      "session_mode": null,
-      "session_style": null,
-      "title": "Sbaraglino"
-    },
-    {
-      "base_variant_id": null,
-      "family": "race",
-      "id": "sbaraglio",
-      "local_ai": {
-        "available": false,
-        "kind": null,
-        "label": null,
-        "presets": []
-      },
-      "local_playable": true,
-      "online_playable": true,
-      "session_mode": null,
-      "session_style": null,
-      "title": "Sbaraglio"
-    },
-    {
-      "base_variant_id": null,
-      "family": "race",
       "id": "tapa",
       "local_ai": {
         "available": false,
-        "kind": null,
-        "label": null,
-        "presets": []
+        "kind": "tapa_zero",
+        "label": "Tapa Zero",
+        "presets": [
+          "tapa"
+        ]
       },
       "local_playable": true,
+      "members": [],
+      "menu_label": "Tapa",
+      "menu_rank": 1,
+      "menu_section": "primary",
       "online_playable": true,
+      "selection_mode": "single",
       "session_mode": null,
       "session_style": null,
       "title": "Tapa / Plakoto"
@@ -118,86 +264,48 @@
     {
       "base_variant_id": null,
       "family": "race",
-      "id": "tavli",
+      "id": "jacquet",
       "local_ai": {
         "available": false,
-        "kind": null,
-        "label": null,
-        "presets": []
-      },
-      "local_playable": true,
-      "online_playable": true,
-      "session_mode": null,
-      "session_style": null,
-      "title": "Tavli"
-    },
-    {
-      "base_variant_id": null,
-      "family": "trictrac",
-      "id": "plein",
-      "local_ai": {
-        "available": false,
-        "kind": null,
-        "label": null,
-        "presets": []
-      },
-      "local_playable": true,
-      "online_playable": true,
-      "session_mode": null,
-      "session_style": null,
-      "title": "Jeu du Plein"
-    },
-    {
-      "base_variant_id": null,
-      "family": "trictrac",
-      "id": "toc",
-      "local_ai": {
-        "available": false,
-        "kind": null,
-        "label": null,
-        "presets": []
-      },
-      "local_playable": true,
-      "online_playable": true,
-      "session_mode": null,
-      "session_style": null,
-      "title": "Jeu du Toc"
-    },
-    {
-      "base_variant_id": null,
-      "family": "trictrac",
-      "id": "toccategli",
-      "local_ai": {
-        "available": true,
-        "kind": "trictrac_zero",
-        "label": "TricTracZero (Trictrac Classique)",
+        "kind": "jacquet_zero",
+        "label": "Jacquet Zero",
         "presets": [
-          "toccategli"
+          "jacquet"
         ]
       },
       "local_playable": true,
+      "members": [],
+      "menu_label": "Jacquet",
+      "menu_rank": 2,
+      "menu_section": "primary",
       "online_playable": true,
+      "selection_mode": "single",
       "session_mode": null,
       "session_style": null,
-      "title": "Toccategli"
+      "title": "Jacquet / Pheuga"
     },
     {
       "base_variant_id": null,
-      "family": "trictrac",
-      "id": "trictrac_aecrire",
+      "family": "race",
+      "id": "garanguet",
       "local_ai": {
-        "available": true,
-        "kind": "trictrac_zero",
-        "label": "TricTracZero (Trictrac Classique)",
+        "available": false,
+        "kind": "garanguet_zero",
+        "label": "Garanguet Zero",
         "presets": [
-          "aecrire"
+          "garanguet"
         ]
       },
       "local_playable": true,
+      "members": [],
+      "menu_label": "Garanguet",
+      "menu_rank": 3,
+      "menu_section": "primary",
       "online_playable": true,
+      "selection_mode": "single",
       "session_mode": null,
       "session_style": null,
-      "title": "Trictrac A Ecrire"
+      "title": "Garanguet"
     },
     {
       "base_variant_id": null,
@@ -208,15 +316,137 @@
         "kind": "trictrac_zero",
         "label": "TricTracZero (Trictrac Classique)",
         "presets": [
-          "classique",
-          "classique-margot"
+          "classique"
         ]
       },
       "local_playable": true,
+      "members": [],
+      "menu_label": "Trictrac classique",
+      "menu_rank": 4,
+      "menu_section": "primary",
       "online_playable": true,
+      "selection_mode": "single",
       "session_mode": null,
       "session_style": null,
       "title": "Trictrac Classique"
+    },
+    {
+      "base_variant_id": null,
+      "family": "trictrac",
+      "id": "toccategli",
+      "local_ai": {
+        "available": true,
+        "kind": "trictrac_zero",
+        "label": "TricTracZero (Toccategli)",
+        "presets": [
+          "toccategli"
+        ]
+      },
+      "local_playable": true,
+      "members": [],
+      "menu_label": "Toccategli",
+      "menu_rank": 5,
+      "menu_section": "primary",
+      "online_playable": true,
+      "selection_mode": "single",
+      "session_mode": null,
+      "session_style": null,
+      "title": "Toccategli"
+    },
+    {
+      "base_variant_id": null,
+      "family": "trictrac",
+      "id": "toc",
+      "local_ai": {
+        "available": false,
+        "kind": "trictrac_zero",
+        "label": "TricTracZero (Jeu du Toc)",
+        "presets": [
+          "toc"
+        ]
+      },
+      "local_playable": true,
+      "members": [],
+      "menu_label": "Toc",
+      "menu_rank": 6,
+      "menu_section": "primary",
+      "online_playable": true,
+      "selection_mode": "single",
+      "session_mode": null,
+      "session_style": null,
+      "title": "Jeu du Toc"
+    },
+    {
+      "base_variant_id": null,
+      "family": "race",
+      "id": "brade",
+      "local_ai": {
+        "available": false,
+        "kind": "brade_zero",
+        "label": "BradeZero",
+        "presets": [
+          "brade"
+        ]
+      },
+      "local_playable": true,
+      "members": [],
+      "menu_label": "Bräde",
+      "menu_rank": 7,
+      "menu_section": "primary",
+      "online_playable": true,
+      "selection_mode": "single",
+      "session_mode": null,
+      "session_style": null,
+      "title": "Brade Suedois"
+    },
+    {
+      "base_variant_id": null,
+      "family": "race",
+      "id": "tavli",
+      "local_ai": {
+        "available": false,
+        "kind": "tavli_zero",
+        "label": "Tavli Zero",
+        "presets": [
+          "tavli"
+        ]
+      },
+      "local_playable": true,
+      "members": [
+        "backgammon",
+        "tapa",
+        "jacquet"
+      ],
+      "menu_label": "Tavli",
+      "menu_rank": 8,
+      "menu_section": "composite",
+      "online_playable": true,
+      "selection_mode": "composite",
+      "session_mode": null,
+      "session_style": null,
+      "title": "Tavli"
+    },
+    {
+      "base_variant_id": null,
+      "family": "trictrac",
+      "id": "trictrac_aecrire",
+      "local_ai": {
+        "available": false,
+        "kind": null,
+        "label": null,
+        "presets": [],
+        "reason": "Computer play is not offered for this game."
+      },
+      "local_playable": true,
+      "members": [],
+      "menu_label": null,
+      "menu_rank": 100,
+      "menu_section": "more",
+      "online_playable": true,
+      "selection_mode": "single",
+      "session_mode": null,
+      "session_style": null,
+      "title": "Trictrac A Ecrire"
     },
     {
       "base_variant_id": null,
@@ -226,13 +456,85 @@
         "available": false,
         "kind": null,
         "label": null,
-        "presets": []
+        "presets": [],
+        "reason": "Computer play is not offered for this game."
       },
       "local_playable": true,
+      "members": [],
+      "menu_label": null,
+      "menu_rank": 101,
+      "menu_section": "more",
       "online_playable": true,
+      "selection_mode": "single",
       "session_mode": null,
       "session_style": null,
       "title": "Trictrac Combine"
+    },
+    {
+      "base_variant_id": null,
+      "family": "race",
+      "id": "sbaraglio",
+      "local_ai": {
+        "available": false,
+        "kind": null,
+        "label": null,
+        "presets": [],
+        "reason": "Computer play is not offered for this game."
+      },
+      "local_playable": true,
+      "members": [],
+      "menu_label": null,
+      "menu_rank": 102,
+      "menu_section": "more",
+      "online_playable": true,
+      "selection_mode": "single",
+      "session_mode": null,
+      "session_style": null,
+      "title": "Sbaraglio"
+    },
+    {
+      "base_variant_id": null,
+      "family": "race",
+      "id": "sbaraglino",
+      "local_ai": {
+        "available": false,
+        "kind": null,
+        "label": null,
+        "presets": [],
+        "reason": "Computer play is not offered for this game."
+      },
+      "local_playable": true,
+      "members": [],
+      "menu_label": null,
+      "menu_rank": 103,
+      "menu_section": "more",
+      "online_playable": true,
+      "selection_mode": "single",
+      "session_mode": null,
+      "session_style": null,
+      "title": "Sbaraglino"
+    },
+    {
+      "base_variant_id": null,
+      "family": "trictrac",
+      "id": "plein",
+      "local_ai": {
+        "available": false,
+        "kind": null,
+        "label": null,
+        "presets": [],
+        "reason": "Computer play is not offered for this game."
+      },
+      "local_playable": true,
+      "members": [],
+      "menu_label": null,
+      "menu_rank": 104,
+      "menu_section": "more",
+      "online_playable": true,
+      "selection_mode": "single",
+      "session_mode": null,
+      "session_style": null,
+      "title": "Jeu du Plein"
     },
     {
       "base_variant_id": null,
@@ -242,10 +544,16 @@
         "available": false,
         "kind": null,
         "label": null,
-        "presets": []
+        "presets": [],
+        "reason": "Computer play is not offered for this game."
       },
       "local_playable": true,
+      "members": [],
+      "menu_label": null,
+      "menu_rank": 105,
+      "menu_section": "more",
       "online_playable": true,
+      "selection_mode": "single",
       "session_mode": null,
       "session_style": null,
       "title": "Tourne-Case"
@@ -258,10 +566,16 @@
         "available": false,
         "kind": null,
         "label": null,
-        "presets": []
+        "presets": [],
+        "reason": "Computer play is not offered for this game."
       },
       "local_playable": true,
+      "members": [],
+      "menu_label": null,
+      "menu_rank": 106,
+      "menu_section": "more",
       "online_playable": true,
+      "selection_mode": "single",
       "session_mode": null,
       "session_style": null,
       "title": "Dames Rabattues"
@@ -274,10 +588,16 @@
         "available": false,
         "kind": null,
         "label": null,
-        "presets": []
+        "presets": [],
+        "reason": "Computer play is not offered for this game."
       },
-      "local_playable": false,
+      "local_playable": true,
+      "members": [],
+      "menu_label": null,
+      "menu_rank": 199,
+      "menu_section": "more",
       "online_playable": true,
+      "selection_mode": "single",
       "session_mode": "poule",
       "session_style": "growing_pot",
       "title": "Toccategli en poule"
@@ -290,10 +610,16 @@
         "available": false,
         "kind": null,
         "label": null,
-        "presets": []
+        "presets": [],
+        "reason": "Computer play is not offered for this game."
       },
-      "local_playable": false,
+      "local_playable": true,
+      "members": [],
+      "menu_label": null,
+      "menu_rank": 199,
+      "menu_section": "more",
       "online_playable": true,
+      "selection_mode": "single",
       "session_mode": "poule",
       "session_style": "plucked_pot",
       "title": "Toccategli en poule (plumee)"
@@ -306,10 +632,16 @@
         "available": false,
         "kind": null,
         "label": null,
-        "presets": []
+        "presets": [],
+        "reason": "Computer play is not offered for this game."
       },
-      "local_playable": false,
+      "local_playable": true,
+      "members": [],
+      "menu_label": null,
+      "menu_rank": 199,
+      "menu_section": "more",
       "online_playable": true,
+      "selection_mode": "single",
       "session_mode": "poule",
       "session_style": "growing_pot",
       "title": "Trictrac en poule"
@@ -322,10 +654,16 @@
         "available": false,
         "kind": null,
         "label": null,
-        "presets": []
+        "presets": [],
+        "reason": "Computer play is not offered for this game."
       },
-      "local_playable": false,
+      "local_playable": true,
+      "members": [],
+      "menu_label": null,
+      "menu_rank": 199,
+      "menu_section": "more",
       "online_playable": true,
+      "selection_mode": "single",
       "session_mode": "poule",
       "session_style": "plucked_pot",
       "title": "Trictrac en poule (plumee)"
@@ -338,10 +676,16 @@
         "available": false,
         "kind": null,
         "label": null,
-        "presets": []
+        "presets": [],
+        "reason": "Computer play is not offered for this game."
       },
-      "local_playable": false,
+      "local_playable": true,
+      "members": [],
+      "menu_label": null,
+      "menu_rank": 199,
+      "menu_section": "more",
       "online_playable": true,
+      "selection_mode": "single",
       "session_mode": "multiplayer",
       "session_style": "a_tourner",
       "title": "Trictrac a ecrire a tourner"
@@ -354,10 +698,16 @@
         "available": false,
         "kind": null,
         "label": null,
-        "presets": []
+        "presets": [],
+        "reason": "Computer play is not offered for this game."
       },
-      "local_playable": false,
+      "local_playable": true,
+      "members": [],
+      "menu_label": null,
+      "menu_rank": 199,
+      "menu_section": "more",
       "online_playable": true,
+      "selection_mode": "single",
       "session_mode": "multiplayer",
       "session_style": "chouette",
       "title": "Trictrac a ecrire chouette"
@@ -370,10 +720,16 @@
         "available": false,
         "kind": null,
         "label": null,
-        "presets": []
+        "presets": [],
+        "reason": "Computer play is not offered for this game."
       },
-      "local_playable": false,
+      "local_playable": true,
+      "members": [],
+      "menu_label": null,
+      "menu_rank": 199,
+      "menu_section": "more",
       "online_playable": true,
+      "selection_mode": "single",
       "session_mode": "multiplayer",
       "session_style": "deux_contre_deux",
       "title": "Trictrac a ecrire deux contre deux"
@@ -386,10 +742,16 @@
         "available": false,
         "kind": null,
         "label": null,
-        "presets": []
+        "presets": [],
+        "reason": "Computer play is not offered for this game."
       },
-      "local_playable": false,
+      "local_playable": true,
+      "members": [],
+      "menu_label": null,
+      "menu_rank": 199,
+      "menu_section": "more",
       "online_playable": true,
+      "selection_mode": "single",
       "session_mode": "multiplayer",
       "session_style": "chouette",
       "title": "Trictrac combine chouette"
@@ -402,10 +764,16 @@
         "available": false,
         "kind": null,
         "label": null,
-        "presets": []
+        "presets": [],
+        "reason": "Computer play is not offered for this game."
       },
-      "local_playable": false,
+      "local_playable": true,
+      "members": [],
+      "menu_label": null,
+      "menu_rank": 199,
+      "menu_section": "more",
       "online_playable": true,
+      "selection_mode": "single",
       "session_mode": "multiplayer",
       "session_style": "deux_contre_deux",
       "title": "Trictrac combine deux contre deux"

@@ -16,6 +16,9 @@
       <span>XGID</span>
       <span>10 / 25 / 50 samples</span>
       <span>Trictrac scoring events</span>
+      <a class="sound-toggle rules-link" href={~p"/rules"} data-rules-language-link data-i18n="game.rules">
+        Rules
+      </a>
       <button type="button" class="sound-toggle theme-cycle-button" data-theme-cycle data-i18n="themeCycle" data-i18n-aria-label="themeCycle">
         Cycle Theme
       </button>
@@ -56,15 +59,28 @@
               <option value="toward_24">Black 1 → 24</option>
             </select>
           </label>
+
+          <label data-model-lab-brade-match hidden>
+            Bräde match
+            <select data-model-lab-brade-match-length>
+              <option value="3">Best of 3</option>
+              <option value="5" selected>Best of 5</option>
+              <option value="7">Best of 7</option>
+            </select>
+          </label>
         </div>
 
         <label>
           Model
           <select data-model-lab-model>
-            <%= for model <- @models do %>
-              <option value={model.id} selected={model.id == "trictrac_zero:classique"}>
-                <%= model.label %>
-              </option>
+            <%= if @models == [] do %>
+              <option value="" selected>No accepted ML champion is available</option>
+            <% else %>
+              <%= for model <- @models do %>
+                <option value={model.id} selected={model.id == "trictrac_zero:classique"}>
+                  <%= model.label %>
+                </option>
+              <% end %>
             <% end %>
           </select>
         </label>
@@ -96,6 +112,9 @@
         </div>
 
         <p class="model-lab-status" data-model-lab-status aria-live="polite"></p>
+        <p class="muted-copy" data-model-lab-brade-note hidden>
+          Bräde analysis uses fixed Jacquet-parallel direction. XGID cannot represent completed-round or current-turn cause history, so those are reconstructed as empty assumptions.
+        </p>
       </section>
 
       <section class="rail-card model-lab-results">

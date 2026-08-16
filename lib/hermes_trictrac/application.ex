@@ -13,6 +13,8 @@ defmodule HermesTrictrac.Application do
       HermesTrictracWeb.Endpoint,
       HermesTrictrac.BackupAgent,
       HermesTrictrac.TrictracModelBot,
+      HermesTrictrac.BradeModelBot,
+      HermesTrictrac.RaceModelBot,
       HermesTrictrac.GameSup
     ]
 

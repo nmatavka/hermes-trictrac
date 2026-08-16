@@ -1,5 +1,7 @@
 const BASE_FEATURE_CHANNELS = 76
 const BASE_FEATURE_SHAPE = (24, 1, BASE_FEATURE_CHANNELS)
+const BRADE_FEATURE_CHANNELS = 64
+const BRADE_FEATURE_SHAPE = (24, 1, BRADE_FEATURE_CHANNELS)
 const AECRIRE_LIKE_FEATURE_CHANNELS = 132
 const AECRIRE_LIKE_FEATURE_SHAPE = (24, 1, AECRIRE_LIKE_FEATURE_CHANNELS)
 const STRAGGLER_TIMEOUT_SECONDS_ENV = "TRICTRAC_ZERO_SELF_PLAY_TAIL_TIMEOUT_SECONDS"
@@ -352,6 +354,7 @@ aecrire_variant(gspec::TricTracGameSpec) = aecrire_variant(gspec.variant_id)
 toc_variant(gspec::TricTracGameSpec) = toc_variant(gspec.variant_id)
 toccategli_variant(gspec::TricTracGameSpec) = toccategli_variant(gspec.variant_id)
 tactical_variant(gspec::TricTracGameSpec) = tactical_variant(gspec.variant_id)
+brade_variant(gspec::TricTracGameSpec) = gspec.variant_id == "brade"
 
 partie_length_schedule_key(gspec::TricTracGameSpec) = gspec.storage
 
@@ -400,7 +403,11 @@ end
 
 function resolved_match_options_for_new_game(gspec::TricTracGameSpec)
   options = copy(gspec.match_options)
-  if aecrire_like_variant(gspec)
+  if brade_variant(gspec)
+    options["matchLength"] = next_brade_match_length!(gspec)
+  elseif tavli_variant(gspec)
+    options["tavliTarget"] = next_tavli_target!(gspec)
+  elseif aecrire_like_variant(gspec)
     schedule = active_partie_length_schedule(gspec)
     if !isnothing(schedule)
       options["aEcrirePartieLength"] = next_partie_length!(schedule)
@@ -410,8 +417,16 @@ function resolved_match_options_for_new_game(gspec::TricTracGameSpec)
 end
 
 function feature_shape(gspec::TricTracGameSpec)
-  return aecrire_like_variant(gspec) ? AECRIRE_LIKE_FEATURE_SHAPE : BASE_FEATURE_SHAPE
+  return race_variant(gspec) ?
+    BRADE_FEATURE_SHAPE :
+    (aecrire_like_variant(gspec) ? AECRIRE_LIKE_FEATURE_SHAPE : BASE_FEATURE_SHAPE)
 end
+
+# Race models add the atomic `(from, to, die)` action slot.  Keep this out of
+# the Trictrac encoder so accepted Trictrac champions keep their 94-column
+# policy input contract.
+action_feature_count(gspec::TricTracGameSpec) =
+  race_variant(gspec) ? RACE_NUM_ACTION_FEATURES : TRICTRAC_NUM_ACTION_FEATURES
 
 GI.spec(game::TricTracGameEnv) = game.spec
 
@@ -547,7 +562,9 @@ end
 function GI.heuristic_value(game::TricTracGameEnv)
   runtime = state_runtime(game.state)
   myself, opponent = perspective_colors(game.state)
-  if aecrire_like_variant(game.spec)
+  if brade_variant(game.spec)
+    return brade_match_utility(runtime)
+  elseif aecrire_like_variant(game.spec)
     raw =
       if combine_variant(game.spec)
         combine_scalar_utility(game.spec, game.state, runtime, myself, opponent)
@@ -704,6 +721,12 @@ function AlphaZero.self_play_step!(
   if aecrire_like_variant(env.gspec)
     install_partie_length_schedule!(env.gspec)
     schedule_installed = true
+  elseif brade_variant(env.gspec)
+    install_brade_match_length_schedule!(env.gspec)
+    schedule_installed = true
+  elseif tavli_variant(env.gspec)
+    install_tavli_target_schedule!(env.gspec)
+    schedule_installed = true
   end
 
   try
@@ -741,11 +764,18 @@ function AlphaZero.self_play_step!(
     AlphaZero.Handlers.self_play_finished(handler, report)
     return report
   finally
-    schedule_installed && remove_partie_length_schedule!(env.gspec)
+    if schedule_installed
+      aecrire_like_variant(env.gspec) && remove_partie_length_schedule!(env.gspec)
+      brade_variant(env.gspec) && remove_brade_match_length_schedule!(env.gspec)
+      tavli_variant(env.gspec) && remove_tavli_target_schedule!(env.gspec)
+    end
   end
 end
 
 function GI.vectorize_state(gspec::TricTracGameSpec, state::TricTracState)
+  brade_variant(gspec) && return brade_vectorize_state(gspec, state)
+  race_variant(gspec) && return race_vectorize_state(gspec, state)
+
   features = zeros(Float32, feature_shape(gspec))
   runtime = state_runtime(state)
   white_to_play = state_white_to_play(state)
@@ -891,6 +921,11 @@ function transition_white_reward(
   next_state::TricTracState;
   fallback::Float64 = 0.0
 )
+  if brade_variant(gspec)
+    return brade_match_utility(state_runtime(next_state)) -
+           brade_match_utility(state_runtime(previous_state))
+  end
+
   family = variant_family(gspec)
   if family == :aecrire
     return aecrire_step_reward(state_runtime(previous_state), state_runtime(next_state))

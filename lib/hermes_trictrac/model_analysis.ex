@@ -1,46 +1,83 @@
 defmodule HermesTrictrac.ModelAnalysis do
   alias HermesTrictrac.{
-    BackgammonAiBot,
+    BradeModelBot,
+    ComputerPlayCatalog,
+    RaceModelBot,
     TrictracModelBot,
     Xgid
   }
 
   alias HermesTrictrac.Rules.{RaceCore, Registry, TrictracCore}
   alias HermesTrictrac.Rules.Trictrac.Classique
-  alias HermesTrictrac.Training.TrictracBridge
+  alias HermesTrictrac.Training.{RaceTrainingBridge, TrictracBridge}
 
   @run_counts [10, 25, 50]
   @max_turn_steps 16
 
   def models do
-    [
-      %{
-        id: "backgammon_ai",
-        label: BackgammonAiBot.model_name(),
-        kind: "backgammon_ai",
-        variant_id: "backgammon",
-        movement_mode: movement_mode_for_variant_id("backgammon"),
-        black_direction: black_direction_for_variant_id("backgammon"),
-        uses_bar: uses_bar_for_variant_id("backgammon"),
-        trictrac: false
-      }
-      | TrictracModelBot.presets()
-        |> Enum.filter(& &1.available)
-        |> Enum.map(fn preset ->
+    trictrac_models =
+      TrictracModelBot.presets()
+      |> Enum.filter(&(&1.available and &1.variant_id in ~w(trictrac_classique toc toccategli)))
+      |> Enum.map(fn preset ->
+        %{
+          id: "trictrac_zero:" <> preset.id,
+          label: preset.model_name,
+          kind: "trictrac_zero",
+          preset: preset.id,
+          variant_id: preset.variant_id,
+          movement_mode: movement_mode_for_variant_id(preset.variant_id),
+          black_direction: black_direction_for_variant_id(preset.variant_id),
+          uses_bar: uses_bar_for_variant_id(preset.variant_id),
+          margot_enabled: preset.margot_enabled,
+          trictrac: true
+        }
+      end)
+
+    race_models =
+      (ComputerPlayCatalog.primary() ++ [ComputerPlayCatalog.tavli()])
+      |> Enum.reject(&(&1.id == "brade" or &1.bot_kind == "trictrac_zero"))
+      |> Enum.filter(&RaceModelBot.available?(&1.preset))
+      |> Enum.map(fn entry -> race_model(entry) end)
+
+    brade_models =
+      if BradeModelBot.available?() do
+        [
           %{
-            id: "trictrac_zero:" <> preset.id,
-            label: preset.model_name,
-            kind: "trictrac_zero",
-            preset: preset.id,
-            variant_id: preset.variant_id,
-            movement_mode: movement_mode_for_variant_id(preset.variant_id),
-            black_direction: black_direction_for_variant_id(preset.variant_id),
-            uses_bar: uses_bar_for_variant_id(preset.variant_id),
-            margot_enabled: preset.margot_enabled,
-            trictrac: true
+            id: "brade_zero",
+            label: BradeModelBot.model_name(),
+            kind: "brade_zero",
+            preset: "brade",
+            variant_id: "brade",
+            movement_mode: "parallel",
+            black_direction: "toward_24",
+            fixed_black_direction: true,
+            uses_bar: true,
+            trictrac: false,
+            brade: true
           }
-        end)
-    ]
+        ]
+      else
+        []
+      end
+
+    trictrac_models ++ race_models ++ brade_models
+  end
+
+  defp race_model(entry) do
+    %{
+      id: entry.bot_kind,
+      label: RaceModelBot.model_name(entry.preset),
+      kind: entry.bot_kind,
+      preset: entry.preset,
+      variant_id: entry.id,
+      movement_mode: movement_mode_for_variant_id(entry.id),
+      black_direction: black_direction_for_variant_id(entry.id),
+      fixed_black_direction: true,
+      uses_bar: uses_bar_for_variant_id(entry.id),
+      trictrac: false,
+      race: true,
+      tavli: entry.id == "tavli"
+    }
   end
 
   def parse(params) when is_map(params) do
@@ -68,11 +105,12 @@ defmodule HermesTrictrac.ModelAnalysis do
          {:ok, turn_color} <- requested_turn_color(params, parsed),
          model_movement <- movement_mode_for_model(model),
          {:ok, black_direction} <- requested_black_direction(params, model),
+         {:ok, brade_match_length} <- requested_brade_match_length(params, model),
          {:ok, dice} <- requested_dice(params, parsed),
          {:ok, runs} <- requested_runs(Map.get(params, "runs")),
          parsed <- %{parsed | turn_color: turn_color},
          {:ok, runtime, variant, match_options} <-
-           build_runtime(parsed, dice, model, black_direction) do
+           build_runtime(parsed, dice, model, black_direction, brade_match_length) do
       case ensure_model_ready(model) do
         :ok ->
           outcomes =
@@ -104,6 +142,8 @@ defmodule HermesTrictrac.ModelAnalysis do
   defp model_config(nil), do: model_config(default_model_id())
   defp model_config(""), do: model_config(default_model_id())
 
+  defp model_config(:none), do: {:error, "No released ML models are available yet."}
+
   defp model_config(id) do
     case Enum.find(models(), &(&1.id == id)) do
       nil -> {:error, "Unknown model: #{id}."}
@@ -115,8 +155,11 @@ defmodule HermesTrictrac.ModelAnalysis do
     models()
     |> Enum.find(&(&1.id == "trictrac_zero:classique"))
     |> case do
-      nil -> "backgammon_ai"
-      model -> model.id
+      nil ->
+        models() |> List.first() |> then(fn model -> if(model, do: model.id, else: :none) end)
+
+      model ->
+        model.id
     end
   end
 
@@ -148,15 +191,29 @@ defmodule HermesTrictrac.ModelAnalysis do
   end
 
   defp requested_black_direction(params, model) do
-    default = Map.get(model, :black_direction, "toward_1")
+    if Map.get(model, :fixed_black_direction, false) do
+      {:ok, Map.get(model, :black_direction, "toward_24")}
+    else
+      default = Map.get(model, :black_direction, "toward_1")
 
-    case Map.get(params, "black_direction", Map.get(params, "blackDirection", default)) do
-      value when value in [nil, ""] -> {:ok, default}
-      value when value in ["toward_1", :toward_1] -> {:ok, "toward_1"}
-      value when value in ["toward_24", :toward_24] -> {:ok, "toward_24"}
-      other -> {:error, "Black direction must be toward_1 or toward_24. Got #{inspect(other)}."}
+      case Map.get(params, "black_direction", Map.get(params, "blackDirection", default)) do
+        value when value in [nil, ""] -> {:ok, default}
+        value when value in ["toward_1", :toward_1] -> {:ok, "toward_1"}
+        value when value in ["toward_24", :toward_24] -> {:ok, "toward_24"}
+        other -> {:error, "Black direction must be toward_1 or toward_24. Got #{inspect(other)}."}
+      end
     end
   end
+
+  defp requested_brade_match_length(params, %{kind: "brade_zero"}) do
+    case Map.get(params, "brade_match_length", Map.get(params, "bradeMatchLength", "5"))
+         |> to_string() do
+      length when length in ["3", "5", "7"] -> {:ok, length}
+      _ -> {:error, "Bräde match length must be best-of 3, 5, or 7."}
+    end
+  end
+
+  defp requested_brade_match_length(_params, _model), do: {:ok, nil}
 
   defp validate_bar_support(board, model) do
     if uses_bar_for_model(model) or bar_empty?(board) do
@@ -187,10 +244,21 @@ defmodule HermesTrictrac.ModelAnalysis do
     Xgid.parse_dice(dice)
   end
 
-  defp build_runtime(parsed, dice, %{variant_id: variant_id} = model, black_direction) do
+  defp build_runtime(
+         parsed,
+         dice,
+         %{variant_id: variant_id} = model,
+         black_direction,
+         brade_match_length
+       ) do
     variant = Registry.fetch!(variant_id)
-    variant = apply_black_direction(variant, black_direction)
-    match_options = match_options(model, black_direction)
+
+    variant =
+      if Map.get(model, :fixed_black_direction, false),
+        do: variant,
+        else: apply_black_direction(variant, black_direction)
+
+    match_options = match_options(model, black_direction, brade_match_length)
     turn_color = parsed.turn_color
     expanded_dice = dice_for_variant(variant, dice)
 
@@ -222,6 +290,7 @@ defmodule HermesTrictrac.ModelAnalysis do
         :race ->
           variant
           |> RaceCore.new()
+          |> RaceCore.submit_options(variant, match_options)
           |> Map.put(:board, parsed.board)
           |> Map.put(:match, match)
           |> Map.put(:turn_color, turn_color)
@@ -244,14 +313,34 @@ defmodule HermesTrictrac.ModelAnalysis do
     %{runtime | trictrac: trictrac}
   end
 
-  defp match_options(%{kind: "trictrac_zero", margot_enabled: margot_enabled}, black_direction) do
+  defp match_options(
+         %{kind: "trictrac_zero", margot_enabled: margot_enabled},
+         black_direction,
+         _brade_match_length
+       ) do
     %{"margotEnabled" => margot_enabled == true, "black_direction" => black_direction}
   end
 
-  defp match_options(_model, _black_direction), do: %{}
+  defp match_options(%{kind: "brade_zero"}, _black_direction, brade_match_length),
+    do: %{"matchLength" => brade_match_length || "5"}
+
+  defp match_options(%{kind: "tavli_zero"}, _black_direction, _brade_match_length),
+    do: %{"tavliTarget" => "7"}
+
+  defp match_options(_model, _black_direction, _brade_match_length), do: %{}
 
   defp match_state(variant, parsed, options) do
-    length = max(parsed.match_length || 0, 1)
+    length =
+      cond do
+        variant.id == "brade" ->
+          options |> Map.get("matchLength", "5") |> to_string() |> String.to_integer()
+
+        variant.id == "tavli" ->
+          options |> Map.get("tavliTarget", "7") |> to_string() |> String.to_integer()
+
+        true ->
+          max(parsed.match_length || 0, 1)
+      end
 
     %{
       is_over: false,
@@ -268,10 +357,11 @@ defmodule HermesTrictrac.ModelAnalysis do
   defp dice_for_variant(%{doubles_mode: :repeat_four}, [a, a]), do: [a, a, a, a]
   defp dice_for_variant(_variant, [a, b]), do: [a, b]
 
-  defp ensure_model_ready(%{kind: "backgammon_ai"}), do: BackgammonAiBot.ready()
-
   defp ensure_model_ready(%{kind: "trictrac_zero", preset: preset}),
     do: TrictracModelBot.ready(preset)
+
+  defp ensure_model_ready(%{kind: "brade_zero", preset: preset}), do: BradeModelBot.ready(preset)
+  defp ensure_model_ready(%{preset: preset}), do: RaceModelBot.ready(preset)
 
   defp run_once(runtime, variant, match_options, %{kind: "trictrac_zero"} = model, run_number) do
     initial_events = score_events(runtime)
@@ -293,8 +383,16 @@ defmodule HermesTrictrac.ModelAnalysis do
     end
   end
 
-  defp run_once(runtime, variant, _match_options, %{kind: "backgammon_ai"}, run_number) do
-    case run_backgammon_turn(runtime, variant, [], @max_turn_steps) do
+  defp run_once(runtime, variant, _match_options, %{kind: "brade_zero"} = model, run_number) do
+    case run_race_turn(runtime, variant, model, [], @max_turn_steps) do
+      {:ok, final_runtime, actions} -> outcome(run_number, actions, [], final_runtime, [])
+      {:error, msg, actions} -> error_outcome(run_number, actions, msg)
+    end
+  end
+
+  defp run_once(runtime, variant, _match_options, %{kind: kind} = model, run_number)
+       when kind in ~w(backgammon_zero tapa_zero jacquet_zero garanguet_zero tavli_zero) do
+    case run_race_turn(runtime, variant, model, [], @max_turn_steps) do
       {:ok, final_runtime, actions} -> outcome(run_number, actions, [], final_runtime, [])
       {:error, msg, actions} -> error_outcome(run_number, actions, msg)
     end
@@ -331,28 +429,43 @@ defmodule HermesTrictrac.ModelAnalysis do
     end
   end
 
-  defp run_backgammon_turn(_runtime, _variant, actions, 0) do
-    {:error, "Model turn exceeded #{@max_turn_steps} actions.", actions}
-  end
+  defp run_race_turn(_runtime, _variant, _model, actions, 0),
+    do: {:error, "Model turn exceeded #{@max_turn_steps} actions.", actions}
 
-  defp run_backgammon_turn(runtime, variant, actions, steps_left) do
-    serialized = BackgammonAiBot.serialize_state(runtime, variant)
+  defp run_race_turn(runtime, variant, model, actions, steps_left) do
+    if runtime.legal_moves == [] do
+      case RaceCore.confirm(runtime, variant, runtime.turn_color) do
+        {:ok, final_runtime} ->
+          {:ok, final_runtime, actions ++ [%{"type" => "special", "id" => "CONFIRM"}]}
 
-    with {:ok, action} <- BackgammonAiBot.choose_action(serialized),
-         {:ok, next_runtime} <- apply_backgammon_action(runtime, variant, action) do
-      actions = actions ++ [action]
-
-      if confirm_action?(action) or terminal_after_turn?(runtime, next_runtime) do
-        {:ok, next_runtime, actions}
-      else
-        run_backgammon_turn(next_runtime, variant, actions, steps_left - 1)
+        {:error, msg} ->
+          {:error, msg, actions}
       end
     else
-      {:error, msg} -> {:error, msg, actions}
+      serialized = RaceTrainingBridge.serialize_runtime(runtime)
+
+      with {:ok, action} <- choose_race_action(model, serialized),
+           {:ok, next_runtime} <- apply_race_action(runtime, variant, action) do
+        actions = actions ++ [action]
+
+        if terminal_after_turn?(runtime, next_runtime) do
+          {:ok, next_runtime, actions}
+        else
+          run_race_turn(next_runtime, variant, model, actions, steps_left - 1)
+        end
+      else
+        {:error, msg} -> {:error, msg, actions}
+      end
     end
   end
 
-  defp apply_backgammon_action(runtime, variant, %{"type" => "move"} = action) do
+  defp choose_race_action(%{kind: "brade_zero", preset: preset}, serialized),
+    do: BradeModelBot.choose_action(preset, serialized)
+
+  defp choose_race_action(%{preset: preset}, serialized),
+    do: RaceModelBot.choose_action(preset, serialized)
+
+  defp apply_race_action(runtime, variant, %{"type" => "move"} = action) do
     RaceCore.move(runtime, variant, runtime.turn_color, %{
       "from" => action["from"],
       "to" => action["to"],
@@ -362,12 +475,12 @@ defmodule HermesTrictrac.ModelAnalysis do
     })
   end
 
-  defp apply_backgammon_action(runtime, variant, %{"type" => "special", "id" => "CONFIRM"}) do
+  defp apply_race_action(runtime, variant, %{"type" => "special", "id" => "CONFIRM"}) do
     RaceCore.confirm(runtime, variant, runtime.turn_color)
   end
 
-  defp apply_backgammon_action(_runtime, _variant, action) do
-    {:error, "Unsupported BackgammonAI action: #{inspect(action)}"}
+  defp apply_race_action(_runtime, _variant, action) do
+    {:error, "Unsupported race-model action: #{inspect(action)}"}
   end
 
   defp terminal_after_turn?(before_runtime, after_runtime) do
@@ -498,7 +611,7 @@ defmodule HermesTrictrac.ModelAnalysis do
 
   defp move_action_text(action) do
     "#{space_label(action["from"])}/#{space_label(action["to"])}" <>
-      sequence_suffix(action["sequence"])
+      sequence_suffix(action["sequence"]) <> die_suffix(action["die"])
   end
 
   defp sequence_suffix(sequence) when is_list(sequence) and sequence != [] do
@@ -506,6 +619,8 @@ defmodule HermesTrictrac.ModelAnalysis do
   end
 
   defp sequence_suffix(_sequence), do: ""
+  defp die_suffix(die) when is_integer(die), do: " (#{die})"
+  defp die_suffix(_die), do: ""
 
   defp space_label("bar"), do: "bar"
   defp space_label("home"), do: "off"
@@ -706,6 +821,7 @@ defmodule HermesTrictrac.ModelAnalysis do
   defp movement_mode_for_variant(%{movement_mode: :contrary}), do: "contrary"
   defp movement_mode_for_variant(%{orientation: :parallel}), do: "parallel"
   defp movement_mode_for_variant(%{orientation: :jacquet_parallel}), do: "parallel"
+  defp movement_mode_for_variant(%{orientation: :jacquet_diagonal_parallel}), do: "parallel"
   defp movement_mode_for_variant(_variant), do: "contrary"
 
   defp uses_bar_for_model(%{uses_bar: uses_bar}), do: uses_bar

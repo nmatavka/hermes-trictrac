@@ -9,24 +9,28 @@ defmodule HermesTrictracWeb.RulesController do
 
     render(conn, :index,
       page_title: "Trictrac Rules Library",
-      books: RulesLibrary.books(),
+      books: RulesLibrary.books(return_context),
       query: query,
-      results: if(query == "", do: [], else: RulesLibrary.search(query)),
+      results: if(query == "", do: [], else: RulesLibrary.search(query, return_context)),
       return_context: return_context,
-      nav_context: RulesLibrary.clear_query(return_context)
+      nav_context: RulesLibrary.clear_query(return_context),
+      language_options: RulesLibrary.language_options(),
+      variant_options: RulesLibrary.variant_options()
     )
   end
 
   def book(conn, %{"book_slug" => book_slug} = params) do
     return_context = RulesLibrary.return_context(params)
 
-    with {:ok, book} <- RulesLibrary.fetch_book(book_slug) do
+    with {:ok, book} <- RulesLibrary.fetch_book(book_slug, return_context) do
       render(conn, :book,
         page_title: "#{book.title} · Trictrac Rules",
         book: book,
         query: return_context.query,
         return_context: return_context,
-        nav_context: RulesLibrary.clear_query(return_context)
+        nav_context: RulesLibrary.clear_query(return_context),
+        language_options: RulesLibrary.language_options(),
+        variant_options: RulesLibrary.variant_options()
       )
     else
       :error -> not_found(conn)
@@ -37,8 +41,8 @@ defmodule HermesTrictracWeb.RulesController do
     return_context = RulesLibrary.return_context(params)
     route_path = chapter_path |> List.wrap() |> Enum.join("/")
 
-    with {:ok, book} <- RulesLibrary.fetch_book(book_slug),
-         {:ok, chapter} <- RulesLibrary.fetch_chapter(book_slug, route_path) do
+    with {:ok, book} <- RulesLibrary.fetch_book(book_slug, return_context),
+         {:ok, chapter} <- RulesLibrary.fetch_chapter(book_slug, route_path, return_context) do
       {previous_chapter, next_chapter} = chapter_neighbors(book, route_path)
 
       render(conn, :chapter,
@@ -50,7 +54,9 @@ defmodule HermesTrictracWeb.RulesController do
         next_chapter: next_chapter,
         query: return_context.query,
         return_context: return_context,
-        nav_context: RulesLibrary.clear_query(return_context)
+        nav_context: RulesLibrary.clear_query(return_context),
+        language_options: RulesLibrary.language_options(),
+        variant_options: RulesLibrary.variant_options()
       )
     else
       :error -> not_found(conn)

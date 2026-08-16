@@ -169,28 +169,51 @@ defmodule HermesTrictrac.Rules.RaceCore do
 
   def roll(runtime, variant, color) do
     effective_variant = active_variant(runtime, variant)
+    roll_with_values(runtime, variant, color, roll_values(effective_variant))
+  end
+
+  @doc false
+  # Training-only boundary for deterministic chance evaluation. Normal games
+  # continue to call `roll/3`, which samples through the configured dice impl.
+  def roll_with_values(runtime, variant, color, values) when is_list(values) do
+    effective_variant = active_variant(runtime, variant)
 
     if runtime.dice do
       {:error, "Dice already rolled."}
     else
-      values = roll_values(effective_variant)
-      moves_left = build_moves_left(effective_variant, values)
+      with {:ok, values} <- normalize_forced_roll_values(effective_variant, values) do
+        moves_left = build_moves_left(effective_variant, values)
 
-      runtime =
-        runtime
-        |> Map.put(:turn_moves, [])
-        |> put_in([:variant_state, :last_roll_double], Enum.uniq(values) |> length() == 1)
-        |> maybe_put_garanguet_force_mode(effective_variant, values)
-        |> Map.put(:dice, %{
-          values: values,
-          moves: moves_left,
-          moves_left: moves_left,
-          moves_played: []
-        })
+        runtime =
+          runtime
+          |> Map.put(:turn_moves, [])
+          |> put_in([:variant_state, :last_roll_double], Enum.uniq(values) |> length() == 1)
+          |> maybe_put_garanguet_force_mode(effective_variant, values)
+          |> Map.put(:dice, %{
+            values: values,
+            moves: moves_left,
+            moves_left: moves_left,
+            moves_played: []
+          })
 
-      {:ok, recalc_legal_moves(runtime, effective_variant, color)}
+        {:ok, recalc_legal_moves(runtime, effective_variant, color)}
+      end
     end
   end
+
+  defp normalize_forced_roll_values(%{id: "brade"}, [first, second])
+       when first in 1..6 and second in 1..6,
+       do: {:ok, [first, second]}
+
+  defp normalize_forced_roll_values(_variant, values)
+       when is_list(values) and values != [] do
+    if Enum.all?(values, &(&1 in 1..6)),
+      do: {:ok, values},
+      else: {:error, "Invalid forced dice values."}
+  end
+
+  defp normalize_forced_roll_values(_variant, _values),
+    do: {:error, "Invalid forced dice values."}
 
   def undo(runtime, variant, color) do
     case runtime.history do
@@ -678,7 +701,7 @@ defmodule HermesTrictrac.Rules.RaceCore do
         own_count > 0 and not brade_case_allowed_on_point?(variant, color, destination) ->
           :error
 
-        opp_count >= 2 and brade_can_explode?(board, color, source, destination) ->
+        opp_count >= 2 and brade_can_explode?(board, variant, color, source, destination) ->
           with {:ok, count} <-
                  move_count_for_landing(board, variant, color, source, source_count, destination) do
             {:ok, true, count}
@@ -724,8 +747,8 @@ defmodule HermesTrictrac.Rules.RaceCore do
     Enum.all?(unsafe_points, fn point -> pieces_at(board, point, color) == 0 end)
   end
 
-  defp bear_off_allowed?(board, %{id: "brade"}, color, route_index, die) do
-    route = route_for(%{orientation: :split_home}, color)
+  defp bear_off_allowed?(board, %{id: "brade"} = variant, color, route_index, die) do
+    route = route_for(variant, color)
     current_point = Enum.at(route, route_index)
     home_zone = Enum.take(route, -6)
     furthest_point = Enum.find(home_zone, &(pieces_at(board, &1, color) > 0))
@@ -810,7 +833,7 @@ defmodule HermesTrictrac.Rules.RaceCore do
     |> jacquet_update_after_move(variant, color, move)
   end
 
-  defp apply_move(runtime, %{id: "brade"}, color, move) do
+  defp apply_move(runtime, %{id: "brade"} = variant, color, move) do
     before_board = runtime.board
     count = Map.get(move, :count, 1)
     dice_used = Map.get(move, :dice_used, [move.die])
@@ -836,6 +859,7 @@ defmodule HermesTrictrac.Rules.RaceCore do
         brade_turn_cause(runtime.variant_state, color),
         before_board,
         board,
+        variant,
         color,
         move
       )
@@ -937,6 +961,12 @@ defmodule HermesTrictrac.Rules.RaceCore do
   defp route_for(%{orientation: :parallel_toward_24}, _color), do: Enum.to_list(23..0//-1)
   defp route_for(%{orientation: :jacquet_parallel}, :white), do: Enum.to_list(23..0//-1)
   defp route_for(%{orientation: :jacquet_parallel}, :black), do: [0 | Enum.to_list(23..1//-1)]
+  # Jacquet begins on diagonal talons, then both players follow the same
+  # clockwise physical circuit. Keep this distinct from Bräde's orientation.
+  defp route_for(%{orientation: :jacquet_diagonal_parallel}, :white), do: Enum.to_list(23..0//-1)
+
+  defp route_for(%{orientation: :jacquet_diagonal_parallel}, :black),
+    do: Enum.to_list(11..0//-1) ++ Enum.to_list(23..12//-1)
 
   defp maybe_finish_game(runtime, %{score_mode: :tavli} = variant, effective_variant, color) do
     case tavli_leg_outcome(runtime, effective_variant, color) do
@@ -964,7 +994,7 @@ defmodule HermesTrictrac.Rules.RaceCore do
         "plein"
 
       variant.score_mode == :brade ->
-        brade_winner_kind(runtime.board, variant.total_pieces, color, runtime.variant_state)
+        brade_winner_kind(runtime.board, variant, color, runtime.variant_state)
 
       variant.score_mode == :sbaraglio ->
         sbaraglio_winner_kind(runtime.board, variant, color)
@@ -1241,27 +1271,27 @@ defmodule HermesTrictrac.Rules.RaceCore do
     pieces_at(board, talon, color) == 1 and tapa_top_owner(point) == opposite(color)
   end
 
-  defp brade_winner_kind(board, total_pieces, color, variant_state \\ %{}) do
+  defp brade_winner_kind(board, variant, color, variant_state \\ %{}) do
     cond do
-      board.outside[color] >= total_pieces ->
+      board.outside[color] >= variant.total_pieces ->
         if board.bar[opposite(color)] > 0, do: "home_munk", else: "home"
 
-      brade_pattern?(board, color, :stack) ->
+      brade_pattern?(board, variant, color, :stack) ->
         if board.bar[opposite(color)] > 0, do: "stack_munk", else: "stack"
 
-      brade_pattern?(board, color, :stair) ->
+      brade_pattern?(board, variant, color, :stair) ->
         if board.bar[opposite(color)] > 0, do: "stair_munk", else: "stair"
 
-      brade_pattern?(board, color, :double_crown) ->
+      brade_pattern?(board, variant, color, :double_crown) ->
         if board.bar[opposite(color)] > 0, do: "double_crown_munk", else: "double_crown"
 
-      brade_pattern?(board, color, :crown) ->
+      brade_pattern?(board, variant, color, :crown) ->
         if board.bar[opposite(color)] > 0, do: "crown_munk", else: "crown"
 
-      brade_jan?(board, color) and brade_sprangjan?(variant_state, color, board) ->
+      brade_jan?(board, variant, color) and brade_sprangjan?(variant_state, color, board) ->
         "sprangjan"
 
-      brade_jan?(board, color) ->
+      brade_jan?(board, variant, color) ->
         "jan"
 
       true ->
@@ -1501,15 +1531,15 @@ defmodule HermesTrictrac.Rules.RaceCore do
     |> Enum.any?(fn point -> pieces_at(board, point, color) > 0 end)
   end
 
-  defp race_branch_finished?(board, %{id: "brade", total_pieces: total_pieces}, color) do
-    not is_nil(brade_winner_kind(board, total_pieces, color))
+  defp race_branch_finished?(board, %{id: "brade"} = variant, color) do
+    not is_nil(brade_winner_kind(board, variant, color))
   end
 
   defp race_branch_finished?(_board, _variant, _color), do: false
 
-  defp reduction_for_move(%{id: "brade"}, color, %{from: point, to: "home", die: die})
+  defp reduction_for_move(%{id: "brade"} = variant, color, %{from: point, to: "home", die: die})
        when is_integer(point) do
-    route = route_for(%{orientation: :split_home}, color)
+    route = route_for(variant, color)
 
     case Enum.find_index(route, &(&1 == point)) do
       nil ->
@@ -1573,7 +1603,7 @@ defmodule HermesTrictrac.Rules.RaceCore do
   end
 
   defp maybe_end_game_on_move(runtime, _top_variant, %{id: "brade"} = variant, color) do
-    case brade_winner_kind(runtime.board, variant.total_pieces, color, runtime.variant_state) do
+    case brade_winner_kind(runtime.board, variant, color, runtime.variant_state) do
       nil ->
         runtime
 
@@ -1587,65 +1617,59 @@ defmodule HermesTrictrac.Rules.RaceCore do
 
   defp maybe_end_game_on_move(runtime, _top_variant, _effective_variant, _color), do: runtime
 
-  defp brade_pattern?(board, color, :stack) do
-    pieces_at(board, brade_last_point(color), color) >= 15 and board.outside[color] == 0
+  defp brade_pattern?(board, variant, color, :stack) do
+    pieces_at(board, brade_last_point(variant, color), color) >= 15 and board.outside[color] == 0
   end
 
-  defp brade_pattern?(board, color, :stair) do
-    [p22, p23, p24] = brade_last_three(color)
+  defp brade_pattern?(board, variant, color, :stair) do
+    [p22, p23, p24] = brade_last_points(variant, color, 3)
 
     pieces_at(board, p24, color) >= 7 and pieces_at(board, p23, color) >= 5 and
       pieces_at(board, p22, color) >= 3 and board.outside[color] == 0
   end
 
-  defp brade_pattern?(board, color, :double_crown) do
-    brade_last_three(color)
+  defp brade_pattern?(board, variant, color, :double_crown) do
+    brade_last_points(variant, color, 3)
     |> Enum.all?(&(pieces_at(board, &1, color) >= 5)) and board.outside[color] == 0
   end
 
-  defp brade_pattern?(board, color, :crown) do
-    brade_last_five(color)
+  defp brade_pattern?(board, variant, color, :crown) do
+    brade_last_points(variant, color, 5)
     |> Enum.all?(&(pieces_at(board, &1, color) >= 3)) and board.outside[color] == 0
   end
 
-  defp brade_jan?(board, color) do
+  defp brade_jan?(board, variant, color) do
     victim = opposite(color)
-    board.bar[victim] > brade_jan_capacity(board, victim)
+    board.bar[victim] > brade_jan_capacity(board, variant, victim)
   end
 
-  defp brade_reentry_slots(board, :white) do
-    Enum.count(18..23, fn point ->
-      pieces_at(board, point, :white) == 0 and pieces_at(board, point, :black) <= 1
+  defp brade_reentry_slots(board, variant, color) do
+    Enum.count(brade_entry_points(variant, color), fn point ->
+      pieces_at(board, point, color) == 0 and pieces_at(board, point, opposite(color)) <= 1
     end)
   end
 
-  defp brade_reentry_slots(board, :black) do
-    Enum.count(0..5, fn point ->
-      pieces_at(board, point, :black) == 0 and pieces_at(board, point, :white) <= 1
-    end)
+  defp brade_jan_capacity(board, variant, color) do
+    Enum.count(brade_entry_points(variant, color), &(pieces_at(board, &1, color) == 0))
   end
 
-  defp brade_jan_capacity(board, :white) do
-    Enum.count(18..23, fn point ->
-      pieces_at(board, point, :white) == 0
-    end)
+  defp brade_entry_points(variant, color) do
+    variant
+    |> route_for(color)
+    |> Enum.take(6)
   end
 
-  defp brade_jan_capacity(board, :black) do
-    Enum.count(0..5, fn point ->
-      pieces_at(board, point, :black) == 0
-    end)
+  defp brade_last_point(variant, color) do
+    variant
+    |> route_for(color)
+    |> List.last()
   end
 
-  defp brade_entry_points(:white), do: 18..23
-  defp brade_entry_points(:black), do: 0..5
-
-  defp brade_last_point(:white), do: 0
-  defp brade_last_point(:black), do: 23
-  defp brade_last_three(:white), do: [2, 1, 0]
-  defp brade_last_three(:black), do: [21, 22, 23]
-  defp brade_last_five(:white), do: [4, 3, 2, 1, 0]
-  defp brade_last_five(:black), do: [19, 20, 21, 22, 23]
+  defp brade_last_points(variant, color, count) do
+    variant
+    |> route_for(color)
+    |> Enum.take(-count)
+  end
 
   defp brade_points_for_kind("sprangjan"), do: 6
   defp brade_points_for_kind("jan"), do: 4
@@ -1775,18 +1799,18 @@ defmodule HermesTrictrac.Rules.RaceCore do
     |> tapa_add_piece(color, move.to, count)
   end
 
-  defp brade_can_explode?(board, color, "bar", _destination) do
+  defp brade_can_explode?(board, variant, color, "bar", _destination) do
     not brade_explosion_blocked?(board, color) and
-      board.bar[color] > brade_reentry_slots(board, color)
+      board.bar[color] > brade_reentry_slots(board, variant, color)
   end
 
-  defp brade_can_explode?(board, color, source, destination) when is_integer(source) do
+  defp brade_can_explode?(board, variant, color, source, destination) when is_integer(source) do
     opp = opposite(color)
 
     if brade_explosion_blocked?(board, color) do
       false
     else
-      route = route_for(%{orientation: :split_home}, color)
+      route = route_for(variant, color)
       source_index = Enum.find_index(route, &(&1 == source))
       destination_index = Enum.find_index(route, &(&1 == destination))
 
@@ -1805,7 +1829,7 @@ defmodule HermesTrictrac.Rules.RaceCore do
     end
   end
 
-  defp brade_can_explode?(_board, _color, _source, _destination), do: false
+  defp brade_can_explode?(_board, _variant, _color, _source, _destination), do: false
 
   defp brade_explosion_blocked?(board, color) do
     brade_junker?(board, color) or brade_junker?(board, opposite(color))
@@ -1815,16 +1839,18 @@ defmodule HermesTrictrac.Rules.RaceCore do
     board.outside[color] >= 14 and total_on_board(board, color) + board.bar[color] <= 1
   end
 
-  defp brade_inward_explosion?(board, color, %{to: destination, hit?: true})
+  defp brade_inward_explosion?(board, variant, color, %{to: destination, hit?: true})
        when is_integer(destination) do
     victim = opposite(color)
-    pieces_at(board, destination, victim) >= 2 and destination in brade_entry_points(victim)
+
+    pieces_at(board, destination, victim) >= 2 and
+      destination in brade_entry_points(variant, victim)
   end
 
-  defp brade_inward_explosion?(_board, _color, _move), do: false
+  defp brade_inward_explosion?(_board, _variant, _color, _move), do: false
 
-  defp brade_move_cause(board, color, move) do
-    if brade_inward_explosion?(board, color, move), do: :inward_explosion, else: nil
+  defp brade_move_cause(board, variant, color, move) do
+    if brade_inward_explosion?(board, variant, color, move), do: :inward_explosion, else: nil
   end
 
   defp brade_turn_cause(variant_state, color) do
@@ -1855,10 +1881,10 @@ defmodule HermesTrictrac.Rules.RaceCore do
 
   defp normalize_brade_turn_cause(_legacy), do: brade_empty_turn_cause()
 
-  defp update_brade_turn_cause(existing, before_board, after_board, color, move) do
+  defp update_brade_turn_cause(existing, before_board, after_board, variant, color, move) do
     existing = normalize_brade_turn_cause(existing)
 
-    case brade_move_cause(before_board, color, move) do
+    case brade_move_cause(before_board, variant, color, move) do
       :inward_explosion ->
         signature = brade_board_signature(after_board)
 
@@ -1866,7 +1892,7 @@ defmodule HermesTrictrac.Rules.RaceCore do
           existing
           | last_inward_signature: signature,
             qualifying_signature:
-              if(brade_jan?(after_board, color),
+              if(brade_jan?(after_board, variant, color),
                 do: signature,
                 else: existing.qualifying_signature
               )

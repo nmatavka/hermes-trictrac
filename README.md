@@ -353,15 +353,15 @@ The most common operational failure mode has been memory pressure from long-live
 
   CLI values override environment variables; environment variables override defaults.
 
-## Desktop Foundation
+## Native Desktop Client
 
-The repo now includes a native desktop foundation under
+The repo includes a native Haskell desktop client under
 `haskell/hermes-desktop`.
 
 The intended desktop bundle has two parts:
 
-  * a Haskell desktop shell
-  * a bundled Hermes release for local head-to-head play
+  * a Haskell lobby and table client
+  * a bundled Hermes release for local play across every lobby format
 
 Desktop bootstrap endpoints are available at:
 
@@ -374,7 +374,8 @@ To assemble the local support tree used by the desktop shell:
   * The default output is `.desktop/bundle`
   * To run the bundled local runtime directly, use `scripts/desktop/run_local_runtime.sh`
 
-The shared desktop variant catalogue is written to:
+The shared desktop variant catalogue, including the Tavli composite and
+multi-seat join metadata, is written to:
 
   * `shared/ui/generated/desktop-variant-catalog.json`
 

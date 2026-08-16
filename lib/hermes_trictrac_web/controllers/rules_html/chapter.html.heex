@@ -3,8 +3,11 @@
   query={@query}
   title={@chapter.title}
   subtitle={@book.title}
+  language_options={@language_options}
+  variant_options={@variant_options}
 >
   <div class="rules-reader-layout">
+    <% outline_entries = Map.get(@chapter, :outline_entries, []) %>
     <aside class="rules-sidebar">
       <div class="rules-sidebar-card">
         <p class="rules-sidebar-label">Book</p>
@@ -24,6 +27,21 @@
           </a>
         <% end %>
       </nav>
+
+      <%= if outline_entries != [] do %>
+        <nav class="rules-sidebar-card rules-toc rules-page-outline" aria-label="On this page">
+          <p class="rules-sidebar-label">On this page</p>
+          <%= for entry <- outline_entries do %>
+            <a
+              class="rules-toc-entry rules-outline-entry"
+              href={"##{entry.id}"}
+              style={"--rules-depth: #{entry.depth}"}
+            >
+              <%= entry.title %>
+            </a>
+          <% end %>
+        </nav>
+      <% end %>
     </aside>
 
     <article class={if(@chapter.route_path == @book.first_chapter_path, do: "rules-article rules-frontmatter", else: "rules-article")}>

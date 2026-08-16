@@ -24,6 +24,18 @@ config :hermes_trictrac, :trictrac_model_bot,
     Path.expand("../trictrac_zero/sessions/trictrac-classique-sparse-v4-arena96x16", __DIR__),
   name: "TricTracZero"
 
+config :hermes_trictrac, :brade_model_bot,
+  project_dir: Path.expand("../trictrac_zero", __DIR__),
+  script: Path.expand("../trictrac_zero/scripts/frontend_brade_bot.jl", __DIR__),
+  session_dir: Path.expand("../trictrac_zero/sessions/brade-sparse-v1-arena96x16", __DIR__),
+  name: "BradeZero"
+
+config :hermes_trictrac, :race_model_bot,
+  project_dir: Path.expand("../trictrac_zero", __DIR__),
+  script: Path.expand("../trictrac_zero/scripts/frontend_race_bot.jl", __DIR__),
+  session_dirs: %{},
+  name: "RaceZero"
+
 config :esbuild,
   version: "0.25.1",
   hermes_trictrac: [
@@ -39,6 +51,7 @@ config :esbuild,
         --loader:.gif=file
         --loader:.ico=file
         --loader:.mp3=file
+        --loader:.ttf=file
         --external:/fonts/*
       ),
     cd: Path.expand("../assets", __DIR__)

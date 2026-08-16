@@ -12,6 +12,7 @@ defmodule HermesTrictracWeb.PageControllerTest do
     assert body =~ ~s(name="play_mode")
     assert body =~ "Table mode"
     assert body =~ ~s(href="/rules")
+    assert body =~ ~s(data-rules-language-link)
     assert body =~ ">Rules<"
     assert body =~ "Lobby Name"
     assert body =~ "User Name"
@@ -24,16 +25,41 @@ defmodule HermesTrictracWeb.PageControllerTest do
     assert body =~ "Choose a Game"
     assert body =~ "Backgammon"
     assert body =~ "Trictrac classique"
-    assert body =~ "Trictrac &agrave; &eacute;crire"
-    assert body =~ "Trictrac combin&eacute;"
     assert body =~ "Toc"
     assert body =~ "Toccategli"
-    assert body =~ "More games"
-    assert body =~ "Jacquet / Pheuga"
+    assert body =~ "Tapa"
+    assert body =~ "Jacquet"
     assert body =~ "Garanguet"
-    assert body =~ "Tavli"
+    assert body =~ "Bräde"
+    assert body =~ "More games"
+    assert body =~ "Trictrac à écrire"
+    assert body =~ "Trictrac combiné"
+    assert body =~ ~s(data-tavli-options)
+    assert body =~ ~s(value="backgammon" data-tavli-member="true")
+    assert body =~ ~s(name="tavli_enabled")
+    assert body =~ ~s(data-tavli-variant="tavli")
+    assert body =~ "Backgammon → Tapa → Jacquet"
+
+    {backgammon_at, _} = :binary.match(body, "Backgammon")
+    {tapa_at, _} = :binary.match(body, ~s(value="tapa"))
+    {jacquet_at, _} = :binary.match(body, ~s(value="jacquet"))
+    {garanguet_at, _} = :binary.match(body, ~s(value="garanguet"))
+    {classique_at, _} = :binary.match(body, ~s(value="trictrac_classique"))
+    {play_against_at, _} = :binary.match(body, "Play against")
+    {tavli_at, _} = :binary.match(body, ~s(data-tavli-options))
+    {more_at, _} = :binary.match(body, "More games")
+    {aecrire_at, _} = :binary.match(body, "Trictrac à écrire")
+    assert backgammon_at < tapa_at
+    assert tapa_at < jacquet_at
+    assert jacquet_at < garanguet_at
+    assert garanguet_at < classique_at
+    assert tapa_at < more_at
+    assert aecrire_at > more_at
+    assert tavli_at > play_against_at
+    assert body =~ ~s(class="variant-disclosure-pill")
     assert body =~ ~s(name="bot")
     assert body =~ "Play against"
+    assert body =~ "Game Options"
     assert body =~ "Human"
     assert body =~ "Computer"
     assert body =~ ~s(name="bot_margot")
@@ -98,9 +124,7 @@ defmodule HermesTrictracWeb.PageControllerTest do
     refute body =~ "being wired"
     refute body =~ "This historical table always uses 12 coups."
 
-    assert body =~ "More games are not available for computer play yet."
-    assert body =~ "Computer play uses BackgammonAI for English backgammon"
-    assert body =~ "the current TricTrac model for Trictrac classique"
+    assert body =~ "Computer play is enabled only when an accepted ML champion is available."
     refute body =~ ~s(data-theme-select)
     refute body =~ ~s(data-theme-cycle)
     refute body =~ "Lobby Name:"
@@ -170,6 +194,7 @@ defmodule HermesTrictracWeb.PageControllerTest do
     assert body =~ ~s(data-queue-size="3")
     assert body =~ ~s(data-ante="7")
     assert body =~ ~s(data-margot-enabled="true")
+    assert body =~ ~s(variant_id=trictrac_classique)
   end
 
   test "POST /game preserves plucked-poule config", %{conn: conn} do
@@ -205,9 +230,10 @@ defmodule HermesTrictracWeb.PageControllerTest do
     assert body =~ ~s(data-variant="trictrac_aecrire_a_tourner")
     assert body =~ ~s(data-cash-per-jeton-minor="125")
     refute body =~ ~s(data-a-ecrire-partie-length=)
+    assert body =~ ~s(variant_id=trictrac_aecrire)
   end
 
-  test "POST /game preserves trictrac bot settings for supported variants", %{conn: conn} do
+  test "POST /game drops computer settings for human-only lower-rail variants", %{conn: conn} do
     conn =
       post(conn, "/game", %{
         game: "combine-bot",
@@ -218,12 +244,13 @@ defmodule HermesTrictracWeb.PageControllerTest do
       })
 
     body = html_response(conn, 200)
-    assert body =~ ~s(data-bot="trictrac_zero")
-    assert body =~ ~s(data-bot-margot="yes")
+    assert body =~ ~s(data-bot="")
+    assert body =~ ~s(data-bot-margot="")
     assert body =~ ~s(data-variant="trictrac_combine")
 
-    assert body =~
-             ~s(data-rules-url="/rules?return_label=Back+to+game&amp;return_to=%2Fgame%2Fcombine-bot")
+    assert body =~ ~s(data-rules-url="/rules?)
+    assert body =~ ~s(return_to=%2Fgame%2Fcombine-bot)
+    assert body =~ ~s(variant_id=trictrac_combine)
   end
 
   test "GET /game preserves the full current location in the rules return target", %{conn: conn} do
@@ -236,11 +263,17 @@ defmodule HermesTrictracWeb.PageControllerTest do
 
     body = html_response(conn, 200)
 
+    assert body =~ ~s(data-rules-url="/rules?)
+
     assert body =~
-             ~s(data-rules-url="/rules?return_label=Back+to+game&amp;return_to=%2Fgame%2Fcombine-bot%3Fname%3Dnick%26variant%3Dtrictrac_combine%26view%3Danalysis")
+             ~s(return_to=%2Fgame%2Fcombine-bot%3Fname%3Dnick%26variant%3Dtrictrac_combine%26view%3Danalysis)
+
+    assert body =~ ~s(variant_id=trictrac_combine)
   end
 
-  test "POST /game preserves BackgammonAI for English backgammon", %{conn: conn} do
+  test "POST /game accepts the legacy Backgammon ingress name only after champion release", %{
+    conn: conn
+  } do
     conn =
       post(conn, "/game", %{
         game: "backgammon-bot",
@@ -250,12 +283,14 @@ defmodule HermesTrictracWeb.PageControllerTest do
       })
 
     body = html_response(conn, 200)
-    assert body =~ ~s(data-bot="backgammon_ai")
+    assert body =~ ~s(data-bot="")
     assert body =~ ~s(data-variant="backgammon")
-    assert body =~ ~s(data-rules-url="")
+    assert body =~ ~s(data-rules-url="/rules?)
+    assert body =~ ~s(return_to=%2Fgame%2Fbackgammon-bot)
+    assert body =~ ~s(variant_id=backgammon)
   end
 
-  test "POST /game drops BackgammonAI for non-backgammon variants", %{conn: conn} do
+  test "POST /game drops the legacy Backgammon ingress name for another game", %{conn: conn} do
     conn =
       post(conn, "/game", %{
         game: "tapa-bot",

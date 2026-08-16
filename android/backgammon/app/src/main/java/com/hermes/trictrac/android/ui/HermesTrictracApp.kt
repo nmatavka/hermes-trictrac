@@ -100,19 +100,12 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
+import okhttp3.Request
 
 private const val PREFS_NAME = "hermes_trictrac_android"
 private const val DEFAULT_SERVER_URL = "http://10.0.2.2:4000"
-private val COMPUTER_BOTS = mapOf(
-    "backgammon" to "backgammon_ai",
-    "trictrac_classique" to "trictrac_zero",
-    "trictrac_aecrire" to "trictrac_zero",
-    "trictrac_combine" to "trictrac_zero",
-    "toc" to "trictrac_zero",
-    "toccategli" to "trictrac_zero",
-)
-
 @Composable
 fun HermesTrictracApp() {
     val context = LocalContext.current
@@ -133,12 +126,17 @@ fun HermesTrictracApp() {
     var localSession by remember { mutableStateOf<LocalBackgammonSession?>(null) }
     val soundPlayer = remember(context) { SharedSoundPlayer(context) }
 
-    LaunchedEffect(Unit) {
-        catalogs = SharedCatalogs.load(context, gson)
+    LaunchedEffect(settings.serverUrl) {
+        val bundledCatalogs = SharedCatalogs.load(context, gson)
+        catalogs = bundledCatalogs
         val defaultPack = catalogs?.soundPacks?.defaultPackId
         if (settings.soundPackId.isBlank() && !defaultPack.isNullOrBlank()) {
             settings = settings.copy(soundPackId = defaultPack)
             preferences.saveSettings(settings)
+        }
+
+        SharedCatalogs.fetchDesktopCatalog(settings.serverUrl, gson)?.let { liveCatalog ->
+            catalogs = bundledCatalogs.withDesktopCatalog(liveCatalog)
         }
     }
 
@@ -220,7 +218,7 @@ fun HermesTrictracApp() {
                                 scope = scope,
                                 gson = gson,
                                 serverUrl = settings.serverUrl,
-                                joinRequest = lobby.toJoinRequest(),
+                                joinRequest = lobby.toJoinRequest(activeCatalogs),
                                 onState = { nextState -> onlineState = nextState },
                                 onCue = { cue -> soundPlayer.play(activeCatalogs, settings, cue) },
                             )
@@ -300,13 +298,15 @@ private data class LobbyDraft(
     val lobbyName: String,
     val userName: String,
     val variantId: String,
+    val manualVariantId: String = "backgammon",
     val opponentChoice: OpponentChoice,
 ) {
-    fun toJoinRequest(): JoinRequest {
+    fun toJoinRequest(catalogs: SharedCatalogs): JoinRequest {
+        val computerPlay = catalogs.computerPlay(variantId)
         val botKind = when (opponentChoice) {
             OpponentChoice.HUMAN -> null
-            OpponentChoice.COMPUTER -> COMPUTER_BOTS[variantId]
-            OpponentChoice.MARGOT -> COMPUTER_BOTS[variantId]
+            OpponentChoice.COMPUTER -> computerPlay?.takeIf { it.available }?.kind
+            OpponentChoice.MARGOT -> computerPlay?.takeIf { it.available && it.kind == "trictrac_zero" }?.kind
         }
 
         return JoinRequest(
@@ -325,6 +325,7 @@ private data class LobbyDraft(
                     it.lobbyName,
                     it.userName,
                     it.variantId,
+                    it.manualVariantId,
                     it.opponentChoice.name,
                 )
             },
@@ -333,7 +334,8 @@ private data class LobbyDraft(
                     lobbyName = it[0],
                     userName = it[1],
                     variantId = it[2],
-                    opponentChoice = OpponentChoice.valueOf(it[3]),
+                    manualVariantId = if (it.size > 4) it[3] else it[2].takeIf { id -> id != "tavli" } ?: "backgammon",
+                    opponentChoice = OpponentChoice.valueOf(if (it.size > 4) it[4] else it[3]),
                 )
             },
         )
@@ -384,6 +386,7 @@ private class AppPreferences(context: Context) {
         lobbyName = prefs.getString("lobby_name", "mobile-table") ?: "mobile-table",
         userName = prefs.getString("user_name", "Android Player") ?: "Android Player",
         variantId = prefs.getString("variant_id", "backgammon") ?: "backgammon",
+        manualVariantId = prefs.getString("manual_variant_id", "backgammon") ?: "backgammon",
         opponentChoice = runCatching {
             OpponentChoice.valueOf(prefs.getString("opponent_choice", OpponentChoice.HUMAN.name)!!)
         }.getOrElse { OpponentChoice.HUMAN },
@@ -394,6 +397,7 @@ private class AppPreferences(context: Context) {
             .putString("lobby_name", lobby.lobbyName)
             .putString("user_name", lobby.userName)
             .putString("variant_id", lobby.variantId)
+            .putString("manual_variant_id", lobby.manualVariantId)
             .putString("opponent_choice", lobby.opponentChoice.name)
             .apply()
     }
@@ -434,12 +438,39 @@ private data class SoundPackCatalog(
     val packs: List<SoundPack>,
 )
 
+private data class DesktopComputerPlay(
+    val available: Boolean,
+    val kind: String?,
+    val label: String?,
+    val presets: List<String> = emptyList(),
+)
+
+private data class DesktopVariant(
+    val id: String,
+    val title: String,
+    @SerializedName("menu_label") val menuLabel: String? = null,
+    @SerializedName("menu_section") val menuSection: String = "more",
+    @SerializedName("menu_rank") val menuRank: Int = 999,
+    @SerializedName("selection_mode") val selectionMode: String = "single",
+    val members: List<String> = emptyList(),
+    @SerializedName("local_ai") val localAi: DesktopComputerPlay? = null,
+)
+
+private data class DesktopVariantCatalog(
+    @SerializedName("schema_version") val schemaVersion: Int,
+    val variants: List<DesktopVariant>,
+)
+
 private data class SharedCatalogs(
     val stringsJson: JsonObject,
     val languageOptions: List<LanguageOption>,
     val variantTitlesJson: JsonObject,
     val soundPacks: SoundPackCatalog,
+    val desktopVariants: DesktopVariantCatalog,
 ) {
+    fun withDesktopCatalog(catalog: DesktopVariantCatalog): SharedCatalogs =
+        copy(desktopVariants = catalog)
+
     fun variantOrder(): List<String> {
         return variantTitlesJson.getAsJsonObject("en")?.entrySet()?.map { it.key } ?: emptyList()
     }
@@ -451,6 +482,30 @@ private data class SharedCatalogs(
         return language.get(variantId)?.asString ?: variantId
     }
 
+    fun railTitle(languageId: String, variant: DesktopVariant): String =
+        variant.menuLabel?.takeIf { it.isNotBlank() } ?: variantTitle(languageId, variant.id)
+
+    fun railTitle(languageId: String, variantId: String): String =
+        desktopVariants.variants
+            .firstOrNull { it.id == variantId }
+            ?.let { railTitle(languageId, it) }
+            ?: variantTitle(languageId, variantId)
+
+    fun topGameVariants(): List<DesktopVariant> =
+        desktopVariants.variants
+            .filter { it.menuSection == "primary" }
+            .sortedBy { it.menuRank }
+
+    fun moreGameVariants(): List<DesktopVariant> =
+        desktopVariants.variants
+            .filter { it.menuSection == "more" && it.selectionMode == "single" && it.menuRank < 200 }
+            .sortedBy { it.menuRank }
+
+    fun tavli(): DesktopVariant? = desktopVariants.variants.firstOrNull { it.id == "tavli" }
+
+    fun computerPlay(variantId: String): DesktopComputerPlay? =
+        desktopVariants.variants.firstOrNull { it.id == variantId }?.localAi
+
     companion object {
         fun load(context: Context, gson: Gson): SharedCatalogs {
             val strings = JsonParser.parseString(context.assets.readText("strings.json")).asJsonObject
@@ -458,6 +513,7 @@ private data class SharedCatalogs(
                 JsonParser.parseString(context.assets.readText("variant-titles.json")).asJsonObject
             val languageType = object : TypeToken<List<LanguageOption>>() {}.type
             val soundType = object : TypeToken<SoundPackCatalog>() {}.type
+            val desktopCatalogType = object : TypeToken<DesktopVariantCatalog>() {}.type
             val languages = gson.fromJson<List<LanguageOption>>(
                 context.assets.readText("language-options.json"),
                 languageType,
@@ -466,8 +522,30 @@ private data class SharedCatalogs(
                 context.assets.readText("sound-packs.json"),
                 soundType,
             )
-            return SharedCatalogs(strings, languages, variantTitles, soundPacks)
+            val bundledDesktopVariants = gson.fromJson<DesktopVariantCatalog>(
+                context.assets.readText("desktop-variant-catalog.json"),
+                desktopCatalogType,
+            )
+            // A bundled descriptor gives the native UI its rail layout, but a
+            // model release is server-owned and must not be assumed offline.
+            val desktopVariants = bundledDesktopVariants.copy(
+                variants = bundledDesktopVariants.variants.map { variant ->
+                    variant.copy(localAi = variant.localAi?.copy(available = false))
+                },
+            )
+            return SharedCatalogs(strings, languages, variantTitles, soundPacks, desktopVariants)
         }
+
+        suspend fun fetchDesktopCatalog(serverUrl: String, gson: Gson): DesktopVariantCatalog? =
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    val url = "${serverUrl.trimEnd('/')}/api/desktop/catalog"
+                    OkHttpClient().newCall(Request.Builder().url(url).build()).execute().use { response ->
+                        check(response.isSuccessful) { "Catalog request failed: ${response.code}" }
+                        gson.fromJson(response.body?.charStream(), DesktopVariantCatalog::class.java)
+                    }
+                }.getOrNull()
+            }
     }
 }
 
@@ -828,6 +906,8 @@ private data class VariantDto(
     val id: String = "",
     val title: String = "",
     @SerializedName("rule_name") val ruleName: String? = null,
+    val orientation: String? = null,
+    @SerializedName("movement_mode") val movementMode: String? = null,
     @SerializedName("active_leg") val activeLeg: ActiveLegDto? = null,
 )
 
@@ -1091,8 +1171,33 @@ private fun LobbyScreen(
     onOpenOnline: () -> Unit,
     onOpenLocal: () -> Unit,
 ) {
-    val selectedBot = lobby.toJoinRequest().bot
+    val selectedBot = lobby.toJoinRequest(catalogs).bot
     val supportedBot = selectedBot != null
+    val tavliEnabled = lobby.variantId == "tavli"
+    val tavli = catalogs.tavli()
+    val tavliMembers = tavli?.members.orEmpty()
+    val tavliSource = lobby.manualVariantId.takeIf { it in tavliMembers } ?: "backgammon"
+    val tavliEligible = tavli != null && tavliSource in tavliMembers
+    val tavliComputerAvailable = tavli?.localAi?.available == true
+    var moreGamesExpanded by rememberSaveable { mutableStateOf(false) }
+
+    val setTavliEnabled: (Boolean) -> Unit = { enabled ->
+        if (enabled && tavliEligible) {
+            onLobbyChange(
+                lobby.copy(
+                    variantId = "tavli",
+                    manualVariantId = tavliSource,
+                    opponentChoice = if (lobby.opponentChoice == OpponentChoice.MARGOT) {
+                        OpponentChoice.HUMAN
+                    } else {
+                        lobby.opponentChoice
+                    },
+                ),
+            )
+        } else if (!enabled) {
+            onLobbyChange(lobby.copy(variantId = tavliSource, manualVariantId = tavliSource))
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -1130,18 +1235,57 @@ private fun LobbyScreen(
         AppCard {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(strings.text("lobby.chooseGame"), style = MaterialTheme.typography.titleLarge)
-                Row(
-                    modifier = Modifier.horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    catalogs.variantOrder().forEach { variantId ->
-                        FilterChip(
-                            selected = variantId == lobby.variantId,
-                            onClick = { onLobbyChange(lobby.copy(variantId = variantId)) },
-                            label = {
-                                Text(catalogs.variantTitle(settings.languageId, variantId))
-                            },
-                        )
+                catalogs.topGameVariants().chunked(4).forEach { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        row.forEach { variant ->
+                            FilterChip(
+                                modifier = Modifier.weight(1f),
+                                selected =
+                                    (tavliEnabled && variant.id in tavliMembers) ||
+                                        (!tavliEnabled && variant.id == lobby.variantId),
+                                enabled = !tavliEnabled,
+                                onClick = {
+                                    onLobbyChange(
+                                        lobby.copy(
+                                            variantId = variant.id,
+                                            manualVariantId = variant.id,
+                                        ),
+                                    )
+                                },
+                                label = { Text(catalogs.railTitle(settings.languageId, variant)) },
+                            )
+                        }
+                        repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
+                    }
+                }
+                if (catalogs.moreGameVariants().isNotEmpty()) {
+                    FilterChip(
+                        selected = moreGamesExpanded,
+                        enabled = !tavliEnabled,
+                        onClick = { moreGamesExpanded = !moreGamesExpanded },
+                        label = { Text(strings.text("lobby.moreGames")) },
+                    )
+                    if (moreGamesExpanded) {
+                        Row(
+                            modifier = Modifier.horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                        catalogs.moreGameVariants().forEach { variant ->
+                            FilterChip(
+                                selected = !tavliEnabled && variant.id == lobby.variantId,
+                                enabled = !tavliEnabled,
+                                onClick = {
+                                    onLobbyChange(
+                                        lobby.copy(
+                                            variantId = variant.id,
+                                            manualVariantId = variant.id,
+                                        ),
+                                    )
+                                },
+                                label = { Text(catalogs.variantTitle(settings.languageId, variant.id)) },
+                            )
+                        }
+                        }
                     }
                 }
             }
@@ -1149,12 +1293,25 @@ private fun LobbyScreen(
 
         AppCard {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(strings.text("lobby.playAgainst"), style = MaterialTheme.typography.titleLarge)
+                Text(strings.text("lobby.gameOptions"), style = MaterialTheme.typography.titleLarge)
+                Text(strings.text("lobby.playAgainst"), style = MaterialTheme.typography.titleMedium)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OpponentChoice.values().forEach { choice ->
+                    OpponentChoice.values().filter { choice ->
+                        !tavliEnabled || choice != OpponentChoice.MARGOT
+                    }.forEach { choice ->
                         FilterChip(
                             selected = choice == lobby.opponentChoice,
-                            onClick = { onLobbyChange(lobby.copy(opponentChoice = choice)) },
+                            onClick = {
+                                val unavailableTavliComputer =
+                                    choice == OpponentChoice.COMPUTER && tavliEnabled && !tavliComputerAvailable
+                                onLobbyChange(
+                                    lobby.copy(
+                                        variantId = if (unavailableTavliComputer) tavliSource else lobby.variantId,
+                                        manualVariantId = tavliSource,
+                                        opponentChoice = choice,
+                                    ),
+                                )
+                            },
                             label = {
                                 Text(
                                     when (choice) {
@@ -1164,6 +1321,34 @@ private fun LobbyScreen(
                                     },
                                 )
                             },
+                        )
+                    }
+                }
+                if (tavliEligible) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            catalogs.railTitle(settings.languageId, tavli!!),
+                            modifier = Modifier.weight(1f),
+                        )
+                        FilterChip(
+                            selected = !tavliEnabled,
+                            onClick = { setTavliEnabled(false) },
+                            label = { Text("Off") },
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        FilterChip(
+                            selected = tavliEnabled,
+                            enabled = lobby.opponentChoice != OpponentChoice.COMPUTER || tavliComputerAvailable,
+                            onClick = { setTavliEnabled(true) },
+                            label = { Text("On") },
+                        )
+                    }
+                    if (tavliEnabled) {
+                        Text(
+                            text = tavli.members.joinToString(" → ") { memberId ->
+                                catalogs.railTitle(settings.languageId, memberId)
+                            },
+                            style = MaterialTheme.typography.bodySmall,
                         )
                     }
                 }
@@ -1325,6 +1510,7 @@ private fun OnlineScreen(
             },
             dice = game.dice,
             openingRoll = game.openingRoll,
+            rawPhysicalLayout = game.variant.orientation?.contains("parallel") == true,
         )
 
         ActionCard(
@@ -1837,9 +2023,10 @@ private fun BoardCard(
     onSelectTarget: (SpaceRef) -> Unit,
     dice: DiceDto?,
     openingRoll: OpeningRollDto?,
+    rawPhysicalLayout: Boolean = false,
 ) {
     val topColor = oppositeColor(bottomColor)
-    val layout = if (bottomColor == "white") {
+    val layout = if (rawPhysicalLayout || bottomColor == "white") {
         (23 downTo 12).toList() to (0..11).toList()
     } else {
         (0..11).toList() to (23 downTo 12).toList()

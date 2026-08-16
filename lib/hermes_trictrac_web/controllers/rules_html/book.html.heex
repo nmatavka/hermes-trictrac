@@ -3,12 +3,22 @@
   query={@query}
   title={@book.title}
   subtitle={@book.author || @book.site_author || "Historical Trictrac text"}
+  language_options={@language_options}
+  variant_options={@variant_options}
 >
   <section class="rules-section">
     <div class="rules-book-hero">
       <div class="rules-book-copy">
+        <div class="rules-chip-row" aria-label="Rulebook metadata">
+          <%= for language <- @book.languages do %>
+            <span class="rules-chip"><%= RulesLibrary.language_label(language) %></span>
+          <% end %>
+          <%= for variant_id <- @book.variant_ids do %>
+            <span class="rules-chip rules-chip-muted"><%= RulesLibrary.variant_label(variant_id) %></span>
+          <% end %>
+        </div>
         <p>
-          <strong><%= length(@book.chapters) %></strong> chapter entries are available in this imported edition.
+          <strong><%= length(@book.chapters) %></strong> <%= if length(@book.chapters) == 1, do: "chapter entry is", else: "chapter entries are" %> available in this edition.
         </p>
         <%= if @book.repo_url do %>
           <p>
@@ -34,10 +44,10 @@
   <section class="rules-section">
     <div class="rules-section-heading">
       <h2>Table of contents</h2>
-      <p>Derived directly from the upstream `mkdocs.yml` navigation.</p>
+      <p>Derived from the source navigation or from the standalone rulebook entry.</p>
     </div>
 
-    <nav class="rules-toc" aria-label={"#{@book.title} table of contents"}>
+    <nav class="rules-toc rules-book-toc" aria-label={"#{@book.title} table of contents"}>
       <%= for entry <- @book.toc_entries do %>
         <a
           class="rules-toc-entry"

@@ -1,6 +1,7 @@
 module Main where
 
 import Control.Exception (finally)
+import qualified Data.Text as Text
 import qualified Hermes.Desktop.Catalog as Catalog
 import qualified Hermes.Desktop.Config as Config
 import qualified Hermes.Desktop.Paths as Paths
@@ -11,8 +12,14 @@ main :: IO ()
 main = do
   config <- Config.loadConfig
   paths <- Paths.resolveSupportPaths (Config.supportRootOverride config)
-  catalog <- Catalog.loadDesktopCatalog paths
+  bundledCatalog <- Catalog.loadDesktopCatalog paths
   runtimeResult <- LocalRuntime.maybeLaunchLocalRuntime config paths
+  let activeServer =
+        case runtimeResult of
+          Right handle -> Text.unpack (LocalRuntime.runtimeBaseUrl handle)
+          Left _ -> Text.unpack (Config.serverUrl config)
+  liveCatalog <- Catalog.fetchDesktopCatalog activeServer
+  let catalog = maybe bundledCatalog id liveCatalog
   Shell.runShell config paths catalog runtimeResult
     `finally` case runtimeResult of
       Right handle -> LocalRuntime.stopLocalRuntime handle

@@ -17,6 +17,8 @@ defmodule HermesTrictrac.Rules.Snapshot do
         "title" => variant.title,
         "rule_name" => variant.title,
         "uses_bar" => uses_bar?(active_variant),
+        "orientation" => variant_metadata(Map.get(active_variant, :orientation)),
+        "movement_mode" => variant_metadata(Map.get(active_variant, :movement_mode)),
         "active_leg" =>
           if variant.id == "tavli" do
             %{
@@ -118,6 +120,10 @@ defmodule HermesTrictrac.Rules.Snapshot do
 
   defp can_confirm?(engine),
     do: engine.status == :playing and not is_nil(engine.dice)
+
+  defp variant_metadata(value) when is_atom(value), do: Atom.to_string(value)
+  defp variant_metadata(value) when is_binary(value), do: value
+  defp variant_metadata(_value), do: nil
 
   defp serialize_player(nil), do: nil
 

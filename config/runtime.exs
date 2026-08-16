@@ -86,7 +86,16 @@ session_dirs =
     "classique-margot" =>
       Path.join(trictrac_zero_dir, "sessions/trictrac-classique-margot-sparse-v4-arena96x16"),
     "aecrire" => Path.join(trictrac_zero_dir, "sessions/trictrac-aecrire-sparse-v4-arena96x16"),
-    "toccategli" => Path.join(trictrac_zero_dir, "sessions/toccategli-sparse-v4-arena96x16")
+    "aecrire-margot" =>
+      Path.join(trictrac_zero_dir, "sessions/trictrac-aecrire-margot-sparse-v4-arena96x16"),
+    "combine" => Path.join(trictrac_zero_dir, "sessions/trictrac-combine-sparse-v4-arena96x16"),
+    "combine-margot" =>
+      Path.join(trictrac_zero_dir, "sessions/trictrac-combine-margot-sparse-v4-arena96x16"),
+    "toc" => Path.join(trictrac_zero_dir, "sessions/toc-sparse-v4-arena96x16"),
+    "toc-margot" => Path.join(trictrac_zero_dir, "sessions/toc-margot-sparse-v4-arena96x16"),
+    "toccategli" => Path.join(trictrac_zero_dir, "sessions/toccategli-sparse-v4-arena96x16"),
+    "toccategli-margot" =>
+      Path.join(trictrac_zero_dir, "sessions/toccategli-margot-sparse-v4-arena96x16")
   }
   |> Enum.filter(fn {_preset, path} -> File.dir?(path) end)
   |> Enum.into(%{})
@@ -113,6 +122,59 @@ config :hermes_trictrac, :trictrac_model_bot,
   session_dirs: session_dirs,
   julia: trictrac_bot_julia,
   name: trictrac_bot_name
+
+brade_bot_project_dir =
+  System.get_env("HERMES_TRICTRAC_BRADE_BOT_PROJECT_DIR") || trictrac_zero_dir
+
+brade_bot_script =
+  System.get_env("HERMES_TRICTRAC_BRADE_BOT_SCRIPT") ||
+    first_existing.(
+      [
+        support_path.("trictrac_zero/scripts/frontend_brade_bot.jl"),
+        Path.join(brade_bot_project_dir, "scripts/frontend_brade_bot.jl")
+      ],
+      &File.regular?/1
+    ) || Path.join(brade_bot_project_dir, "scripts/frontend_brade_bot.jl")
+
+brade_bot_session_dir =
+  System.get_env("HERMES_TRICTRAC_BRADE_BOT_SESSION_DIR") ||
+    Path.join(brade_bot_project_dir, "sessions/brade-sparse-v1-arena96x16")
+
+brade_bot_julia =
+  System.get_env("HERMES_TRICTRAC_BRADE_BOT_JULIA") || trictrac_bot_julia
+
+brade_bot_name = System.get_env("HERMES_TRICTRAC_BRADE_BOT_NAME") || "BradeZero"
+
+config :hermes_trictrac, :brade_model_bot,
+  project_dir: brade_bot_project_dir,
+  script: brade_bot_script,
+  session_dir: brade_bot_session_dir,
+  julia: brade_bot_julia,
+  name: brade_bot_name
+
+race_bot_project_dir =
+  System.get_env("HERMES_TRICTRAC_RACE_BOT_PROJECT_DIR") || trictrac_zero_dir
+
+race_bot_script =
+  System.get_env("HERMES_TRICTRAC_RACE_BOT_SCRIPT") ||
+    Path.join(race_bot_project_dir, "scripts/frontend_race_bot.jl")
+
+race_bot_julia =
+  System.get_env("HERMES_TRICTRAC_RACE_BOT_JULIA") || trictrac_bot_julia
+
+race_bot_sessions =
+  for variant <- ~w(backgammon tapa jacquet garanguet tavli), into: %{} do
+    env_name = "HERMES_TRICTRAC_" <> String.upcase(variant) <> "_BOT_SESSION_DIR"
+    default = Path.join(race_bot_project_dir, "sessions/#{variant}-sparse-v1-arena96x16")
+    {variant, System.get_env(env_name) || default}
+  end
+
+config :hermes_trictrac, :race_model_bot,
+  project_dir: race_bot_project_dir,
+  script: race_bot_script,
+  session_dirs: race_bot_sessions,
+  julia: race_bot_julia,
+  name: "RaceZero"
 
 identity_mode =
   case {System.get_env("HERMES_TRICTRAC_IDENTITY_MODE"), prod_env?, desktop_mode?} do

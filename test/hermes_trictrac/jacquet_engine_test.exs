@@ -53,7 +53,7 @@ defmodule HermesTrictrac.JacquetEngineTest do
     assert {:ok, engine} = Engine.roll(engine, "jane", "tab-b")
     assert engine.dice.values == [6, 1]
     assert engine.dice.moves_left == [6, 1]
-    assert Enum.all?(engine.legal_moves, &(&1.from == 0))
+    assert Enum.all?(engine.legal_moves, &(&1.from == 11))
   end
 
   test "jacquet rerolls tied opening throws until a starter is found" do

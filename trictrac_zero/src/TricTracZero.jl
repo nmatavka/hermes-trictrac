@@ -14,6 +14,8 @@ include("actions.jl")
 include("state.jl")
 include("bridge.jl")
 include("env.jl")
+include("brade.jl")
+include("race.jl")
 include("device.jl")
 include("network.jl")
 include("experiment.jl")
@@ -22,6 +24,9 @@ export TricTracAction
 export TricTracState
 export TricTracGameSpec
 export TricTracGameEnv
+export BradeGameSpec
+export RaceGameSpec
+export tavli_targets
 export TricTracSparseNet
 export TricTracSparseNetHP
 export TricTracMetalSparseNet
@@ -37,6 +42,14 @@ export resolve_device_backend
 export run_train
 export run_smoke
 export run_explore
+export default_brade_experiment
+export smoke_brade_experiment
+export run_brade_train
+export run_brade_smoke
+export race_experiment
+export run_race_train
+export publish_race_champion!
+export publish_brade_champion!
 export set_runtime_device!
 
 register_experiments!()

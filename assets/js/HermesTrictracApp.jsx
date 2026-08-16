@@ -9,6 +9,7 @@ import {
   localizeError,
   optionChoiceLabel,
   optionLabel,
+  rulesUrlWithLanguage,
   setLanguage,
   subscribeLanguage,
   t,
@@ -16,6 +17,7 @@ import {
   variantTitle
 } from "./i18n";
 import { SOUND_PACK_OPTIONS, createSoundController } from "./sound";
+import { createBgmController } from "./bgm";
 import { cycleTheme, getTheme, subscribeTheme } from "./theme";
 import BoardWood from "../static/images/6besh/board-wood.jpg";
 import CheckerGreen from "../static/images/6besh/checker-green.png";
@@ -194,10 +196,14 @@ function scoreEventDetail(event) {
 }
 
 function scoreEventToastFamily(event) {
-  switch (scoreEventTranslationKey(event)) {
+  const key = scoreEventTranslationKey(event);
+  const resolution = event?.metadata?.resolution;
+
+  switch (key) {
     case "jan_recompense":
     case "coin_battu":
       return "reward";
+    case "coin_battu_a_faux":
     case "jan_qui_ne_peut":
     case "impuissance":
     case "margot":
@@ -219,7 +225,7 @@ function scoreEventToastFamily(event) {
     case "sortie":
       return "sortie";
     default:
-      return null;
+      return resolution === "opponent_beneficiary" ? "conceded" : null;
   }
 }
 
@@ -1211,15 +1217,21 @@ export default function gameInit(root, channel, options = {}) {
 
 function HermesTrictracApp({ channel, initialGame, player, viewer: initialViewer, playerName, lobbyName, requestedBotMargot, rulesUrl }) {
   const soundControllerRef = useRef(null);
+  const bgmControllerRef = useRef(null);
 
   if (!soundControllerRef.current) {
     soundControllerRef.current = createSoundController();
+  }
+
+  if (!bgmControllerRef.current) {
+    bgmControllerRef.current = createBgmController();
   }
 
   const [game, setGame] = useState(initialGame);
   const [language, setLanguageState] = useState(getLanguage());
   const [theme, setThemeState] = useState(getTheme());
   const [soundState, setSoundState] = useState(() => soundControllerRef.current.getSnapshot());
+  const [bgmState, setBgmState] = useState(() => bgmControllerRef.current.getSnapshot());
   const [selectedFrom, setSelectedFrom] = useState(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [optionsDraft, setOptionsDraft] = useState({});
@@ -1338,6 +1350,16 @@ function HermesTrictracApp({ channel, initialGame, player, viewer: initialViewer
       window.removeEventListener("focus", unlockWhenVisible);
       window.removeEventListener("pageshow", unlockWhenVisible);
       document.removeEventListener("visibilitychange", unlockWhenVisible);
+    };
+  }, []);
+
+  useEffect(() => {
+    const controller = bgmControllerRef.current;
+    const unsubscribe = controller.subscribe(setBgmState);
+
+    return () => {
+      unsubscribe();
+      controller.destroy();
     };
   }, []);
 
@@ -1573,6 +1595,7 @@ function HermesTrictracApp({ channel, initialGame, player, viewer: initialViewer
   const diceTheme = game.turn?.color || playerColor;
   const botDisplayName = trictracBotDisplayName(game) || game.bot?.name || t("lobby.computer");
   const trimmedRulesUrl = typeof rulesUrl === "string" ? rulesUrl.trim() : "";
+  const localizedRulesUrl = trimmedRulesUrl ? rulesUrlWithLanguage(trimmedRulesUrl, language) : "";
   const heroCopy = isPouleTable
     ? viewer?.role === "active"
       ? tx("game.pouleOnBoard", "You are on the board right now.")
@@ -1590,6 +1613,9 @@ function HermesTrictracApp({ channel, initialGame, player, viewer: initialViewer
         : t("game.againstHuman", { color: colorLabel(playerColor) });
   const toggleSound = () => {
     soundControllerRef.current.setEnabled(!soundState.enabled);
+  };
+  const toggleBgm = () => {
+    bgmControllerRef.current.setEnabled(!bgmState.enabled);
   };
   const selectSoundPack = (packId) => {
     soundControllerRef.current.setPack(packId);
@@ -1614,12 +1640,13 @@ function HermesTrictracApp({ channel, initialGame, player, viewer: initialViewer
           <span>{t("game.host")}: {seatName(game, "host") || t("waiting")}</span>
           <span>{t("game.guest")}: {seatName(game, "guest") || t("waiting")}</span>
           <span>{t("game.turn", { number: game.turn?.number || 0 })}</span>
-          {trimmedRulesUrl ? (
-            <a className="sound-toggle rules-link" href={trimmedRulesUrl}>
+          {localizedRulesUrl ? (
+            <a className="sound-toggle rules-link" href={localizedRulesUrl}>
               {tx("game.rules", "Rules")}
             </a>
           ) : null}
           <SoundToggle state={soundState} onToggle={toggleSound} />
+          <BgmToggle state={bgmState} onToggle={toggleBgm} />
           <SoundPackSelect state={soundState} onChange={selectSoundPack} />
           <ThemeCycleButton theme={theme} onCycle={cycleThemeSelection} />
           <LanguageSelect language={language} onChange={selectLanguage} />
@@ -1784,6 +1811,32 @@ function SoundToggle({ state, onToggle }) {
     <button
       type="button"
       className="sound-toggle"
+      onClick={onToggle}
+      disabled={!state.supported}
+      aria-pressed={state.enabled}
+      title={title}
+    >
+      {label}
+    </button>
+  );
+}
+
+function BgmToggle({ state, onToggle }) {
+  const label = !state.supported
+    ? t("game.bgmUnavailable")
+    : state.enabled
+      ? t("game.bgmOn")
+      : t("game.bgmOff");
+  const title = !state.supported
+    ? t("game.bgmUnavailableTitle")
+    : state.enabled
+      ? t("game.bgmOffTitle")
+      : t("game.bgmOnTitle");
+
+  return (
+    <button
+      type="button"
+      className="sound-toggle bgm-toggle"
       onClick={onToggle}
       disabled={!state.supported}
       aria-pressed={state.enabled}

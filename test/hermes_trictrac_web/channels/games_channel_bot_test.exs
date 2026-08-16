@@ -4,7 +4,7 @@ defmodule HermesTrictracWeb.GamesChannelBotTest do
   import ExUnit.CaptureLog
 
   alias HermesTrictrac.GameServer
-  alias HermesTrictrac.Rules.{Engine, RaceCore}
+  alias HermesTrictrac.Rules.Engine
   alias HermesTrictrac.Rules.Trictrac.Classique
   alias HermesTrictracWeb.UserSocket
 
@@ -22,6 +22,19 @@ defmodule HermesTrictracWeb.GamesChannelBotTest do
     end
 
     def choose_action(_preset, serialized_state), do: choose_action(serialized_state)
+  end
+
+  defmodule FakeRaceBot do
+    def model_name(preset), do: "Fake#{String.capitalize(preset)}Zero"
+    def ready(_preset), do: :ok
+    def warmup(_preset), do: :ok
+
+    def choose_action(_preset, serialized_state) do
+      case serialized_state["legal_actions"] do
+        [action | _] -> {:ok, action}
+        _ -> {:error, "No legal actions available in fake race bot."}
+      end
+    end
   end
 
   defmodule PresetAwareFakeTrictracBot do
@@ -196,75 +209,82 @@ defmodule HermesTrictracWeb.GamesChannelBotTest do
     :ok
   end
 
-  test "English backgammon can be hosted against the copied BackgammonAI bot" do
-    lobby = "bg-ai-join-#{System.unique_integer([:positive])}"
-
-    {:ok, reply, _socket} =
-      UserSocket
-      |> socket("user:bg-ai", %{})
-      |> subscribe_and_join(HermesTrictracWeb.GamesChannel, "games:#{lobby}", %{
-        "user" => "nick",
-        "variant" => "backgammon",
-        "bot" => "backgammon_ai",
-        "client_id" => "bg-ai-host"
-      })
-
-    assert reply.player["color"] == "white"
-    assert reply.game["variant"]["id"] == "backgammon"
-    assert reply.game["bot"]["kind"] == "backgammon_ai"
-    assert reply.game["bot"]["name"] == "BackgammonAI"
-    assert reply.game["players"]["guest"]["name"] == "BackgammonAI"
-    assert get_in(reply.game, ["opening_roll", "rolls", "black"]) in 1..6
-  end
-
-  test "BackgammonAI bot plays and confirms a forced in-progress turn" do
-    lobby = "bg-ai-turn-#{System.unique_integer([:positive])}"
+  test "legacy Backgammon ingress is rejected until BackgammonZero is released" do
+    lobby = "bg-zero-release-#{System.unique_integer([:positive])}"
     GameServer.reg(lobby)
     GameServer.start(lobby, "backgammon")
 
-    assert {:ok, %{game: _game, player: _player}} =
+    assert {:error, %{msg: message}} =
              GameServer.join(lobby, "nick", "bg-ai-turn-host", "backgammon", %{
                "bot" => "backgammon_ai"
              })
 
-    pid = GenServer.whereis(GameServer.reg(lobby))
+    assert message =~ "accepted ML champion"
+  end
 
-    before_board =
-      :sys.replace_state(pid, fn state ->
-        engine = state.engine
-        dice = %{values: [1, 2], moves: [1, 2], moves_left: [1, 2], moves_played: []}
+  test "Tavli computer play never accepts Margot" do
+    lobby = "tavli-zero-margot-#{System.unique_integer([:positive])}"
+    GameServer.reg(lobby)
+    GameServer.start(lobby, "tavli")
 
-        runtime =
-          engine
-          |> Engine.runtime_view()
-          |> Map.put(:turn_color, :black)
-          |> Map.put(:turn_number, 42)
-          |> Map.put(:dice, dice)
-          |> Map.put(:pending_turn_decision, nil)
+    assert {:error, %{msg: "Margot is not available for this computer opponent."}} =
+             GameServer.join(lobby, "nick", "tavli-zero-host", "tavli", %{
+               "bot" => "tavli_zero",
+               "bot_margot" => "yes"
+             })
+  end
 
-        runtime = %{runtime | legal_moves: RaceCore.legal_moves(runtime, engine.variant, :black)}
+  test "an accepted TavliZero release joins one Tavli table and agrees to the host target" do
+    previous_config = Application.get_env(:hermes_trictrac, :race_model_bot)
+    previous_impl = Application.get_env(:hermes_trictrac, :race_model_bot_impl)
+    session = Path.join(System.tmp_dir!(), "tavli-zero-#{System.unique_integer([:positive])}")
+    File.mkdir_p!(session)
+    File.write!(Path.join(session, "bestnn.data"), "checkpoint")
 
-        updated_engine = %{
-          engine
-          | runtime: runtime,
-            board: runtime.board,
-            turn_color: :black,
-            turn_number: 42,
-            dice: dice,
-            legal_moves: runtime.legal_moves,
-            pending_turn_decision: nil
-        }
+    File.write!(
+      Path.join(session, "race-champion.json"),
+      Jason.encode!(%{"accepted" => true, "checkpoint" => "bestnn.data", "variant_id" => "tavli"})
+    )
 
-        %{state | engine: updated_engine}
-      end).engine.board
+    Application.put_env(:hermes_trictrac, :race_model_bot, session_dirs: %{"tavli" => session})
+    Application.put_env(:hermes_trictrac, :race_model_bot_impl, FakeRaceBot)
 
-    snapshot = GameServer.peek(lobby)
-    state = :sys.get_state(pid)
+    on_exit(fn ->
+      Application.put_env(:hermes_trictrac, :race_model_bot, previous_config)
 
-    assert snapshot["turn"]["color"] == "white"
-    assert state.engine.turn_color == :white
-    assert state.engine.dice == nil
-    refute state.engine.board == before_board
+      if is_nil(previous_impl) do
+        Application.delete_env(:hermes_trictrac, :race_model_bot_impl)
+      else
+        Application.put_env(:hermes_trictrac, :race_model_bot_impl, previous_impl)
+      end
+
+      File.rm_rf(session)
+    end)
+
+    lobby = "tavli-zero-release-#{System.unique_integer([:positive])}"
+    GameServer.reg(lobby)
+    GameServer.start(lobby, "tavli")
+
+    assert {:ok, %{game: joining}} =
+             GameServer.join(lobby, "nick", "tavli-zero-host", "tavli", %{
+               "bot" => "tavli_zero"
+             })
+
+    assert joining["bot"]["kind"] == "tavli_zero"
+    assert joining["pending_match_options"]["kind"] == "tavli_target_consent"
+
+    assert {:ok, _snapshot} =
+             GameServer.submit_match_options(
+               lobby,
+               %{"tavliTargetConsent" => "3"},
+               "nick",
+               "tavli-zero-host"
+             )
+
+    settled = GameServer.peek(lobby)
+    assert settled["variant"]["id"] == "tavli"
+    assert settled["match"]["options"]["tavliTarget"] == "3"
+    assert settled["pending_match_options"] == nil
   end
 
   test "joining with bot auto-seats the model guest and starts trictrac classique" do
@@ -363,105 +383,33 @@ defmodule HermesTrictracWeb.GamesChannelBotTest do
     assert result.game["opening_roll"]["pending"] == true
   end
 
-  test "joining with bot is exposed for toc and applies default match options" do
+  test "Toc remains human-playable until its dedicated champion is released" do
     lobby = "toc-bot-#{System.unique_integer([:positive])}"
 
-    {:ok, host_reply, _host_socket} =
-      UserSocket
-      |> socket("user:221", %{})
-      |> subscribe_and_join(HermesTrictracWeb.GamesChannel, "games:#{lobby}", %{
-        "user" => "nick",
-        "variant" => "toc",
-        "bot" => "trictrac_zero",
-        "bot_margot" => "yes",
-        "client_id" => "toc-bot-host"
-      })
+    assert {:error, %{msg: message}} =
+             UserSocket
+             |> socket("user:221", %{})
+             |> subscribe_and_join(HermesTrictracWeb.GamesChannel, "games:#{lobby}", %{
+               "user" => "nick",
+               "variant" => "toc",
+               "bot" => "trictrac_zero",
+               "client_id" => "toc-bot-host"
+             })
 
-    assert host_reply.player["color"] == "white"
-    assert host_reply.game["bot"]["enabled"] == true
-    assert host_reply.game["status"] == "playing"
-    assert host_reply.game["pending_match_options"] == nil
-    assert host_reply.game["match"]["options"]["holeTarget"] == "1"
-    assert host_reply.game["match"]["options"]["doublesMode"] == "on"
-    assert host_reply.game["match"]["options"]["margotEnabled"] == true
-    assert host_reply.game["opening_roll"]["pending"] == true
-    assert is_integer(host_reply.game["opening_roll"]["rolls"]["black"])
-    assert is_nil(host_reply.game["opening_roll"]["rolls"]["white"])
+    assert message =~ "accepted ML champion"
   end
 
-  test "joining with bot for trictrac combine waits for the host marque choice and the bot agrees" do
+  test "the lower human-only rail rejects computer bot requests" do
     lobby = "combine-bot-#{System.unique_integer([:positive])}"
-
-    {:ok, host_reply, _host_socket} =
-      UserSocket
-      |> socket("user:226", %{})
-      |> subscribe_and_join(HermesTrictracWeb.GamesChannel, "games:#{lobby}", %{
-        "user" => "nick",
-        "variant" => "trictrac_combine",
-        "bot" => "trictrac_zero",
-        "client_id" => "combine-bot-host"
-      })
-
-    assert host_reply.player["color"] == "white"
-    assert host_reply.game["bot"]["enabled"] == true
-    assert host_reply.game["status"] == "awaiting_match_options"
-    assert host_reply.game["pending_match_options"]["kind"] == "trictrac_partie_length_consent"
-    assert is_nil(host_reply.game["match"]["options"]["margotEnabled"])
-    assert is_nil(host_reply.game["opening_roll"])
-
-    assert {:ok, game} =
-             GameServer.submit_match_options(
-               lobby,
-               %{"aEcrirePartieLengthConsent" => "20"},
-               "nick",
-               "combine-bot-host"
-             )
-
-    assert game["status"] == "awaiting_match_options"
-    assert get_in(game, ["pending_match_options", "responses", "white"]) == "20"
-
-    game = GameServer.peek(lobby)
-    assert game["status"] == "playing"
-    assert game["pending_match_options"] == nil
-    assert game["match"]["options"]["aEcrirePartieLength"] == "20"
-    assert game["opening_roll"]["pending"] == true
-    assert is_integer(game["opening_roll"]["rolls"]["black"])
-    assert is_nil(game["opening_roll"]["rolls"]["white"])
-  end
-
-  test "aecrire bot mirrors the host marque choice before taking its opening roll" do
-    lobby = "aecrire-bot-opening-#{System.unique_integer([:positive])}"
     GameServer.reg(lobby)
-    GameServer.start(lobby, "trictrac_aecrire")
+    GameServer.start(lobby, "trictrac_combine")
 
-    assert {:ok, %{game: game, player: _player}} =
-             GameServer.join(lobby, "nick", "aecrire-bot-host", "trictrac_aecrire", %{
+    assert {:error, %{msg: message}} =
+             GameServer.join(lobby, "nick", "combine-bot-host", "trictrac_combine", %{
                "bot" => "trictrac_zero"
              })
 
-    assert game["status"] == "awaiting_match_options"
-    assert game["pending_match_options"]["kind"] == "trictrac_partie_length_consent"
-    assert is_nil(game["match"]["options"]["margotEnabled"])
-    assert is_nil(game["opening_roll"])
-
-    assert {:ok, game} =
-             GameServer.submit_match_options(
-               lobby,
-               %{"aEcrirePartieLengthConsent" => "24"},
-               "nick",
-               "aecrire-bot-host"
-             )
-
-    assert game["status"] == "awaiting_match_options"
-    assert get_in(game, ["pending_match_options", "responses", "white"]) == "24"
-
-    game = GameServer.peek(lobby)
-    assert game["status"] == "playing"
-    assert game["pending_match_options"] == nil
-    assert game["match"]["options"]["aEcrirePartieLength"] == "24"
-    assert game["opening_roll"]["pending"] == true
-    assert is_integer(game["opening_roll"]["rolls"]["black"])
-    assert is_nil(game["opening_roll"]["rolls"]["white"])
+    assert message =~ "only available for Trictrac Classique"
   end
 
   test "joining with a Margot bot applies the lobby choice and starts toccategli" do

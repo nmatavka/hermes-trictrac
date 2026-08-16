@@ -14,12 +14,24 @@ const NO_SEQ = Int8(0)
 const ACTION_KIND_FEATURES = 5
 const ACTION_FROM_FEATURES = 26
 const ACTION_TO_FEATURES = 26
-const ACTION_SEQUENCE_FEATURES = 37
-const NUM_ACTION_FEATURES =
+const TRICTRAC_ACTION_SEQUENCE_FEATURES = 37
+const RACE_ACTION_SEQUENCE_FEATURES = 38
+const TRICTRAC_NUM_ACTION_FEATURES =
   ACTION_KIND_FEATURES +
   ACTION_FROM_FEATURES +
   ACTION_TO_FEATURES +
-  ACTION_SEQUENCE_FEATURES
+  TRICTRAC_ACTION_SEQUENCE_FEATURES
+const RACE_NUM_ACTION_FEATURES =
+  ACTION_KIND_FEATURES +
+  ACTION_FROM_FEATURES +
+  ACTION_TO_FEATURES +
+  RACE_ACTION_SEQUENCE_FEATURES
+
+# `NUM_ACTION_FEATURES` remains the full catalogue width for callers that do
+# not have a game specification.  Networks must instead ask their game spec
+# for its encoding width: established Trictrac checkpoints use 94 columns,
+# while the physical race games reserve column 95 for an atomic die move.
+const NUM_ACTION_FEATURES = RACE_NUM_ACTION_FEATURES
 
 struct TricTracAction
   kind::ActionKind
@@ -51,6 +63,9 @@ function build_action_catalog()
   from_positions = Int8[BAR_POS; Int8.(collect(0:23))]
   to_positions = Int8[HOME_POS; Int8.(collect(0:23))]
   sequences = Tuple{Int8, Int8}[(NO_SEQ, NO_SEQ)]
+  # Bräde identifies a single die, represented by the otherwise unused
+  # `(die, 0)` sequence slot. Existing Trictrac actions remain unchanged.
+  append!(sequences, [(Int8(die), NO_SEQ) for die in 1:6])
   append!(sequences, [(Int8(a), Int8(b)) for a in 1:6 for b in 1:6])
 
   for from in from_positions, to in to_positions, (s1, s2) in sequences
@@ -137,9 +152,12 @@ function bridge_action_to_catalog_action(raw::Dict{String, Any}, white_to_play::
     end
   end
 
+  die = get(raw, "die", nothing)
   sequence = get(raw, "sequence", nothing)
   s1, s2 =
-    if sequence isa AbstractVector && length(sequence) == 2
+    if die isa Integer
+      (Int8(die), NO_SEQ)
+    elseif sequence isa AbstractVector && length(sequence) == 2
       (Int8(sequence[1]), Int8(sequence[2]))
     else
       (NO_SEQ, NO_SEQ)
@@ -147,8 +165,8 @@ function bridge_action_to_catalog_action(raw::Dict{String, Any}, white_to_play::
 
   return TricTracAction(
     MOVE_ACTION,
-    normalize_point(raw["from"], white_to_play),
-    normalize_point(raw["to"], white_to_play),
+    normalize_point(raw["from"], die isa Integer ? true : white_to_play),
+    normalize_point(raw["to"], die isa Integer ? true : white_to_play),
     s1,
     s2
   )
@@ -166,11 +184,13 @@ function catalog_action_to_bridge_action(action::TricTracAction, white_to_play::
 
   payload = Dict{String, Any}(
     "type" => "move",
-    "from" => denormalize_point(action.from, white_to_play),
-    "to" => denormalize_point(action.to, white_to_play)
+    "from" => denormalize_point(action.from, action.s2 == NO_SEQ && action.s1 != NO_SEQ ? true : white_to_play),
+    "to" => denormalize_point(action.to, action.s2 == NO_SEQ && action.s1 != NO_SEQ ? true : white_to_play)
   )
 
-  if action.s1 != NO_SEQ && action.s2 != NO_SEQ
+  if action.s1 != NO_SEQ && action.s2 == NO_SEQ
+    payload["die"] = Int(action.s1)
+  elseif action.s1 != NO_SEQ && action.s2 != NO_SEQ
     payload["sequence"] = Any[Int(action.s1), Int(action.s2)]
   end
 
@@ -220,19 +240,32 @@ function parse_action_label(str::String)
   return TricTracAction(MOVE_ACTION, from, to, s1, s2)
 end
 
-function legal_action_features(actions::AbstractVector{TricTracAction})
-  features = zeros(Float32, NUM_ACTION_FEATURES, length(actions))
+function legal_action_features(
+  actions::AbstractVector{TricTracAction},
+  feature_count::Int = NUM_ACTION_FEATURES
+)
+  feature_count in (TRICTRAC_NUM_ACTION_FEATURES, RACE_NUM_ACTION_FEATURES) ||
+    error("Unsupported action feature width: $feature_count")
+
+  features = zeros(Float32, feature_count, length(actions))
   for (index, action) in pairs(actions)
     features[action_kind_feature_index(action), index] = 1f0
     features[ACTION_KIND_FEATURES + action_from_feature_index(action), index] = 1f0
     features[ACTION_KIND_FEATURES + ACTION_FROM_FEATURES + action_to_feature_index(action), index] = 1f0
-    features[
-      ACTION_KIND_FEATURES + ACTION_FROM_FEATURES + ACTION_TO_FEATURES + action_sequence_feature_index(action),
-      index
-    ] = 1f0
+    sequence_index =
+      ACTION_KIND_FEATURES + ACTION_FROM_FEATURES + ACTION_TO_FEATURES +
+        action_sequence_feature_index(action)
+
+    sequence_index <= feature_count ||
+      error("Race die action cannot be encoded by a Trictrac policy network.")
+
+    features[sequence_index, index] = 1f0
   end
   return features
 end
+
+legal_action_features(gspec, actions::AbstractVector{TricTracAction}) =
+  legal_action_features(actions, action_feature_count(gspec))
 
 action_kind_feature_index(action::TricTracAction) = Int(action.kind)
 
@@ -250,5 +283,6 @@ end
 
 function action_sequence_feature_index(action::TricTracAction)
   action.s1 == NO_SEQ && action.s2 == NO_SEQ && return 1
+  action.s2 == NO_SEQ && return 38
   return 2 + (Int(action.s1) - 1) * 6 + (Int(action.s2) - 1)
 end

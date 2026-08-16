@@ -39,13 +39,14 @@ defmodule HermesTrictracWeb.ModelAnalysisControllerTest do
            } = json_response(conn, 200)
   end
 
-  test "POST /dev/model-lab/parse derives opposite-direction play for contrary models", %{
-    conn: conn
-  } do
+  test "POST /dev/model-lab/parse derives opposite-direction play for a released contrary model",
+       %{
+         conn: conn
+       } do
     conn =
       post(conn, "/dev/model-lab/parse", %{
         xgid: @starting_xgid,
-        model: "backgammon_ai",
+        model: "trictrac_zero:classique",
         black_direction: "toward_24"
       })
 
@@ -56,11 +57,12 @@ defmodule HermesTrictracWeb.ModelAnalysisControllerTest do
            } = json_response(conn, 200)
   end
 
-  test "POST /dev/model-lab/parse permits bar positions for bar variants", %{conn: conn} do
+  test "POST /dev/model-lab/parse does not expose the legacy heuristic Backgammon model", %{
+    conn: conn
+  } do
     conn = post(conn, "/dev/model-lab/parse", %{xgid: @bar_xgid, model: "backgammon_ai"})
 
-    assert %{"uses_bar" => true, "board" => %{"bar" => %{"white" => 13, "black" => 13}}} =
-             json_response(conn, 200)
+    assert %{"error" => "Unknown model: backgammon_ai."} = json_response(conn, 422)
   end
 
   test "POST /dev/model-lab/parse rejects bar positions for no-bar variants", %{conn: conn} do
@@ -80,6 +82,8 @@ defmodule HermesTrictracWeb.ModelAnalysisControllerTest do
     body = html_response(conn, 200)
     assert body =~ ~s(id="model-lab-root")
     assert body =~ @starting_xgid
+    assert body =~ ~s(href="/rules")
+    assert body =~ ~s(data-rules-language-link)
 
     assert body =~
              ~r/<option[^>]*value="trictrac_zero:classique"[^>]*selected|<option[^>]*selected[^>]*value="trictrac_zero:classique"/

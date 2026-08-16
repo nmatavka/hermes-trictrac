@@ -30,6 +30,7 @@ defmodule HermesTrictrac.Training.TrictracBridge do
   @stats_enabled_key {__MODULE__, :stats_enabled}
   @shared_max_tactical_parallelism 24
   @worker_max_tactical_parallelism 4
+  @toccategli_worker_tactical_parallelism 1
   @default_step_cache_max_entries 1_024
   @default_tactical_cache_max_entries 128
   @default_current_turn_leaf_cache_max_entries 512
@@ -1187,7 +1188,7 @@ defmodule HermesTrictrac.Training.TrictracBridge do
   defp projected_roll_runtime(runtime, variant, color, context) do
     profile_metric(:projected_roll_runtime, fn ->
       runtime
-      |> dice_class_results(context, fn {a, b, weight}, child_context ->
+      |> dice_class_results(variant, context, fn {a, b, weight}, child_context ->
         rolled_runtime =
           runtime_for_dice(runtime, variant, color, dice_class(a, b), child_context)
 
@@ -1213,7 +1214,7 @@ defmodule HermesTrictrac.Training.TrictracBridge do
 
   defp current_turn_best_leaf(runtime, variant, color, context) do
     memoized(context, {:current_turn_best_leaf, runtime, color}, fn ->
-      fetch_or_store_current_turn_best_leaf(runtime, variant, color, fn ->
+      compute = fn ->
         profile_metric(:current_turn_best_leaf, fn ->
           turn = runtime.trictrac.turn || %{}
           start_board = Map.get(turn, :start_board, runtime.board)
@@ -1250,7 +1251,16 @@ defmodule HermesTrictrac.Training.TrictracBridge do
             end
           )
         end)
-      end)
+      end
+
+      if worker_bridge_mode?() and toccategli_variant?(variant) do
+        # The request-local memo above already deduplicates a tactical
+        # projection. Retaining complete Toccategli turn leaves across MCTS
+        # requests consumes far more memory than it reuses in worker mode.
+        compute.()
+      else
+        fetch_or_store_current_turn_best_leaf(runtime, variant, color, compute)
+      end
     end)
   end
 
@@ -1391,7 +1401,7 @@ defmodule HermesTrictrac.Training.TrictracBridge do
     end
   end
 
-  defp dice_class_results(_runtime, context, fun) do
+  defp dice_class_results(_runtime, variant, context, fun) do
     if context.async_depth == 0 do
       child_context = %{context | async_depth: 1}
 
@@ -1399,7 +1409,7 @@ defmodule HermesTrictrac.Training.TrictracBridge do
       |> Task.async_stream(
         fn dice_class -> fun.(dice_class, child_context) end,
         ordered: true,
-        max_concurrency: tactical_parallelism(),
+        max_concurrency: tactical_parallelism(variant),
         timeout: :infinity
       )
       |> Enum.map(fn {:ok, result} -> result end)
@@ -1408,18 +1418,29 @@ defmodule HermesTrictrac.Training.TrictracBridge do
     end
   end
 
-  defp tactical_parallelism do
+  defp tactical_parallelism(variant \\ nil) do
     schedulers = max(System.schedulers_online(), 1)
 
     cap =
-      if worker_bridge_mode?() do
-        @worker_max_tactical_parallelism
-      else
-        @shared_max_tactical_parallelism
+      cond do
+        worker_bridge_mode?() and toccategli_variant?(variant) ->
+          # The trainer already has many independent worker daemons. Keeping
+          # this inner dice fan-out serial preserves the same projection while
+          # avoiding simultaneous full-turn allocations in every daemon.
+          @toccategli_worker_tactical_parallelism
+
+        worker_bridge_mode?() ->
+          @worker_max_tactical_parallelism
+
+        true ->
+          @shared_max_tactical_parallelism
       end
 
     min(cap, schedulers)
   end
+
+  defp toccategli_variant?(%{id: "toccategli"}), do: true
+  defp toccategli_variant?(_variant), do: false
 
   defp runtime_for_dice(runtime, variant, color, dice, context) do
     memoized(context, {:runtime_for_dice, runtime, color, dice}, fn ->

@@ -1,138 +1,23 @@
 defmodule HermesTrictracWeb.PageController do
   use HermesTrictracWeb, :controller
 
-  alias HermesTrictrac.{GameServer, Identity, RulesLibrary}
+  alias HermesTrictrac.{ComputerPlayCatalog, GameServer, Identity, LobbyCatalog, RulesLibrary}
+  alias HermesTrictrac.Rules.Registry
 
   plug :require_table_identity when action in [:game]
 
-  @trictrac_zero_variants [
-    "trictrac_classique",
-    "trictrac_aecrire",
-    "trictrac_combine",
-    "toc",
-    "toccategli"
-  ]
-  @computer_variant_bots %{
-    "backgammon" => "backgammon_ai",
-    "trictrac_classique" => "trictrac_zero",
-    "trictrac_aecrire" => "trictrac_zero",
-    "trictrac_combine" => "trictrac_zero",
-    "toc" => "trictrac_zero",
-    "toccategli" => "trictrac_zero"
-  }
-  @headline_variants [
-    %{id: "backgammon", label: "Backgammon"},
-    %{id: "trictrac_classique", label: "Trictrac classique"},
-    %{id: "trictrac_aecrire", label: "Trictrac &agrave; &eacute;crire"},
-    %{id: "trictrac_combine", label: "Trictrac combin&eacute;"},
-    %{id: "toc", label: "Toc"},
-    %{id: "toccategli", label: "Toccategli"}
-  ]
-  @secondary_variants [
-    %{id: "tapa", label: "Tapa / Plakoto"},
-    %{id: "jacquet", label: "Jacquet / Pheuga"},
-    %{id: "tavli", label: "Tavli"},
-    %{id: "brade", label: "Bräde"},
-    %{id: "garanguet", label: "Garanguet"},
-    %{id: "sbaraglio", label: "Sbaraglio"},
-    %{id: "sbaraglino", label: "Sbaraglino"},
-    %{id: "plein", label: "Plein"},
-    %{id: "tourne_case", label: "Tourne-Case"},
-    %{id: "dames_rabattues", label: "Dames Rabattues"}
-  ]
-  @multi_seat_formats [
-    %{
-      id: "trictrac_en_poule",
-      session_kind: "poule",
-      style: "growing_pot",
-      title: "Trictrac en poule",
-      title_key: "lobby.multiSeatTrictracPouleTitle",
-      meta: "2 active seats · rotating queue",
-      meta_key: "lobby.multiSeatTrictracPouleMeta"
-    },
-    %{
-      id: "toccategli_en_poule",
-      session_kind: "poule",
-      style: "growing_pot",
-      title: "Toccategli en poule",
-      title_key: "lobby.multiSeatToccategliPouleTitle",
-      meta: "2 active seats · rotating queue",
-      meta_key: "lobby.multiSeatToccategliPouleMeta"
-    },
-    %{
-      id: "trictrac_en_poule_plumee",
-      session_kind: "poule",
-      style: "plucked_pot",
-      title: "Trictrac en poule (plumée)",
-      title_key: "lobby.multiSeatTrictracPoulePlumeeTitle",
-      meta: "fixed ring · common fund",
-      meta_key: "lobby.multiSeatTrictracPoulePlumeeMeta"
-    },
-    %{
-      id: "toccategli_en_poule_plumee",
-      session_kind: "poule",
-      style: "plucked_pot",
-      title: "Toccategli en poule (plumée)",
-      title_key: "lobby.multiSeatToccategliPoulePlumeeTitle",
-      meta: "fixed ring · common fund",
-      meta_key: "lobby.multiSeatToccategliPoulePlumeeMeta"
-    },
-    %{
-      id: "trictrac_aecrire_a_tourner",
-      session_kind: "multiplayer",
-      multiplayer_mode: "a_tourner",
-      title: "Trictrac à écrire à tourner",
-      title_key: "lobby.multiSeatAecrireTournerTitle",
-      meta: "3 players · round robin",
-      meta_key: "lobby.multiSeatAecrireTournerMeta"
-    },
-    %{
-      id: "trictrac_aecrire_chouette",
-      session_kind: "multiplayer",
-      multiplayer_mode: "chouette",
-      title: "Trictrac à écrire chouette",
-      title_key: "lobby.multiSeatAecrireChouetteTitle",
-      meta: "3 players · chouette",
-      meta_key: "lobby.multiSeatAecrireChouetteMeta"
-    },
-    %{
-      id: "trictrac_aecrire_deux_contre_deux",
-      session_kind: "multiplayer",
-      multiplayer_mode: "deux_contre_deux",
-      title: "Trictrac à écrire deux contre deux",
-      title_key: "lobby.multiSeatAecrireTeamsTitle",
-      meta: "4 players · two sides",
-      meta_key: "lobby.multiSeatAecrireTeamsMeta"
-    },
-    %{
-      id: "trictrac_combine_chouette",
-      session_kind: "multiplayer",
-      multiplayer_mode: "combine_chouette",
-      title: "Trictrac combiné chouette",
-      title_key: "lobby.multiSeatCombineChouetteTitle",
-      meta: "3 players · combined chouette",
-      meta_key: "lobby.multiSeatCombineChouetteMeta"
-    },
-    %{
-      id: "trictrac_combine_deux_contre_deux",
-      session_kind: "multiplayer",
-      multiplayer_mode: "combine_deux_contre_deux",
-      title: "Trictrac combiné deux contre deux",
-      title_key: "lobby.multiSeatCombineTeamsTitle",
-      meta: "4 players · combined teams",
-      meta_key: "lobby.multiSeatCombineTeamsMeta"
-    }
-  ]
-  @cash_per_jeton_variants for format <- @multi_seat_formats,
-                               format.session_kind == "multiplayer",
-                               do: format.id
+  # Kept as a compile-time alias so existing helpers stay simple; the values
+  # themselves are server-owned by LobbyCatalog and serialized for native UIs.
+  @multi_seat_formats LobbyCatalog.multi_seat_formats()
+  @cash_per_jeton_variants LobbyCatalog.cash_per_jeton_variant_ids()
   @manual_name_session_key :manual_player_name
 
   def index(conn, params) do
     render(conn, :index,
-      headline_variants: @headline_variants,
-      secondary_variants: @secondary_variants,
-      computer_variant_bots: @computer_variant_bots,
+      headline_variants: ComputerPlayCatalog.primary(),
+      secondary_variants: ComputerPlayCatalog.secondary(),
+      tavli: ComputerPlayCatalog.tavli(),
+      computer_variant_bots: computer_variant_bots(),
       multi_seat_formats: @multi_seat_formats,
       manual_name: get_session(conn, @manual_name_session_key),
       identity_mode: conn.assigns[:identity_mode] || Identity.mode(),
@@ -214,12 +99,22 @@ defmodule HermesTrictracWeb.PageController do
     end
   end
 
-  defp normalize_bot("trictrac_zero", variant) when variant in @trictrac_zero_variants,
-    do: "trictrac_zero"
+  defp normalize_bot(bot, variant) do
+    bot = ComputerPlayCatalog.canonical_bot_kind(bot)
 
-  defp normalize_bot("backgammon_ai", "backgammon"), do: "backgammon_ai"
+    if ComputerPlayCatalog.accepts_bot?(variant, bot) and ComputerPlayCatalog.available?(variant),
+      do: bot,
+      else: nil
+  end
 
-  defp normalize_bot(_, _), do: nil
+  defp computer_variant_bots do
+    (ComputerPlayCatalog.primary() ++ [ComputerPlayCatalog.tavli()])
+    |> Enum.reduce(%{}, fn entry, bots ->
+      if ComputerPlayCatalog.available?(entry.id),
+        do: Map.put(bots, entry.id, entry.bot_kind),
+        else: bots
+    end)
+  end
 
   defp normalize_bot_margot(_value, nil), do: nil
   defp normalize_bot_margot("yes", _bot), do: "yes"
@@ -262,18 +157,34 @@ defmodule HermesTrictracWeb.PageController do
   end
 
   defp rules_url_for_variant(conn, game, variant) when is_binary(variant) do
-    if String.starts_with?(variant, "trictrac_") do
-      RulesLibrary.library_path(%{
-        return_to: game_return_to(conn, game),
-        return_label: "Back to game",
-        query: ""
-      })
-    end
+    RulesLibrary.library_path(%{
+      return_to: game_return_to(conn, game),
+      return_label: "Back to game",
+      query: "",
+      variant_id: effective_rules_variant_id(variant)
+    })
   end
 
-  defp rules_url_for_variant(_conn, _game, _variant), do: nil
+  defp rules_url_for_variant(conn, game, _variant) do
+    RulesLibrary.library_path(%{
+      return_to: game_return_to(conn, game),
+      return_label: "Back to game",
+      query: ""
+    })
+  end
 
-  defp game_return_to(%Plug.Conn{method: "GET", request_path: request_path, query_string: query}, _game) do
+  defp effective_rules_variant_id(variant_id) do
+    variant_id
+    |> Registry.fetch!()
+    |> Map.get(:base_variant_id, variant_id)
+  rescue
+    _ -> variant_id
+  end
+
+  defp game_return_to(
+         %Plug.Conn{method: "GET", request_path: request_path, query_string: query},
+         _game
+       ) do
     request_path <> if(query in [nil, ""], do: "", else: "?#{query}")
   end
 

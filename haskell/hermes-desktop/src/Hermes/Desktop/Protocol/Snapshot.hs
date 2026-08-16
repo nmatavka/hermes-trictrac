@@ -14,7 +14,8 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 
 data GameSnapshot = GameSnapshot
-  { matchPayload :: Value,
+  { snapshotPayload :: Value,
+    matchPayload :: Value,
     variantSnapshot :: Maybe VariantSnapshot,
     viewerSnapshot :: Maybe ViewerSnapshot,
     openingRollPayload :: Maybe Value,
@@ -46,17 +47,22 @@ data UiActionsSnapshot = UiActionsSnapshot
   deriving (Eq, Show)
 
 instance FromJSON GameSnapshot where
-  parseJSON = withObject "GameSnapshot" $ \object ->
-    GameSnapshot
-      <$> object .:? "match" .!= Object mempty
-      <*> object .:? "variant"
-      <*> object .:? "viewer"
-      <*> object .:? "opening_roll"
-      <*> object .:? "pending_match_options"
-      <*> object .:? "pending_turn_decision"
-      <*> object .:? "poule"
-      <*> object .:? "multiplayer"
-      <*> object .:? "ui_actions"
+  parseJSON value =
+    withObject "GameSnapshot"
+      ( \object ->
+          GameSnapshot
+            <$> pure value
+            <*> object .:? "match" .!= Object mempty
+            <*> object .:? "variant"
+            <*> object .:? "viewer"
+            <*> object .:? "opening_roll"
+            <*> object .:? "pending_match_options"
+            <*> object .:? "pending_turn_decision"
+            <*> object .:? "poule"
+            <*> object .:? "multiplayer"
+            <*> object .:? "ui_actions"
+      )
+      value
 
 instance FromJSON VariantSnapshot where
   parseJSON = withObject "VariantSnapshot" $ \object ->

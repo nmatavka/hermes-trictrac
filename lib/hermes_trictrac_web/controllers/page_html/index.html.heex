@@ -56,7 +56,7 @@
             </div>
           </div>
 
-          <a class="button-link lobby-rules-link" href={~p"/rules"} data-i18n="game.rules">Rules</a>
+          <a class="button-link lobby-rules-link" href={~p"/rules"} data-rules-language-link data-i18n="game.rules">Rules</a>
         </div>
 
         <label>
@@ -111,6 +111,7 @@
                   name="head_to_head_variant"
                   value={variant.id}
                   data-computer-bot={Map.get(@computer_variant_bots, variant.id)}
+                  data-tavli-member={if(variant.id in @tavli.members, do: "true", else: "false")}
                   data-head-to-head-variant
                   checked={variant.id == "backgammon"}
                 />
@@ -120,11 +121,19 @@
           </div>
 
           <details class="variant-disclosure" data-human-only-variants>
-            <summary data-i18n="lobby.moreGames">More games</summary>
+            <summary class="variant-disclosure-pill" data-i18n="lobby.moreGames">More games</summary>
             <div class="variant-grid variant-grid-secondary">
               <%= for variant <- @secondary_variants do %>
                 <label class="variant-option">
-                  <input class="variant-choice" type="radio" name="head_to_head_variant" value={variant.id} data-head-to-head-variant />
+                  <input
+                    class="variant-choice"
+                    type="radio"
+                    name="head_to_head_variant"
+                    value={variant.id}
+                    data-computer-bot={Map.get(@computer_variant_bots, variant.id)}
+                    data-tavli-member="false"
+                    data-head-to-head-variant
+                  />
                   <span class="variant-chip variant-chip-secondary" data-variant-label={variant.id}><%= variant.label %></span>
                 </label>
               <% end %>
@@ -132,7 +141,7 @@
           </details>
 
           <p class="muted-copy computer-only-note" data-computer-variants-note hidden>
-            <span data-i18n="lobby.computerNote">More games are not available for computer play yet.</span>
+            <span data-i18n="lobby.computerNote">Computer play is enabled only when an accepted ML champion is available.</span>
           </p>
         </fieldset>
 
@@ -216,7 +225,7 @@
         </fieldset>
 
         <fieldset class="opponent-fieldset" data-mode-panel="head_to_head">
-          <legend data-i18n="lobby.opponent">Opponent</legend>
+          <legend data-i18n="lobby.gameOptions">Game Options</legend>
 
           <input type="hidden" name="bot" value="" data-bot-input />
 
@@ -248,6 +257,25 @@
             </div>
           </div>
 
+          <div class="segmented-line tavli-line" data-tavli-options>
+            <span class="segmented-label front-door-label"><%= @tavli.label %></span>
+            <div class="segmented-control" role="radiogroup" aria-label="Tavli">
+              <label class="segment-option">
+                <input class="segment-choice" type="radio" name="tavli_enabled" value="false" checked data-tavli-choice />
+                <span class="segment-chip" data-i18n="off">Off</span>
+              </label>
+
+              <label class="segment-option">
+                <input class="segment-choice" type="radio" name="tavli_enabled" value="true" data-tavli-choice />
+                <span class="segment-chip" data-i18n="on">On</span>
+              </label>
+            </div>
+            <span class="muted-copy tavli-sequence" data-tavli-sequence hidden>
+              <%= Enum.join(@tavli.member_labels, " → ") %>
+            </span>
+            <span hidden data-tavli-variant="tavli" data-computer-bot={Map.get(@computer_variant_bots, "tavli")}></span>
+          </div>
+
           <div class="segmented-line margot-line" data-margot-options hidden>
             <span class="segmented-label front-door-label" data-i18n="lobby.margot">Margot</span>
             <div class="segmented-control" role="radiogroup" aria-label="Margot" data-i18n-aria-label="lobby.margot">
@@ -265,8 +293,7 @@
 
           <p class="muted-copy">
             <span data-i18n="lobby.botNote">
-              Computer play uses BackgammonAI for English backgammon and the current TricTrac model for Trictrac classique,
-              Trictrac &agrave; &eacute;crire, Trictrac combin&eacute;, Toc, and Toccategli.
+              Computer play is available only when the selected game has an accepted ML champion.
             </span>
           </p>
         </fieldset>

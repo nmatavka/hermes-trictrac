@@ -70,6 +70,7 @@ defmodule HermesTrictrac.Training.TrictracBridgeTest do
   test "confirm is not legal while checker moves remain" do
     config = %{"tactical_config" => %{"enabled" => false}}
     {:ok, initial} = TrictracBridge.new_game(config)
+
     {:ok, rolled} = TrictracBridge.step(initial["state"], %{"type" => "special", "id" => "ROLL"}, config)
 
     actions = rolled["state"]["legal_actions"]
@@ -85,6 +86,7 @@ defmodule HermesTrictrac.Training.TrictracBridgeTest do
     variant = Registry.fetch!("trictrac_classique")
     config = %{"tactical_config" => %{"enabled" => false}}
     {:ok, initial} = TrictracBridge.new_game(config)
+
     {:ok, rolled} = TrictracBridge.step(initial["state"], %{"type" => "special", "id" => "ROLL"}, config)
 
     runtime = TrictracBridge.decode_runtime_term(rolled["state"]["runtime_term"])
@@ -112,6 +114,7 @@ defmodule HermesTrictrac.Training.TrictracBridgeTest do
     {:ok, direct_after_confirm} = TrictracCore.confirm(direct_runtime, variant, color)
 
     assert direct_after_confirm == direct_confirmed
+
     assert confirmed["state"]["runtime"] == TrictracBridge.public_runtime(direct_after_confirm, config)
     assert confirmed["reward"] == trous_reward(direct_runtime, direct_after_confirm)
 
@@ -135,6 +138,7 @@ defmodule HermesTrictrac.Training.TrictracBridgeTest do
   test "step_batch preserves input order and matches duplicated sequential step results" do
     config = %{"tactical_config" => %{"enabled" => false}}
     {:ok, initial} = TrictracBridge.new_game(config)
+
     {:ok, rolled} = TrictracBridge.step(initial["state"], %{"type" => "special", "id" => "ROLL"}, config)
     action = List.first(rolled["state"]["legal_actions"])
 
@@ -165,6 +169,7 @@ defmodule HermesTrictrac.Training.TrictracBridgeTest do
   test "step_batch singleton matches direct step result" do
     config = %{"tactical_config" => %{"enabled" => false}}
     {:ok, initial} = TrictracBridge.new_game(config)
+
     {:ok, rolled} = TrictracBridge.step(initial["state"], %{"type" => "special", "id" => "ROLL"}, config)
     action = List.first(rolled["state"]["legal_actions"])
 
@@ -192,6 +197,7 @@ defmodule HermesTrictrac.Training.TrictracBridgeTest do
         fn _ ->
           assert :ok = TrictracBridge.ensure_daemon_tables()
           assert {:ok, _stats} = TrictracBridge.stats()
+
           assert {:ok, _response} = TrictracBridge.new_game(%{"tactical_config" => %{"enabled" => false}})
         end,
         ordered: false,
@@ -446,6 +452,36 @@ defmodule HermesTrictrac.Training.TrictracBridgeTest do
       turn_event_points(single_start, single_end, single_dice, %{"margotEnabled" => false}, "toccategli")
 
     assert toccategli_value != classique_value
+  end
+
+  test "worker-mode Toccategli horizon-2 projection preserves its tactical payload" do
+    config = %{
+      "variant_id" => "toccategli",
+      "tactical_config" => %{
+        "enabled" => true,
+        "horizon_own_turns" => 2,
+        "reward_weight" => 1.0,
+        "heuristic_weight" => 1.0,
+        "version" => "trictrac-tactical-v1"
+      }
+    }
+
+    runtime = move_runtime_for_variant("toccategli", %{})
+    previous_mode = System.get_env("TRICTRAC_ZERO_BRIDGE_MODE")
+
+    try do
+      System.put_env("TRICTRAC_ZERO_BRIDGE_MODE", "shared")
+      expected = TrictracBridge.serialize_state(runtime, config)
+
+      System.put_env("TRICTRAC_ZERO_BRIDGE_MODE", "worker")
+      actual = TrictracBridge.serialize_state(runtime, config)
+
+      assert actual["runtime"]["tactical_tariffs"] == expected["runtime"]["tactical_tariffs"]
+    after
+      if previous_mode,
+        do: System.put_env("TRICTRAC_ZERO_BRIDGE_MODE", previous_mode),
+        else: System.delete_env("TRICTRAC_ZERO_BRIDGE_MODE")
+    end
   end
 
   test "toc tactical payload is scaled in hole outcome space" do

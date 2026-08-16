@@ -1,20 +1,19 @@
 defmodule HermesTrictrac.GameServer do
   use GenServer
 
-  alias HermesTrictrac.{GameSnapshot, TableSession}
+  alias HermesTrictrac.{ComputerPlayCatalog, GameSnapshot, TableSession}
   alias HermesTrictrac.Rules.Engine
   alias HermesTrictrac.Rules.Registry, as: VariantRegistry
-  alias HermesTrictrac.Training.TrictracBridge
+  alias HermesTrictrac.Training.{RaceTrainingBridge, TrictracBridge}
 
   require Logger
 
   @call_timeout 120_000
   @trictrac_bot "trictrac_zero"
-  @backgammon_bot "backgammon_ai"
+  @brade_bot "brade_zero"
+  @race_bots ~w(backgammon_zero tapa_zero jacquet_zero garanguet_zero tavli_zero)
   @trictrac_bot_variants [
     "trictrac_classique",
-    "trictrac_aecrire",
-    "trictrac_combine",
     "toc",
     "toccategli"
   ]
@@ -82,6 +81,10 @@ defmodule HermesTrictrac.GameServer do
 
   def reset(name, _user, _client_id) do
     GenServer.call(reg(name), :reset, @call_timeout)
+  end
+
+  def reset_for_rule_correction(name) do
+    GenServer.call(reg(name), :reset_for_rule_correction, @call_timeout)
   end
 
   def remain_seated(name, user, client_id) do
@@ -386,6 +389,22 @@ defmodule HermesTrictrac.GameServer do
     else
       {:reply, {:error, "Reset is only available after the match is over."}, state}
     end
+  end
+
+  def handle_call(
+        :reset_for_rule_correction,
+        _from,
+        %{engine: %{variant: %{id: "brade"}}} = state
+      ) do
+    engine = Engine.reset(state.engine)
+    updated = clear_seat_reclaim(%{state | engine: engine, chat: []})
+    persist(updated)
+    broadcast_snapshot(updated)
+    {:reply, :ok, updated}
+  end
+
+  def handle_call(:reset_for_rule_correction, _from, state) do
+    {:reply, {:error, "Only Bräde tables can be reset for this rule correction."}, state}
   end
 
   def handle_info({:seat_reclaim_expired, seat_key, claimant_client_id}, state) do
@@ -881,7 +900,12 @@ defmodule HermesTrictrac.GameServer do
   end
 
   defp normalize_requested_bot(opts, variant_id, _session) when is_map(opts) do
-    case Map.get(opts, "bot", Map.get(opts, :bot)) do
+    requested =
+      opts
+      |> Map.get("bot", Map.get(opts, :bot))
+      |> ComputerPlayCatalog.canonical_bot_kind()
+
+    case requested do
       nil ->
         {:ok, nil}
 
@@ -890,7 +914,8 @@ defmodule HermesTrictrac.GameServer do
 
       @trictrac_bot ->
         with {:ok, margot_enabled} <- normalize_requested_bot_margot(opts),
-             {:ok, preset} <- bot_preset_for_variant(variant_id, margot_enabled) do
+             {:ok, preset} <- bot_preset_for_variant(variant_id, margot_enabled),
+             :ok <- ensure_released_computer_model(variant_id) do
           {:ok,
            %{
              kind: @trictrac_bot,
@@ -899,11 +924,26 @@ defmodule HermesTrictrac.GameServer do
            }}
         end
 
-      @backgammon_bot when variant_id == "backgammon" ->
-        {:ok, %{kind: @backgammon_bot, preset: "backgammon", margot_enabled: false}}
+      @brade_bot when variant_id == "brade" ->
+        with :ok <- ensure_released_computer_model(variant_id) do
+          {:ok, %{kind: @brade_bot, preset: "brade", margot_enabled: false}}
+        end
 
-      @backgammon_bot ->
-        {:error, "BackgammonAI is only available for English backgammon."}
+      kind when kind in @race_bots ->
+        with {:ok, margot_enabled} <- normalize_requested_bot_margot(opts) do
+          cond do
+            margot_enabled ->
+              {:error, "Margot is not available for this computer opponent."}
+
+            ComputerPlayCatalog.accepts_bot?(variant_id, kind) ->
+              with :ok <- ensure_released_computer_model(variant_id) do
+                {:ok, %{kind: kind, preset: variant_id, margot_enabled: false}}
+              end
+
+            true ->
+              {:error, "This computer opponent is not available for #{variant_id}."}
+          end
+        end
 
       other ->
         {:error, "Unsupported bot option: #{other}."}
@@ -1299,6 +1339,17 @@ defmodule HermesTrictrac.GameServer do
          %{"margotConsent" => if(bot_margot_enabled?(bot), do: "yes", else: "no")}}
 
       engine.pending_match_options &&
+        engine.pending_match_options["kind"] == "tavli_target_consent" &&
+          is_nil(Map.get(responses, Atom.to_string(bot.color))) ->
+        case Map.get(responses, "white") do
+          target when target in ["3", "5", "7", "9"] ->
+            {:submit_match_options, %{"tavliTargetConsent" => target}}
+
+          _ ->
+            nil
+        end
+
+      engine.pending_match_options &&
         engine.pending_match_options["kind"] == "trictrac_partie_length_consent" &&
           is_nil(Map.get(responses, Atom.to_string(bot.color))) ->
         case Map.get(responses, "white") do
@@ -1381,6 +1432,12 @@ defmodule HermesTrictrac.GameServer do
   end
 
   defp maybe_put_sequence(move, action) do
+    move =
+      case Map.get(action, "die") do
+        die when is_integer(die) -> Map.put(move, "die", die)
+        _ -> move
+      end
+
     case Map.get(action, "sequence") do
       sequence when is_list(sequence) -> Map.put(move, "sequence", sequence)
       _ -> move
@@ -1395,14 +1452,22 @@ defmodule HermesTrictrac.GameServer do
     )
   end
 
-  defp bot_module(@backgammon_bot) do
-    Application.get_env(:hermes_trictrac, :backgammon_ai_bot_impl, HermesTrictrac.BackgammonAiBot)
+  defp bot_module(@brade_bot) do
+    Application.get_env(:hermes_trictrac, :brade_model_bot_impl, HermesTrictrac.BradeModelBot)
   end
 
-  defp bot_module(_kind), do: HermesTrictrac.BackgammonAiBot
+  defp bot_module(kind) when kind in @race_bots do
+    Application.get_env(:hermes_trictrac, :race_model_bot_impl, HermesTrictrac.RaceModelBot)
+  end
+
+  defp bot_module(_kind), do: HermesTrictrac.RaceModelBot
 
   defp bot_playable_variant?(@trictrac_bot, variant_id), do: variant_id in @trictrac_bot_variants
-  defp bot_playable_variant?(@backgammon_bot, "backgammon"), do: true
+  defp bot_playable_variant?(@brade_bot, "brade"), do: true
+
+  defp bot_playable_variant?(kind, variant_id) when kind in @race_bots,
+    do: ComputerPlayCatalog.accepts_bot?(variant_id, kind)
+
   defp bot_playable_variant?(_kind, _variant_id), do: false
 
   defp normalize_requested_bot_margot(opts) do
@@ -1423,28 +1488,38 @@ defmodule HermesTrictrac.GameServer do
 
   defp bot_preset_for_variant("trictrac_classique", false), do: {:ok, "classique"}
   defp bot_preset_for_variant("trictrac_classique", true), do: {:ok, "classique-margot"}
-  defp bot_preset_for_variant("trictrac_aecrire", false), do: {:ok, "aecrire"}
-  defp bot_preset_for_variant("trictrac_aecrire", true), do: {:ok, "aecrire-margot"}
-  defp bot_preset_for_variant("trictrac_combine", false), do: {:ok, "combine"}
-  defp bot_preset_for_variant("trictrac_combine", true), do: {:ok, "combine-margot"}
   defp bot_preset_for_variant("toc", false), do: {:ok, "toc"}
   defp bot_preset_for_variant("toc", true), do: {:ok, "toc-margot"}
   defp bot_preset_for_variant("toccategli", false), do: {:ok, "toccategli"}
   defp bot_preset_for_variant("toccategli", true), do: {:ok, "toccategli-margot"}
+  defp bot_preset_for_variant("brade", false), do: {:ok, "brade"}
 
   defp bot_preset_for_variant(_variant_id, _margot_enabled) do
     {:error,
-     "The current model is only available for Trictrac Classique, Trictrac a ecrire, Trictrac combine, Jeu du Toc, and Toccategli."}
+     "The current model is only available for Trictrac Classique, Jeu du Toc, and Toccategli."}
   end
 
   defp bot_unavailable_message(@trictrac_bot) do
-    "The current model is only available for Trictrac Classique, Trictrac a ecrire, Trictrac combine, Jeu du Toc, and Toccategli."
+    "The current model is only available for Trictrac Classique, Jeu du Toc, and Toccategli."
   end
 
-  defp bot_unavailable_message(@backgammon_bot),
-    do: "BackgammonAI is only available for English backgammon."
+  defp bot_unavailable_message(@brade_bot),
+    do: "BrädeZero is only available after an accepted Bräde champion has been trained."
+
+  defp bot_unavailable_message(kind) when kind in @race_bots,
+    do:
+      "This game is available for computer play only after its accepted ML champion is released."
 
   defp bot_unavailable_message(_kind), do: "Unsupported bot option."
+
+  defp ensure_released_computer_model(variant_id) do
+    if ComputerPlayCatalog.available?(variant_id) do
+      :ok
+    else
+      {:error,
+       "Computer play for #{variant_id} is unavailable until its accepted ML champion is released."}
+    end
+  end
 
   defp valid_bot_module?(bot_module) do
     Code.ensure_loaded?(bot_module) and
@@ -1515,9 +1590,17 @@ defmodule HermesTrictrac.GameServer do
     end
   end
 
-  defp maybe_serialize_bot_state(engine, %{kind: @backgammon_bot}) do
-    if bot_playable_variant?(@backgammon_bot, engine.variant.id) do
-      HermesTrictrac.BackgammonAiBot.serialize_state(Engine.runtime_view(engine), engine.variant)
+  defp maybe_serialize_bot_state(engine, %{kind: @brade_bot}) do
+    if bot_playable_variant?(@brade_bot, engine.variant.id) do
+      RaceTrainingBridge.serialize_state(engine)
+    else
+      nil
+    end
+  end
+
+  defp maybe_serialize_bot_state(engine, %{kind: kind}) when kind in @race_bots do
+    if bot_playable_variant?(kind, engine.variant.id) do
+      RaceTrainingBridge.serialize_state(engine)
     else
       nil
     end

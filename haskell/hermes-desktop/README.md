@@ -2,7 +2,7 @@
 
 Native desktop foundation for Hermes Trictrac.
 
-This app is designed as a Haskell desktop shell over the existing Hermes rules
+This app is designed as a Haskell desktop client over the existing Hermes rules
 and session runtime:
 
 - `local` mode launches a bundled Hermes release and talks to it as if it were a
@@ -31,14 +31,12 @@ The Haskell app looks for the support root in this order:
 
 ## Current scope
 
-This scaffold currently provides:
+The native client provides a catalog-driven lobby for all head-to-head and
+multi-seat formats, the Tavli composite selector, a Phoenix Channel transport,
+and a playable physical board driven exclusively by server snapshots and legal
+moves. It loads the bundled catalog as a fallback and refreshes it from the
+running server before the window opens.
 
-- desktop config loading
-- support tree discovery
-- desktop catalog loading
-- Phoenix frame codec
-- snapshot decoding foundation
-- local runtime launch/stop and readiness polling
-- a minimal Gloss shell using the shared board assets
-
-It is intended to be extended into the full playable desktop client.
+The bundled local runtime always uses manual identity. Remote servers that
+require the browser-session Bluesky OAuth flow are intentionally reported as
+unavailable to the native client rather than accepting an unauthenticated join.

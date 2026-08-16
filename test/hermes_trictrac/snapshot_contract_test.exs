@@ -36,12 +36,20 @@ defmodule HermesTrictrac.SnapshotContractTest do
            ]
 
     assert snapshot["variant"]["id"] == "backgammon"
+    assert snapshot["variant"]["orientation"] == "ascending"
     assert is_list(snapshot["board"]["points"])
     assert is_map(snapshot["board"]["bar"])
     assert is_map(snapshot["board"]["outside"])
     assert is_list(snapshot["legal_moves"])
     assert is_map(snapshot["match"])
     assert is_map(snapshot["ui_actions"])
+  end
+
+  test "Jacquet exposes its physical parallel orientation to native clients" do
+    snapshot = ready_engine("android-contract-jacquet", "jacquet") |> Engine.snapshot()
+
+    assert snapshot["variant"]["orientation"] == "jacquet_diagonal_parallel"
+    assert snapshot["variant"]["movement_mode"] == "parallel"
   end
 
   test "trictrac aecrire snapshot exposes pending options and trictrac state" do
@@ -64,8 +72,8 @@ defmodule HermesTrictrac.SnapshotContractTest do
         %{"author" => "white", "type" => "text", "data" => %{"text" => "hello"}}
       ])
       |> GameSnapshot.with_bot(%{
-        kind: "backgammon_ai",
-        name: "BackgammonAI",
+        kind: "backgammon_zero",
+        name: "BackgammonZero",
         color: :black
       })
       |> GameSnapshot.with_seat_reclaim(%{
@@ -81,8 +89,8 @@ defmodule HermesTrictrac.SnapshotContractTest do
 
     assert layered_snapshot["bot"] == %{
              "enabled" => true,
-             "kind" => "backgammon_ai",
-             "name" => "BackgammonAI",
+             "kind" => "backgammon_zero",
+             "name" => "BackgammonZero",
              "color" => "black"
            }
 

@@ -40,7 +40,7 @@ defmodule HermesTrictrac.MixProject do
       {:gettext, "~> 1.0"},
       {:jason, "~> 1.4"},
       {:yaml_elixir, "~> 2.11"},
-      {:earmark, "~> 1.4"},
+      {:mdex, "~> 0.13"},
       {:floki, "~> 0.38"},
       {:html_sanitize_ex, "~> 1.4"},
       {:plug_cowboy, "~> 2.8"},

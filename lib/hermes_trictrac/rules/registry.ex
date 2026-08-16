@@ -40,10 +40,10 @@ defmodule HermesTrictrac.Rules.Registry do
       family: :race,
       movement_mode: :parallel,
       uses_bar: false,
-      orientation: :jacquet_parallel,
+      orientation: :jacquet_diagonal_parallel,
       start_points: %{
         white: [{23, 15}],
-        black: [{0, 15}]
+        black: [{11, 15}]
       },
       total_pieces: 15,
       can_hit: false,
@@ -449,7 +449,7 @@ defmodule HermesTrictrac.Rules.Registry do
       family: :race,
       movement_mode: :parallel,
       uses_bar: true,
-      orientation: :split_home,
+      orientation: :jacquet_parallel,
       start_points: %{
         white: [{23, 15}],
         black: [{0, 15}]

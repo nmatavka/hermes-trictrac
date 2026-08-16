@@ -203,12 +203,12 @@ defmodule HermesTrictrac.EngineTest do
     jacquet = Registry.fetch!("jacquet")
 
     assert jacquet.family == :race
-    assert jacquet.orientation == :jacquet_parallel
+    assert jacquet.orientation == :jacquet_diagonal_parallel
     assert jacquet.can_hit == false
     assert jacquet.can_bear_off == true
     assert jacquet.doubles_mode == :repeat_four
     assert jacquet.opening_roll_mode == :highest
-    assert jacquet.start_points == %{white: [{23, 15}], black: [{0, 15}]}
+    assert jacquet.start_points == %{white: [{23, 15}], black: [{11, 15}]}
   end
 
   test "registry records inherent contrary and parallel movement families" do
@@ -224,6 +224,7 @@ defmodule HermesTrictrac.EngineTest do
 
     assert Enum.all?(contrary_ids, &(Registry.fetch!(&1).movement_mode == :contrary))
     assert Enum.all?(parallel_ids, &(Registry.fetch!(&1).movement_mode == :parallel))
+    assert Registry.fetch!("brade").orientation == :jacquet_parallel
   end
 
   test "registry records which analysis variants use a bar" do
@@ -244,7 +245,7 @@ defmodule HermesTrictrac.EngineTest do
     assert Enum.all?(no_bar_ids, &(Registry.fetch!(&1).uses_bar == false))
   end
 
-  test "jacquet routes both players counterclockwise on the shared loop" do
+  test "jacquet routes both players clockwise from diagonal talons" do
     engine = ready_engine("jacquet-routes", "jacquet")
 
     white_board =
@@ -262,6 +263,75 @@ defmodule HermesTrictrac.EngineTest do
 
     black_board =
       Enum.map(0..23, fn index ->
+        if index == 11, do: %{white: 0, black: 1}, else: %{white: 0, black: 0}
+      end)
+
+    black_runtime =
+      engine.runtime
+      |> Map.put(:board, %{engine.board | points: black_board})
+      |> Map.put(:dice, %{values: [1], moves: [1], moves_left: [1], moves_played: []})
+
+    assert [%{from: 11, to: 10, die: 1}] =
+             HermesTrictrac.Rules.RaceCore.legal_moves(black_runtime, engine.variant, :black)
+  end
+
+  test "jacquet black wraps across point zero and bears off from its final quarter" do
+    engine = ready_engine("jacquet-black-parallel-route", "jacquet")
+
+    wrap_board =
+      Enum.map(0..23, fn index ->
+        if index == 0, do: %{white: 0, black: 1}, else: %{white: 0, black: 0}
+      end)
+
+    wrap_runtime =
+      engine.runtime
+      |> Map.put(:board, %{engine.board | points: wrap_board})
+      |> Map.put(:dice, %{values: [1], moves: [1], moves_left: [1], moves_played: []})
+      |> put_in([:variant_state, :jacquet_postillon_entered, :black], true)
+
+    assert [%{from: 0, to: 23, die: 1}] =
+             HermesTrictrac.Rules.RaceCore.legal_moves(wrap_runtime, engine.variant, :black)
+
+    home_board =
+      Enum.map(0..23, fn index ->
+        cond do
+          index == 17 -> %{white: 0, black: 1}
+          index == 13 -> %{white: 0, black: 13}
+          index == 12 -> %{white: 0, black: 1}
+          true -> %{white: 0, black: 0}
+        end
+      end)
+
+    home_runtime =
+      engine.runtime
+      |> Map.put(:board, %{engine.board | points: home_board, outside: %{white: 0, black: 0}})
+      |> Map.put(:dice, %{values: [6], moves: [6], moves_left: [6], moves_played: []})
+      |> put_in([:variant_state, :jacquet_postillon_entered, :black], true)
+
+    assert Enum.any?(
+             HermesTrictrac.Rules.RaceCore.legal_moves(home_runtime, engine.variant, :black),
+             &(&1.from == 17 and &1.to == "home" and &1.die == 6)
+           )
+  end
+
+  test "brade routes both players counterclockwise from diagonally opposite talons" do
+    engine = ready_engine("brade-routes", "brade")
+
+    white_board =
+      Enum.map(0..23, fn index ->
+        if index == 23, do: %{white: 1, black: 0}, else: %{white: 0, black: 0}
+      end)
+
+    white_runtime =
+      engine.runtime
+      |> Map.put(:board, %{engine.board | points: white_board})
+      |> Map.put(:dice, %{values: [1], moves: [1], moves_left: [1], moves_played: []})
+
+    assert [%{from: 23, to: 22, die: 1}] =
+             RaceCore.legal_moves(white_runtime, engine.variant, :white)
+
+    black_board =
+      Enum.map(0..23, fn index ->
         if index == 0, do: %{white: 0, black: 1}, else: %{white: 0, black: 0}
       end)
 
@@ -271,7 +341,7 @@ defmodule HermesTrictrac.EngineTest do
       |> Map.put(:dice, %{values: [1], moves: [1], moves_left: [1], moves_played: []})
 
     assert [%{from: 0, to: 23, die: 1}] =
-             HermesTrictrac.Rules.RaceCore.legal_moves(black_runtime, engine.variant, :black)
+             RaceCore.legal_moves(black_runtime, engine.variant, :black)
   end
 
   test "jacquet only allows the postillon to move before it enters home" do
@@ -441,8 +511,8 @@ defmodule HermesTrictrac.EngineTest do
     points =
       Enum.map(0..23, fn index ->
         cond do
-          index == 0 -> %{white: 0, black: 2}
-          index in [19, 20, 21, 22, 23] -> %{white: 0, black: 1}
+          index == 11 -> %{white: 0, black: 2}
+          index in 6..10 -> %{white: 0, black: 1}
           true -> %{white: 0, black: 0}
         end
       end)
@@ -454,7 +524,7 @@ defmodule HermesTrictrac.EngineTest do
       |> put_in([:variant_state, :jacquet_postillon_entered, :black], true)
 
     legal = HermesTrictrac.Rules.RaceCore.legal_moves(runtime, engine.variant, :black)
-    refute Enum.any?(legal, &(&1.from == 0 and &1.to == 23))
+    refute Enum.any?(legal, &(&1.from == 11 and &1.to == 10))
   end
 
   test "jacquet bearing off uses exact points or the highest occupied lower point" do
@@ -5899,7 +5969,7 @@ defmodule HermesTrictrac.EngineTest do
       Enum.map(0..23, fn index ->
         cond do
           index == 0 -> %{white: 0, black: 1}
-          index == 1 -> %{white: 0, black: 1}
+          index == 23 -> %{white: 0, black: 1}
           true -> %{white: 0, black: 0}
         end
       end)
@@ -5910,8 +5980,7 @@ defmodule HermesTrictrac.EngineTest do
 
     legal = HermesTrictrac.Rules.RaceCore.legal_moves(runtime, engine.variant, :black)
 
-    refute Enum.any?(legal, &(&1.from == 0 and &1.to == 1 and &1.die == 1))
-    assert Enum.any?(legal, &(&1.from == 1 and &1.to == 2 and &1.die == 1))
+    refute Enum.any?(legal, &(&1.from == 0 and &1.to == 23 and &1.die == 1))
   end
 
   test "brade can still form a case on the far-side coin of rest" do
@@ -6303,8 +6372,7 @@ defmodule HermesTrictrac.EngineTest do
     points =
       Enum.map(0..23, fn index ->
         cond do
-          index == 6 -> %{white: 1, black: 0}
-          index in 0..5 -> %{white: 0, black: 2}
+          index in 19..23 -> %{white: 0, black: 2}
           true -> %{white: 0, black: 0}
         end
       end)
@@ -6312,15 +6380,15 @@ defmodule HermesTrictrac.EngineTest do
     board = %{
       engine.board
       | points: points,
-        bar: %{white: 0, black: 5},
+        bar: %{white: 3, black: 5},
         outside: %{white: 0, black: 0}
     }
 
-    dice = %{values: [2, 1], moves: [2, 1], moves_left: [2], moves_played: []}
+    dice = %{values: [4, 1], moves: [4, 1], moves_left: [4], moves_played: []}
     runtime = engine.runtime |> Map.put(:board, board) |> Map.put(:dice, dice)
     legal_moves = HermesTrictrac.Rules.RaceCore.legal_moves(runtime, engine.variant, :white)
 
-    assert Enum.any?(legal_moves, &(&1.from == 6 and &1.to == 4 and &1.die == 2 and &1.hit?))
+    assert Enum.any?(legal_moves, &(&1.from == "bar" and &1.to == 20 and &1.die == 4 and &1.hit?))
 
     engine =
       %{
@@ -6334,7 +6402,7 @@ defmodule HermesTrictrac.EngineTest do
       }
 
     assert {:ok, engine} =
-             Engine.move(engine, %{"from" => 6, "to" => 4, "die" => 2}, "nick", "tab-a")
+             Engine.move(engine, %{"from" => "bar", "to" => 20, "die" => 4}, "nick", "tab-a")
 
     snapshot = Engine.snapshot(engine)
 
@@ -6725,6 +6793,43 @@ defmodule HermesTrictrac.EngineTest do
 
     assert snapshot["match"]["results"] == [
              %{"winner" => "white", "points" => 2, "kind" => "crown"}
+           ]
+  end
+
+  test "brade can detect a black crown beau jeu on the parallel route" do
+    engine = Engine.new("brade-black-crown", "brade")
+    assert {:ok, engine, _} = Engine.join(engine, "nick", "tab-a")
+    assert {:ok, engine, _} = Engine.join(engine, "jane", "tab-b")
+
+    assert {:ok, engine} =
+             Engine.submit_match_options(engine, %{"matchLength" => "3"}, "nick", "tab-a")
+
+    points =
+      Enum.map(0..23, fn index ->
+        if index in 1..5, do: %{white: 0, black: 3}, else: %{white: 0, black: 0}
+      end)
+
+    board = %{
+      engine.board
+      | points: points,
+        outside: %{white: 0, black: 0},
+        bar: %{white: 0, black: 0}
+    }
+
+    runtime = %{engine.runtime | board: board}
+
+    engine = %{
+      engine
+      | runtime: runtime,
+        board: board,
+        turn_color: :black,
+        dice: %{values: [5, 4], moves: [5, 4], moves_left: [], moves_played: [5, 4]}
+    }
+
+    assert {:ok, engine} = Engine.confirm(engine, "jane", "tab-b")
+
+    assert Engine.snapshot(engine)["match"]["results"] == [
+             %{"winner" => "black", "points" => 2, "kind" => "crown"}
            ]
   end
 

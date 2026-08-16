@@ -379,6 +379,11 @@ defmodule HermesTrictracWeb.GamesChannelTest do
     assert guest_reply.game["turn"] == nil
     assert guest_reply.game["opening_roll"]["order"] == "highest"
     assert guest_reply.game["opening_roll"]["rolls"] == %{"white" => nil, "black" => nil}
+
+    points = guest_reply.game["board"]["points"]
+    assert Enum.at(points, 23)["pieces"] == List.duplicate("white", 15)
+    assert Enum.at(points, 11)["pieces"] == List.duplicate("black", 15)
+    assert Enum.at(points, 0)["pieces"] == []
   end
 
   test "garanguet join snapshot exposes the opening roll state" do
@@ -1011,7 +1016,10 @@ defmodule HermesTrictracWeb.GamesChannelTest do
 
     ref = push(spectator_socket, "claim_roster_slot", %{})
     assert_reply ref, :ok, %{}
-    assert_broadcast "update", %{game: %{"status" => "awaiting_order_draw", "multiplayer" => %{"waiting_slots" => 0}}}
+
+    assert_broadcast "update", %{
+      game: %{"status" => "awaiting_order_draw", "multiplayer" => %{"waiting_slots" => 0}}
+    }
 
     assert GameServer.viewer(lobby, "dana", "multi-d")["role"] == "bench"
     snapshot = GameServer.peek(lobby)

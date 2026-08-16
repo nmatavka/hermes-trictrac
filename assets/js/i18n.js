@@ -95,13 +95,14 @@ const STRINGS = {
       "multiSeatStatus": "Status",
       "multiSeatStatusNote": "Multi-seat lobby flow is being wired. You can scope the table style now, but starting play stays disabled for the moment.",
       "moreGames": "More games",
-      "computerNote": "More games are not available for computer play yet.",
+      "computerNote": "Computer play is enabled only when an accepted ML champion is available.",
       "opponent": "Opponent",
+      "gameOptions": "Game Options",
       "playAgainst": "Play against",
       "human": "Human",
       "computer": "Computer",
       "margot": "Margot",
-      "botNote": "Computer play uses BackgammonAI for English backgammon and the current Trictrac model for Trictrac classique, Trictrac à écrire, Trictrac combiné, Toc, and Toccategli.",
+      "botNote": "Computer play is available only when the selected game has an accepted ML champion.",
       "enter": "Enter Lobby",
       "multiSeatEnter": "Enter Multi-seat Table"
     },
@@ -208,6 +209,12 @@ const STRINGS = {
       "soundOffTitle": "Turn generated sound cues off",
       "soundOffLockedTitle": "Turn generated sound cues off. Audio will resume on your next click or key press.",
       "soundOnTitle": "Turn generated sound cues on",
+      "bgmUnavailable": "Music Unavailable",
+      "bgmOn": "Music On",
+      "bgmOff": "Music Off",
+      "bgmUnavailableTitle": "Background music is unavailable in this browser",
+      "bgmOffTitle": "Turn background music off",
+      "bgmOnTitle": "Play background music",
       "pack": "Pack",
       "packTitle": "Choose a sound pack",
       "rules": "Rules",
@@ -463,13 +470,14 @@ const LOCALE_OVERRIDES = {
       "multiSeatStatus": "Status",
       "multiSeatStatusNote": "Der Mehrplatz-Lobbyablauf wird gerade verdrahtet. Den Tischtyp kannst du schon festlegen, das Starten bleibt vorerst deaktiviert.",
       "moreGames": "Weitere Spiele",
-      "computerNote": "Weitere Spiele sind gegen den Computer noch nicht verfügbar.",
+      "computerNote": "Computerspiel ist nur verfügbar, wenn ein akzeptierter ML-Champion verfügbar ist.",
       "opponent": "Gegner",
+      "gameOptions": "Spieloptionen",
       "playAgainst": "Spielen gegen",
       "human": "Mensch",
       "computer": "Computer",
       "margot": "Margot",
-      "botNote": "Partien gegen den Computer nutzen BackgammonAI für englisches Backgammon und das aktuelle Trictrac-Modell für Trictrac classique, Trictrac à écrire, Trictrac combiné, Toc und Toccategli.",
+      "botNote": "Computerspiel ist nur verfügbar, wenn für das gewählte Spiel ein akzeptierter ML-Champion vorliegt.",
       "enter": "Tisch betreten",
       "multiSeatEnter": "Mehrplatz-Tisch betreten"
     },
@@ -576,6 +584,12 @@ const LOCALE_OVERRIDES = {
       "soundOffTitle": "Töne ausschalten",
       "soundOffLockedTitle": "Töne ausschalten. Der Ton wird beim nächsten Klick oder Tastendruck fortgesetzt.",
       "soundOnTitle": "Töne einschalten",
+      "bgmUnavailable": "Musik nicht verfügbar",
+      "bgmOn": "Musik an",
+      "bgmOff": "Musik aus",
+      "bgmUnavailableTitle": "Hintergrundmusik ist in diesem Browser nicht verfügbar",
+      "bgmOffTitle": "Hintergrundmusik ausschalten",
+      "bgmOnTitle": "Hintergrundmusik abspielen",
       "pack": "Paket",
       "packTitle": "Soundpaket auswählen",
       "rules": "Regeln"
@@ -798,13 +812,14 @@ const LOCALE_OVERRIDES = {
       "multiSeatStatus": "État",
       "multiSeatStatusNote": "Le parcours de lobby multisiège est en cours de câblage. Vous pouvez déjà cadrer le format de table, mais le lancement reste désactivé pour le moment.",
       "moreGames": "Autres jeux",
-      "computerNote": "Les autres jeux ne sont pas encore disponibles contre l’ordinateur.",
+      "computerNote": "Le jeu contre l’ordinateur est disponible seulement lorsqu’un champion ML accepté est disponible.",
       "opponent": "Adversaire",
+      "gameOptions": "Options de jeu",
       "playAgainst": "Jouer contre",
       "human": "Humain",
       "computer": "Ordinateur",
       "margot": "Margot",
-      "botNote": "Le jeu contre l’ordinateur utilise BackgammonAI pour le backgammon anglais et le modèle actuel de Trictrac pour Trictrac classique, Trictrac à écrire, Trictrac combiné, Toc et Toccategli.",
+      "botNote": "Le jeu contre l’ordinateur est disponible seulement lorsqu’un champion ML accepté existe pour le jeu sélectionné.",
       "enter": "Rejoindre la table",
       "multiSeatEnter": "Entrer à la table multisiège"
     },
@@ -911,6 +926,12 @@ const LOCALE_OVERRIDES = {
       "soundOffTitle": "Couper les sons",
       "soundOffLockedTitle": "Couper les sons. L’audio reprendra au prochain clic ou à la prochaine touche.",
       "soundOnTitle": "Activer les sons",
+      "bgmUnavailable": "Musique indisponible",
+      "bgmOn": "Musique activée",
+      "bgmOff": "Musique coupée",
+      "bgmUnavailableTitle": "La musique d’ambiance n’est pas disponible dans ce navigateur",
+      "bgmOffTitle": "Couper la musique d’ambiance",
+      "bgmOnTitle": "Lire la musique d’ambiance",
       "pack": "Pack sonore",
       "packTitle": "Choisir un pack sonore",
       "rules": "Règles"
@@ -1128,13 +1149,14 @@ const LOCALE_OVERRIDES = {
       "multiSeatStatus": "Status",
       "multiSeatStatusNote": "Flödet för flerplatslobbyn håller på att kopplas upp. Du kan avgränsa bordsformatet redan nu, men start av spel är tills vidare avstängt.",
       "moreGames": "Fler spel",
-      "computerNote": "Fler spel är ännu inte tillgängliga mot datorn.",
+      "computerNote": "Datorspel är bara tillgängligt när en godkänd ML-mästare finns tillgänglig.",
       "opponent": "Motståndare",
+      "gameOptions": "Spelalternativ",
       "playAgainst": "Spela mot",
       "human": "Människa",
       "computer": "Dator",
       "margot": "Margot",
-      "botNote": "Spel mot datorn använder BackgammonAI för engelskt backgammon och den aktuella Trictrac-modellen för Trictrac classique, Trictrac à écrire, Trictrac combiné, Toc och Toccategli.",
+      "botNote": "Datorspel är bara tillgängligt när det valda spelet har en godkänd ML-mästare.",
       "enter": "Gå till bordet",
       "multiSeatEnter": "Gå in vid flersätesbordet"
     },
@@ -1224,6 +1246,12 @@ const LOCALE_OVERRIDES = {
       "soundOffTitle": "Stäng av ljud",
       "soundOffLockedTitle": "Stäng av ljud. Ljudet återupptas vid nästa klick eller tangenttryckning.",
       "soundOnTitle": "Slå på ljud",
+      "bgmUnavailable": "Musik är inte tillgänglig",
+      "bgmOn": "Musik på",
+      "bgmOff": "Musik av",
+      "bgmUnavailableTitle": "Bakgrundsmusik är inte tillgänglig i den här webbläsaren",
+      "bgmOffTitle": "Stäng av bakgrundsmusik",
+      "bgmOnTitle": "Spela bakgrundsmusik",
       "matchOptions": "Matchalternativ",
       "startMatch": "Starta match",
       "pregame": "Före spelet",
@@ -1458,13 +1486,14 @@ const LOCALE_OVERRIDES = {
       "multiSeatStatus": "Status",
       "multiSeatStatusNote": "Flowet til flersæde-lobbyen er ved at blive koblet på. Du kan allerede afgrænse bordformatet nu, men start af spil er foreløbig slået fra.",
       "moreGames": "Flere spil",
-      "computerNote": "Flere spil er endnu ikke tilgængelige mod computeren.",
+      "computerNote": "Spil mod computeren er kun tilgængeligt, når en godkendt ML-mester er tilgængelig.",
       "opponent": "Modstander",
+      "gameOptions": "Spilindstillinger",
       "playAgainst": "Spil mod",
       "human": "Menneske",
       "computer": "Computer",
       "margot": "Margot",
-      "botNote": "Spil mod computeren bruger BackgammonAI til engelsk backgammon og den aktuelle Trictrac-model til Trictrac classique, Trictrac à écrire, Trictrac combiné, Toc og Toccategli.",
+      "botNote": "Spil mod computeren er kun tilgængeligt, når det valgte spil har en godkendt ML-mester.",
       "enter": "Gå til bordet",
       "multiSeatEnter": "Gå til flersædebord"
     },
@@ -1554,6 +1583,12 @@ const LOCALE_OVERRIDES = {
       "soundOffTitle": "Slå lyd fra",
       "soundOffLockedTitle": "Slå lyd fra. Lyden genoptages ved næste klik eller tastetryk.",
       "soundOnTitle": "Slå lyd til",
+      "bgmUnavailable": "Musik er ikke tilgængelig",
+      "bgmOn": "Musik til",
+      "bgmOff": "Musik fra",
+      "bgmUnavailableTitle": "Baggrundsmusik er ikke tilgængelig i denne browser",
+      "bgmOffTitle": "Slå baggrundsmusik fra",
+      "bgmOnTitle": "Afspil baggrundsmusik",
       "matchOptions": "Matchindstillinger",
       "startMatch": "Start match",
       "pregame": "Før spillet",
@@ -2037,9 +2072,40 @@ export function syncLanguageSelects() {
   });
 }
 
+export function rulesUrlWithLanguage(href, language = currentLanguage) {
+  const normalized = normalizeLanguage(language);
+
+  try {
+    const base =
+      typeof window !== "undefined" && window.location?.origin
+        ? window.location.origin
+        : "http://localhost";
+    const url = new URL(href || "/rules", base);
+    url.searchParams.set("lang", normalized);
+
+    if (typeof window !== "undefined" && url.origin === window.location.origin) {
+      return `${url.pathname}${url.search}${url.hash}`;
+    }
+
+    return url.toString();
+  } catch (_error) {
+    const separator = String(href || "/rules").includes("?") ? "&" : "?";
+    return `${href || "/rules"}${separator}lang=${encodeURIComponent(normalized)}`;
+  }
+}
+
+export function syncRulesLanguageLinks(root = document) {
+  root.querySelectorAll("[data-rules-language-link]").forEach((link) => {
+    const baseHref = link.dataset.rulesBaseHref || link.getAttribute("href") || "/rules";
+    link.dataset.rulesBaseHref = baseHref;
+    link.setAttribute("href", rulesUrlWithLanguage(baseHref));
+  });
+}
+
 export function localizeStaticPage(root = document) {
   applyDocumentLanguage();
   syncLanguageSelects();
+  syncRulesLanguageLinks(root);
 
   root.querySelectorAll("[data-i18n]").forEach((element) => {
     element.textContent = t(element.dataset.i18n);

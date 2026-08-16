@@ -71,17 +71,23 @@ end
 
 bridge_scope_slot(mode::Symbol) = mode == :shared ? 0 : bridge_worker_slot()
 
-function bridge_erl_flags()
+function bridge_erl_flags(spec = nothing)
   haskey(ENV, "ERL_FLAGS") && return nothing
   if haskey(ENV, BRIDGE_ERL_FLAGS_ENV)
     flags = strip(ENV[BRIDGE_ERL_FLAGS_ENV])
     return isempty(flags) ? nothing : flags
   end
-  return configured_bridge_mode() == :worker ? "+S 2:2" : nothing
+  if configured_bridge_mode() == :worker
+    # Toccategli's higher tactical horizons already fan out across the outer
+    # self-play workers. One scheduler per bridge bounds each daemon's peak
+    # allocation without changing which tactical lines are evaluated.
+    return !isnothing(spec) && spec.variant_id == "toccategli" ? "+S 1:1" : "+S 2:2"
+  end
+  return nothing
 end
 
-function apply_bridge_runtime_env(cmd::Cmd)
-  flags = bridge_erl_flags()
+function apply_bridge_runtime_env(cmd::Cmd, spec = nothing)
+  flags = bridge_erl_flags(spec)
   isnothing(flags) && return cmd
   env = copy(ENV)
   env["ERL_FLAGS"] = flags
@@ -126,6 +132,11 @@ function bridge_paths(spec)
 end
 
 function daemon_script_path(spec)
+  if hasproperty(spec, :variant_id) &&
+     spec.variant_id in ("backgammon", "tapa", "jacquet", "garanguet", "tavli", "brade")
+    return joinpath(spec.repo_root, "priv", "training", "race_bridge_daemon.exs")
+  end
+
   return joinpath(spec.repo_root, "priv", "training", "trictrac_bridge_daemon.exs")
 end
 
@@ -184,7 +195,7 @@ function native_elixir_bridge_command(
   end
   push!(args, String(script))
   append!(args, extra_args)
-  return apply_bridge_runtime_env(Cmd(Cmd(args), dir = spec.repo_root))
+  return apply_bridge_runtime_env(Cmd(Cmd(args), dir = spec.repo_root), spec)
 end
 
 function repo_compile_signature(spec)
@@ -244,7 +255,7 @@ function bridge_stdio_command(spec)
       push!(args, "-pa", path)
     end
     push!(args, spec.bridge_script)
-    return apply_bridge_runtime_env(Cmd(Cmd(args), dir = spec.repo_root))
+    return apply_bridge_runtime_env(Cmd(Cmd(args), dir = spec.repo_root), spec)
   end
 
   native = native_elixir_bridge_command(spec, spec.bridge_script)
@@ -253,7 +264,8 @@ function bridge_stdio_command(spec)
   rel_script = relpath(spec.bridge_script, spec.repo_root)
   ensure_mix_compiled!(spec)
   return apply_bridge_runtime_env(
-    Cmd(`mix run --no-start --no-compile --no-deps-check $rel_script`, dir = spec.repo_root)
+    Cmd(`mix run --no-start --no-compile --no-deps-check $rel_script`, dir = spec.repo_root),
+    spec
   )
 end
 
@@ -273,7 +285,7 @@ function bridge_daemon_command(spec, paths)
       push!(args, "-pa", path)
     end
     append!(args, [script, paths.socket, paths.ready, paths.pid])
-    return apply_bridge_runtime_env(Cmd(Cmd(args), dir = spec.repo_root))
+    return apply_bridge_runtime_env(Cmd(Cmd(args), dir = spec.repo_root), spec)
   end
 
   native = native_elixir_bridge_command(spec, script, String[paths.socket, paths.ready, paths.pid])
@@ -281,10 +293,13 @@ function bridge_daemon_command(spec, paths)
 
   rel_script = relpath(script, spec.repo_root)
   ensure_mix_compiled!(spec)
-  return apply_bridge_runtime_env(Cmd(
-    `mix run --no-start --no-compile --no-deps-check $rel_script -- $(paths.socket) $(paths.ready) $(paths.pid)`,
-    dir = spec.repo_root
-  ))
+  return apply_bridge_runtime_env(
+    Cmd(
+      `mix run --no-start --no-compile --no-deps-check $rel_script -- $(paths.socket) $(paths.ready) $(paths.pid)`,
+      dir = spec.repo_root
+    ),
+    spec
+  )
 end
 
 function BridgeConnection(io::IO)
@@ -560,11 +575,19 @@ function ensure_daemon_running!(service::BridgeService, spec)
   catch err
     bt = catch_backtrace()
     service.control = nothing
-    service.transport = :stdio
     try
       cleanup_daemon_files!(service)
     catch
     end
+    if configured_bridge_mode() == :worker
+      # A persistent stdio bridge can grow unbounded after a worker socket dies.
+      # Let the caller restart the daemon or abort just this game instead.
+      service.transport = :unknown
+      @warn "Bridge daemon launch or handshake failed in worker mode; retrying the native daemon instead of falling back to stdio." exception = (err, bt) state_dir = service.state_dir
+      rethrow()
+    end
+
+    service.transport = :stdio
     if configured_bridge_mode() != :stdio
       @warn "Bridge daemon launch or handshake failed; falling back to stdio for now." exception = (err, bt) state_dir = service.state_dir
     end
@@ -665,10 +688,14 @@ function bridge_request!(service::BridgeService, spec, payload::Dict{String, Any
       end
 
       reset_daemon_connections!(service)
-      try
-        return request!(ensure_control_connection!(service, spec), payload)
-      catch
-        return request!(ensure_stdio_fallback!(service, spec), payload)
+      if configured_bridge_mode() == :worker
+        return daemon_control_request!(service, spec, payload)
+      else
+        try
+          return request!(ensure_control_connection!(service, spec), payload)
+        catch
+          return request!(ensure_stdio_fallback!(service, spec), payload)
+        end
       end
     end
   end
@@ -965,35 +992,22 @@ function flush_pending_step_batch!(
 end
 
 function dispatch_failed_step_batch!(service::BridgeService, spec, pending, last_error, last_backtrace)
-  if configured_bridge_mode() == :shared
-    if last_error !== nothing
-      @warn "Bridge daemon step_batch failed; retrying this batch as individual daemon step requests." exception = (last_error, last_backtrace) state_dir = service.state_dir batch_items = length(pending)
-    end
-
-    try
-      reset_daemon_connections!(service)
-    catch
-    end
-
-    for request in pending
-      try
-        put!(request.reply_channel, daemon_step_request!(service, spec, request.payload))
-      catch err
-        put!(request.reply_channel, err)
-      end
-    end
-
-    return nothing
-  end
-
   if last_error !== nothing
-    @warn "Bridge daemon step_batch failed; using stdio fallback for this batch." exception = (last_error, last_backtrace) state_dir = service.state_dir batch_items = length(pending)
+    mode = configured_bridge_mode()
+    message = mode == :worker ?
+      "Bridge daemon step_batch failed in worker mode; restarting the daemon and retrying requests individually." :
+      "Bridge daemon step_batch failed; retrying this batch as individual daemon step requests."
+    @warn message exception = (last_error, last_backtrace) state_dir = service.state_dir batch_items = length(pending)
   end
 
-  fallback = ensure_stdio_fallback!(service, spec)
+  try
+    reset_daemon_connections!(service)
+  catch
+  end
+
   for request in pending
     try
-      put!(request.reply_channel, request!(fallback, request.payload))
+      put!(request.reply_channel, daemon_step_request!(service, spec, request.payload))
     catch err
       put!(request.reply_channel, err)
     end

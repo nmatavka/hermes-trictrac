@@ -1,4 +1,5 @@
 import "../css/app.css";
+import "../css/rules_corporate.css";
 import "phoenix_html"
 import socket from "./socket";
 import gameInit from "./HermesTrictracApp";
@@ -19,8 +20,10 @@ import DiceRed5 from "../static/images/6besh/dice_red5.png";
 import DiceRed6 from "../static/images/6besh/dice_red6.png";
 import {
   attachLanguageControls,
+  getLanguage,
   localizeError,
   localizeStaticPage,
+  setLanguage,
   subscribeLanguage,
   t,
   tx
@@ -89,6 +92,10 @@ function initLobbyForm() {
   const humanOnlyVariants = form.querySelector("[data-human-only-variants]");
   const computerVariantsNote = form.querySelector("[data-computer-variants-note]");
   const margotOptions = form.querySelector("[data-margot-options]");
+  const tavliChoices = Array.from(form.querySelectorAll("[data-tavli-choice]"));
+  const tavliOptions = form.querySelector("[data-tavli-options]");
+  const tavliSequence = form.querySelector("[data-tavli-sequence]");
+  const tavliVariant = form.querySelector("[data-tavli-variant]");
   const modePanels = Array.from(form.querySelectorAll("[data-mode-panel]"));
   const growingPotConfig = Array.from(form.querySelectorAll("[data-growing-pot-config]"));
   const pouleGrowingConfig = Array.from(form.querySelectorAll("[data-poule-growing-config]"));
@@ -112,6 +119,12 @@ function initLobbyForm() {
   const multiSeatSessionKind = () => checkedMultiSeatVariant()?.dataset.sessionKind || "poule";
   const multiSeatStyle = () => checkedMultiSeatVariant()?.dataset.pouleStyle || "growing_pot";
   const firstComputerVariant = () => headToHeadVariantChoices.find((choice) => choice.dataset.computerBot);
+  const tavliEnabled = () => tavliChoices.find((choice) => choice.checked)?.value === "true";
+  const setTavliEnabled = (enabled) => {
+    const choice = tavliChoices.find((input) => (input.value === "true") === enabled);
+    if (choice) choice.checked = true;
+  };
+  let lastManualVariant = checkedHeadToHeadVariant()?.value || "backgammon";
 
   const syncLobbyForm = () => {
     const multiSeatMode = checkedPlayMode() === "multi_seat";
@@ -237,9 +250,28 @@ function initLobbyForm() {
       });
     });
 
+    let compositeTavli = tavliEnabled();
     const computerMode = checkedOpponent() === "computer";
+    let selectedVariant = checkedHeadToHeadVariant();
+    let tavliEligible = selectedVariant?.dataset.tavliMember === "true";
 
-    if (computerMode && !checkedHeadToHeadVariant()?.dataset.computerBot) {
+    if (!compositeTavli) {
+      lastManualVariant = selectedVariant?.value || lastManualVariant;
+    }
+
+    if (compositeTavli && !tavliEligible) {
+      setTavliEnabled(false);
+      compositeTavli = false;
+    }
+
+    if (computerMode && compositeTavli && !tavliVariant?.dataset.computerBot) {
+      setTavliEnabled(false);
+      compositeTavli = false;
+      const restored = headToHeadVariantChoices.find((choice) => choice.value === lastManualVariant);
+      if (restored) restored.checked = true;
+    }
+
+    if (computerMode && !compositeTavli && !checkedHeadToHeadVariant()?.dataset.computerBot) {
       const fallback = firstComputerVariant();
 
       if (fallback) {
@@ -247,31 +279,51 @@ function initLobbyForm() {
       }
     }
 
-    const selectedVariant = checkedHeadToHeadVariant();
-    const selectedBot = computerMode ? selectedVariant?.dataset.computerBot || "" : "";
+    selectedVariant = checkedHeadToHeadVariant();
+    tavliEligible = selectedVariant?.dataset.tavliMember === "true";
+    const selectedBot = computerMode
+      ? compositeTavli
+        ? tavliVariant?.dataset.computerBot || ""
+        : selectedVariant?.dataset.computerBot || ""
+      : "";
 
     if (variantInput) {
-      variantInput.value = selectedVariant?.value || "backgammon";
+      variantInput.value = compositeTavli ? tavliVariant?.dataset.tavliVariant || "tavli" : selectedVariant?.value || "backgammon";
     }
 
     form.classList.toggle("computer-mode", computerMode);
+    form.classList.toggle("tavli-active", compositeTavli);
 
     if (botInput) {
       botInput.value = selectedBot;
     }
 
     headToHeadVariantChoices.forEach((choice) => {
-      const disabled = computerMode && !choice.dataset.computerBot;
+      const unavailableForComputer = !compositeTavli && computerMode && !choice.dataset.computerBot;
+      const disabled = compositeTavli || unavailableForComputer;
       choice.disabled = disabled;
-      choice.closest(".variant-option")?.classList.toggle("variant-option-disabled", disabled);
+      const option = choice.closest(".variant-option");
+      option?.classList.toggle("variant-option-disabled", unavailableForComputer);
+      option?.classList.toggle("variant-option-tavli-inert", compositeTavli);
+      option?.classList.toggle(
+        "variant-option-tavli-member",
+        compositeTavli && choice.dataset.tavliMember === "true"
+      );
     });
 
-    if (humanOnlyVariants) {
-      humanOnlyVariants.hidden = computerMode;
+    if (tavliOptions) {
+      tavliOptions.hidden = multiSeatMode || !tavliEligible;
+      tavliOptions.querySelectorAll("input").forEach((input) => {
+        input.disabled = multiSeatMode || !tavliEligible || (computerMode && input.value === "true" && !tavliVariant?.dataset.computerBot);
+      });
+    }
 
-      if (computerMode) {
-        humanOnlyVariants.open = false;
-      }
+    if (tavliSequence) {
+      tavliSequence.hidden = !compositeTavli;
+    }
+
+    if (humanOnlyVariants) {
+      humanOnlyVariants.hidden = false;
     }
 
     if (computerVariantsNote) {
@@ -279,7 +331,12 @@ function initLobbyForm() {
     }
 
     if (margotOptions) {
-      margotOptions.hidden = !(computerMode && selectedBot === "trictrac_zero");
+      const hidden = compositeTavli || !(computerMode && selectedBot === "trictrac_zero");
+      margotOptions.hidden = hidden;
+      margotOptions.querySelectorAll("input").forEach((input) => {
+        input.disabled = hidden;
+        if (hidden && input.value === "no") input.checked = true;
+      });
     }
 
     if (submitButton) {
@@ -289,7 +346,24 @@ function initLobbyForm() {
 
   playModeChoices.forEach((choice) => choice.addEventListener("change", syncLobbyForm));
   opponentChoices.forEach((choice) => choice.addEventListener("change", syncLobbyForm));
-  headToHeadVariantChoices.forEach((choice) => choice.addEventListener("change", syncLobbyForm));
+  headToHeadVariantChoices.forEach((choice) =>
+    choice.addEventListener("change", () => {
+      lastManualVariant = choice.value;
+      setTavliEnabled(false);
+      syncLobbyForm();
+    })
+  );
+  tavliChoices.forEach((choice) =>
+    choice.addEventListener("change", () => {
+      if (tavliEnabled()) {
+        lastManualVariant = checkedHeadToHeadVariant()?.value || lastManualVariant;
+      } else {
+        const restored = headToHeadVariantChoices.find((input) => input.value === lastManualVariant);
+        if (restored) restored.checked = true;
+      }
+      syncLobbyForm();
+    })
+  );
   multiSeatVariantChoices.forEach((choice) => choice.addEventListener("change", syncLobbyForm));
 
   blueskyLoginButton?.addEventListener("click", () => {
@@ -326,6 +400,9 @@ function initModelLab() {
   const dieControls = [die1Control, die2Control].filter(Boolean);
   const turnSelect = root.querySelector("[data-model-lab-turn]");
   const directionSelect = root.querySelector("[data-model-lab-black-direction]");
+  const bradeMatchControl = root.querySelector("[data-model-lab-brade-match-length]");
+  const bradeMatchContainer = root.querySelector("[data-model-lab-brade-match]");
+  const bradeHistoryNote = root.querySelector("[data-model-lab-brade-note]");
   const editorColorInputs = root.querySelectorAll("[data-model-lab-editor-color]");
   const status = root.querySelector("[data-model-lab-status]");
   const board = root.querySelector("[data-model-lab-board]");
@@ -341,12 +418,32 @@ function initModelLab() {
   const selectedBlackDirection = () => directionSelect?.value || selectedModel()?.black_direction || "toward_1";
   const selectedModelUsesBar = () => selectedModel()?.uses_bar === true;
 
+  if (!preferredModel) {
+    root.querySelectorAll("[data-model-lab-load], [data-model-lab-run]").forEach((control) => {
+      control.disabled = true;
+    });
+    if (status) {
+      status.textContent = "No accepted ML champion is available yet.";
+    }
+    return;
+  }
+
   const syncDirectionToSelectedModel = () => {
     if (!directionSelect) {
       return;
     }
 
     directionSelect.value = selectedModel()?.black_direction || "toward_1";
+    const fixedDirection = selectedModel()?.fixed_black_direction === true;
+    directionSelect.disabled = fixedDirection;
+
+    if (bradeMatchContainer) {
+      bradeMatchContainer.hidden = selectedModel()?.kind !== "brade_zero";
+    }
+
+    if (bradeHistoryNote) {
+      bradeHistoryNote.hidden = selectedModel()?.kind !== "brade_zero";
+    }
 
     if (currentPosition) {
       currentPosition.movement_mode = selectedModelMovement();
@@ -364,11 +461,12 @@ function initModelLab() {
 
   const selectedPayload = (runs) => ({
     xgid: xgidInput?.value || "",
-    model: modelSelect?.value || preferredModel?.id || "backgammon_ai",
+    model: modelSelect?.value || preferredModel?.id || "",
     die1: die1Control?.value || "6",
     die2: die2Control?.value || "1",
     turn_color: turnSelect?.value || "from_xgid",
     black_direction: selectedBlackDirection(),
+    brade_match_length: bradeMatchControl?.value || "5",
     runs
   });
 
@@ -542,9 +640,10 @@ function initModelLab() {
     try {
       const payload = await postJson("/dev/model-lab/parse", {
         xgid: xgidInput?.value || "",
-        model: modelSelect?.value || preferredModel?.id || "backgammon_ai",
+        model: modelSelect?.value || preferredModel?.id || "",
         turn_color: turnSelect?.value || "from_xgid",
-        black_direction: selectedBlackDirection()
+        black_direction: selectedBlackDirection(),
+        brade_match_length: bradeMatchControl?.value || "5"
       });
       currentPosition = payload;
 
@@ -621,6 +720,10 @@ function initModelLab() {
     markSettingsChanged(
       `Direction changed: ${directionSummary(selectedModelMovement(), selectedBlackDirection())}. Run the model again.`
     );
+  });
+
+  bradeMatchControl?.addEventListener("change", () => {
+    markSettingsChanged("Bräde match length changed. Run the model again.");
   });
 
   modelSelect?.addEventListener("change", () => {
@@ -1158,9 +1261,46 @@ function renderJoinError(root, { title, detail, hint, retryable = true }) {
   root.replaceChildren(shell);
 }
 
+function initRulesLibraryFilters() {
+  const form = document.querySelector("[data-rules-filter-form]");
+
+  if (!form) {
+    return;
+  }
+
+  try {
+    const url = new URL(window.location.href);
+
+    if (!url.searchParams.has("lang")) {
+      url.searchParams.set("lang", getLanguage());
+      window.location.replace(url.toString());
+      return;
+    }
+
+    setLanguage(url.searchParams.get("lang"));
+  } catch (_error) {
+    // Filtering still works without URL/localStorage niceties.
+  }
+
+  form.querySelectorAll("select").forEach((select) => {
+    select.addEventListener("change", (event) => {
+      if (event.target.name === "lang") {
+        setLanguage(event.target.value);
+      }
+
+      if (typeof form.requestSubmit === "function") {
+        form.requestSubmit();
+      } else {
+        form.submit();
+      }
+    });
+  });
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   attachThemeControls(document);
   attachLanguageControls(document);
+  initRulesLibraryFilters();
   localizeStaticPage(document);
   subscribeLanguage(() => localizeStaticPage(document));
   subscribeTheme(() => syncThemeControls(document));

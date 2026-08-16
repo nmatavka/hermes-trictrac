@@ -123,6 +123,30 @@ defmodule HermesTrictrac.Rules.Engine do
 
   def roll(engine, user, client_id), do: with_actor(engine, user, client_id, :roll, &do_roll/2)
 
+  @doc false
+  # Reserved for the offline training bridge. It bypasses player credentials
+  # but keeps legal-move generation in the production race rules. Normal
+  # games never call this boundary.
+  def roll_for_training(%{variant: %{family: :race}} = engine, color, values)
+      when color in [:white, :black] and is_list(values) do
+    cond do
+      opening_roll_pending?(engine) ->
+        {:error, "Opening teker uses single sampled rolls."}
+
+      engine.turn_color != color ->
+        {:error, "Not this color's turn."}
+
+      true ->
+        with {:ok, runtime} <-
+               RaceCore.roll_with_values(runtime_view(engine), engine.variant, color, values) do
+          {:ok, apply_runtime(engine, runtime)}
+        end
+    end
+  end
+
+  def roll_for_training(_engine, _color, _values),
+    do: {:error, "Forced dice are only supported for race-game training."}
+
   def move(engine, move, user, client_id),
     do: with_actor(engine, user, client_id, :turn, &do_move(&1, &2, move))
 

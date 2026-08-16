@@ -114,7 +114,7 @@ function TricTracSparseNet(gspec::GI.AbstractGameSpec, hyper::TricTracSparseNetH
   )
 
   action_head = Flux.Chain(
-    Flux.Dense(NUM_ACTION_FEATURES, hidden, Flux.relu),
+    Flux.Dense(action_feature_count(gspec), hidden, Flux.relu),
     Flux.Dense(hidden, hidden, Flux.relu)
   )
 
@@ -158,7 +158,7 @@ function TricTracMetalSparseNet(gspec::GI.AbstractGameSpec, hyper::TricTracMetal
   state_head = Flux.Dense(width, latent, Flux.relu)
 
   action_head = Flux.Chain(
-    Flux.Dense(NUM_ACTION_FEATURES, action_hidden, Flux.relu),
+    Flux.Dense(action_feature_count(gspec), action_hidden, Flux.relu),
     Flux.Dense(action_hidden, latent, Flux.relu)
   )
 
@@ -240,12 +240,12 @@ function sparse_policy_batch(gspec::TricTracGameSpec, states::AbstractVector{Tri
   X = Flux.batch([GI.vectorize_state(gspec, state) for state in states])
   actions = [state_catalog_actions(state) for state in states]
   max_actions = isempty(actions) ? 0 : maximum(length, actions)
-  F = zeros(Float32, NUM_ACTION_FEATURES, max_actions, length(states))
+  F = zeros(Float32, action_feature_count(gspec), max_actions, length(states))
   M = zeros(Float32, max_actions, length(states))
 
   for (index, state_actions) in pairs(actions)
     isempty(state_actions) && continue
-    features = legal_action_features(state_actions)
+    features = legal_action_features(gspec, state_actions)
     nactions = size(features, 2)
     F[:, 1:nactions, index] = features
     M[1:nactions, index] .= 1f0
@@ -311,7 +311,7 @@ function AlphaZero.convert_sample(
 
   actions = state_catalog_actions(e.s)
   x = GI.vectorize_state(gspec, e.s)
-  f = legal_action_features(actions)
+  f = legal_action_features(gspec, actions)
   m = ones(Float32, length(actions))
   p = Float32.(e.π)
   v = Float32[e.z]
@@ -329,7 +329,7 @@ function AlphaZero.convert_samples(
   V = convert(AbstractArray{Float32}, Flux.batch([entry.v for entry in ces]))
 
   max_actions = isempty(ces) ? 0 : maximum(size(entry.f, 2) for entry in ces)
-  F = zeros(Float32, NUM_ACTION_FEATURES, max_actions, length(ces))
+  F = zeros(Float32, action_feature_count(gspec), max_actions, length(ces))
   M = zeros(Float32, max_actions, length(ces))
   P = zeros(Float32, max_actions, length(ces))
 

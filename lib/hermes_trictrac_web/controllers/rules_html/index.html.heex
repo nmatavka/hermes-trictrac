@@ -1,26 +1,53 @@
-<.shell return_context={@return_context} query={@query} title="Trictrac Rules Library" subtitle="Three full historical rulebooks, browsable inside the game flow.">
+<.shell
+  return_context={@return_context}
+  query={@query}
+  title="Rules Library"
+  subtitle="Rulebooks filtered by language and game type, browsable inside the game flow."
+  language_options={@language_options}
+  variant_options={@variant_options}
+>
   <section class="rules-section">
-    <div class="rules-books-grid">
-      <%= for book <- @books do %>
-        <article class="rules-book-card">
-          <p class="rules-book-eyebrow"><%= book.site_name %></p>
-          <h2>
-            <a href={RulesLibrary.book_path(book.slug, @nav_context)}><%= book.title %></a>
-          </h2>
-          <p class="rules-book-meta">
-            <%= book.author || book.site_author || "Anonymous" %>
-            · <%= length(book.chapters) %> chapters
-          </p>
-          <p class="rules-book-actions">
-            <a href={RulesLibrary.book_path(book.slug, @nav_context)}>Browse book</a>
-            <%= if book.first_chapter_path do %>
-              <span>·</span>
-              <a href={RulesLibrary.chapter_path(book.slug, book.first_chapter_path, @nav_context)}>Open first chapter</a>
-            <% end %>
-          </p>
-        </article>
-      <% end %>
-    </div>
+    <%= if @books == [] do %>
+      <div class="rules-empty-state">
+        <p>
+          No rulebooks match <strong><%= RulesLibrary.language_label(@return_context.language) %></strong><%= if @return_context.variant_id do %>
+            for <strong><%= RulesLibrary.variant_label(@return_context.variant_id) %></strong><% end %>.
+        </p>
+        <p class="rules-book-actions">
+          <a href={RulesLibrary.library_path(RulesLibrary.clear_variant(@nav_context))}>Clear game filter</a>
+        </p>
+      </div>
+    <% else %>
+      <div class="rules-books-grid">
+        <%= for book <- @books do %>
+          <article class="rules-book-card">
+            <p class="rules-book-eyebrow"><%= book.site_name %></p>
+            <h2>
+              <a href={RulesLibrary.book_path(book.slug, @nav_context)}><%= book.title %></a>
+            </h2>
+            <div class="rules-chip-row" aria-label="Rulebook metadata">
+              <%= for language <- book.languages do %>
+                <span class="rules-chip"><%= RulesLibrary.language_label(language) %></span>
+              <% end %>
+              <%= for variant_id <- book.variant_ids do %>
+                <span class="rules-chip rules-chip-muted"><%= RulesLibrary.variant_label(variant_id) %></span>
+              <% end %>
+            </div>
+            <p class="rules-book-meta">
+              <%= book.author || book.site_author || "Anonymous" %>
+              · <%= length(book.chapters) %> <%= if length(book.chapters) == 1, do: "chapter", else: "chapters" %>
+            </p>
+            <p class="rules-book-actions">
+              <a href={RulesLibrary.book_path(book.slug, @nav_context)}>Browse book</a>
+              <%= if book.first_chapter_path do %>
+                <span>·</span>
+                <a href={RulesLibrary.chapter_path(book.slug, book.first_chapter_path, @nav_context)}>Open first chapter</a>
+              <% end %>
+            </p>
+          </article>
+        <% end %>
+      </div>
+    <% end %>
   </section>
 
   <%= if @query != "" do %>
@@ -32,7 +59,7 @@
 
       <%= if @results == [] do %>
         <div class="rules-empty-state">
-          <p>No matches were found in the imported rules books.</p>
+          <p>No matches were found in the currently visible rulebooks.</p>
         </div>
       <% else %>
         <div class="rules-results-list">

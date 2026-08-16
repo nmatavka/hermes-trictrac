@@ -5,6 +5,104 @@ using AlphaZero
 import AlphaZero.GI
 import AlphaZero.UserInterface
 
+@testset "Bräde AlphaZero track" begin
+  spec = BradeGameSpec()
+  @test spec.variant_id == "brade"
+  @test GI.state_dim(spec) == (24, 1, 64)
+  @test TricTracZero.action_feature_count(spec) == TricTracZero.RACE_NUM_ACTION_FEATURES
+  @test TricTracZero.next_brade_match_length!(spec) == "3"
+  @test TricTracZero.next_brade_match_length!(spec) == "5"
+  @test TricTracZero.next_brade_match_length!(spec) == "7"
+
+  raw = Dict{String, Any}(
+    "runtime_term" => "brade-state",
+    "runtime" => Dict{String, Any}(),
+    "phase" => "move",
+    "terminal" => false,
+    "white_to_play" => false,
+    "legal_actions" => Any[Dict{String, Any}(
+      "type" => "move", "from" => 0, "to" => 23, "die" => 4
+    )]
+  )
+  state = TricTracState(raw)
+  action = only(TricTracZero.state_catalog_actions(state))
+  @test size(TricTracZero.legal_action_features(spec, [action]), 1) ==
+          TricTracZero.RACE_NUM_ACTION_FEATURES
+  bridge_action = TricTracZero.catalog_action_to_bridge_action(action, false)
+  @test bridge_action["from"] == 0
+  @test bridge_action["to"] == 23
+  @test bridge_action["die"] == 4
+
+  runtime = Dict{String, Any}(
+    "match" => Dict{String, Any}(
+      "length" => 5,
+      "score" => Dict{String, Any}("white" => 6, "black" => 0),
+      "winner" => "white"
+    )
+  )
+  @test TricTracZero.brade_match_utility(runtime) == 0.6
+end
+
+@testset "Race-game AlphaZero track" begin
+  for variant_id in ("backgammon", "tapa", "jacquet", "garanguet", "tavli")
+    spec = RaceGameSpec(variant_id)
+    @test spec.variant_id == variant_id
+    @test GI.state_dim(spec) == (24, 1, 64)
+  end
+
+  tavli = RaceGameSpec("tavli")
+  @test tavli_targets(tavli) == ["3", "5", "7", "9"]
+  @test TricTracZero.next_tavli_target!(tavli) == "3"
+  @test TricTracZero.next_tavli_target!(tavli) == "5"
+  @test TricTracZero.next_tavli_target!(tavli) == "7"
+  @test TricTracZero.next_tavli_target!(tavli) == "9"
+
+  # Jacquet actions stay in the engine's physical coordinates.  In particular,
+  # a black move from its diagonal talon remains 11 -> 10, never a mirror.
+  raw = Dict{String, Any}(
+    "runtime_term" => "jacquet-state",
+    "runtime" => Dict{String, Any}(),
+    "phase" => "move",
+    "terminal" => false,
+    "white_to_play" => false,
+    "legal_actions" => Any[Dict{String, Any}(
+      "type" => "move", "from" => 11, "to" => 10, "die" => 1
+    )]
+  )
+  state = TricTracState(raw)
+  action = only(TricTracZero.state_catalog_actions(state))
+  bridge_action = TricTracZero.catalog_action_to_bridge_action(action, false)
+  @test bridge_action["from"] == 11
+  @test bridge_action["to"] == 10
+end
+
+@testset "Trictrac and race action encodings stay isolated" begin
+  classique = TricTracGameSpec()
+  race = RaceGameSpec("jacquet")
+
+  @test TricTracZero.action_feature_count(classique) ==
+          TricTracZero.TRICTRAC_NUM_ACTION_FEATURES
+  @test TricTracZero.action_feature_count(race) == TricTracZero.RACE_NUM_ACTION_FEATURES
+
+  classique_action = TricTracAction(TricTracZero.MOVE_ACTION, Int8(23), Int8(22), Int8(6), Int8(1))
+  race_action = TricTracAction(TricTracZero.MOVE_ACTION, Int8(11), Int8(10), Int8(1), Int8(0))
+
+  @test size(TricTracZero.legal_action_features(classique, [classique_action]), 1) ==
+          TricTracZero.TRICTRAC_NUM_ACTION_FEATURES
+  @test size(TricTracZero.legal_action_features(race, [race_action]), 1) ==
+          TricTracZero.RACE_NUM_ACTION_FEATURES
+  @test_throws ErrorException TricTracZero.legal_action_features(
+                 [race_action],
+                 TricTracZero.TRICTRAC_NUM_ACTION_FEATURES
+               )
+
+  classique_network = TricTracSparseNet(classique, TricTracZero.netparams())
+  race_network = TricTracSparseNet(race, TricTracZero.netparams())
+  @test size(classique_network.action_head[1].weight, 2) ==
+          TricTracZero.TRICTRAC_NUM_ACTION_FEATURES
+  @test size(race_network.action_head[1].weight, 2) == TricTracZero.RACE_NUM_ACTION_FEATURES
+end
+
 include(joinpath(@__DIR__, "..", "scripts", "cpu_config.jl"))
 
 function tactical_off_config()
@@ -981,6 +1079,7 @@ end
   original_mode = get(ENV, "TRICTRAC_ZERO_BRIDGE_MODE", nothing)
   original_erl_flags = get(ENV, "ERL_FLAGS", nothing)
   original_bridge_erl_flags = get(ENV, "TRICTRAC_ZERO_BRIDGE_ERL_FLAGS", nothing)
+  toccategli_spec = TricTracGameSpec(variant_id = "toccategli")
   try
     @test TricTracZero.preferred_bridge_mode(:cpu) == "worker"
     @test TricTracZero.preferred_bridge_mode(:cuda) == "shared"
@@ -990,6 +1089,7 @@ end
     delete!(ENV, "TRICTRAC_ZERO_BRIDGE_ERL_FLAGS")
     ENV["TRICTRAC_ZERO_BRIDGE_MODE"] = "worker"
     @test TricTracZero.bridge_erl_flags() == "+S 2:2"
+    @test TricTracZero.bridge_erl_flags(toccategli_spec) == "+S 1:1"
 
     ENV["TRICTRAC_ZERO_BRIDGE_MODE"] = "shared"
     @test isnothing(TricTracZero.bridge_erl_flags())
@@ -1209,6 +1309,25 @@ end
     @test stats["transport"] == "daemon"
     @test occursin("-s0", stats["state_dir"])
     @test length(TricTracZero.bridge_client(spec).service.step_tasks) == 1
+
+    service = TricTracZero.bridge_client(spec).service
+    game = GI.init(spec)
+    state = GI.current_state(game)
+    roll_action = Dict{String, Any}("type" => "special", "id" => "ROLL")
+    broken_connection = TricTracZero.BridgeConnection(service.socket_path)
+    close(broken_connection)
+    failed_request = TricTracZero.BridgeBatchRequest(
+      TricTracZero.bridge_step_request_key(spec, state, roll_action),
+      TricTracZero.bridge_step_payload(spec, state, roll_action),
+      Channel{Any}(1)
+    )
+
+    TricTracZero.flush_pending_step_batch!(service, spec, [failed_request], broken_connection)
+    recovered = take!(failed_request.reply_channel)
+    @test recovered isa Dict{String, Any}
+    @test recovered["state"]["phase"] == "move"
+    @test service.transport == :daemon
+    @test isnothing(service.fallback)
   finally
     TricTracZero.close_cached_bridges!()
     TricTracZero.clear_step_response_cache!()

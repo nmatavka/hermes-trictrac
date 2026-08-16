@@ -8,7 +8,7 @@ defmodule HermesTrictracWeb.DesktopControllerTest do
 
     assert payload["ok"] == true
     assert payload["app"] == "hermes_trictrac"
-    assert payload["schema_version"] == 1
+    assert payload["schema_version"] == 3
     assert is_list(payload["local_variant_ids"])
     assert is_list(payload["online_variant_ids"])
     assert "backgammon" in payload["local_variant_ids"]
@@ -20,7 +20,7 @@ defmodule HermesTrictracWeb.DesktopControllerTest do
 
     payload = json_response(conn, 200)
 
-    assert payload["schema_version"] == 1
+    assert payload["schema_version"] == 3
     assert is_list(payload["variants"])
 
     backgammon =
@@ -29,6 +29,12 @@ defmodule HermesTrictracWeb.DesktopControllerTest do
       end)
 
     assert backgammon["local_playable"] == true
-    assert backgammon["local_ai"]["kind"] == "backgammon_ai"
+    assert backgammon["local_ai"]["kind"] == "backgammon_zero"
+    assert backgammon["local_ai"]["available"] == false
+    assert backgammon["menu_section"] == "primary"
+
+    tavli = Enum.find(payload["variants"], &(&1["id"] == "tavli"))
+    assert tavli["selection_mode"] == "composite"
+    assert tavli["members"] == ["backgammon", "tapa", "jacquet"]
   end
 end
