@@ -6,8 +6,9 @@ import forcefulElectroHouse from "../static/sounds/music/05 Forceful Electro Hou
 import livelyElectroHouse from "../static/sounds/music/06 Lively Electro House.mp3";
 import motivationalElectroHouse from "../static/sounds/music/07 Motivational Electro House.mp3";
 import strongElectroHouse from "../static/sounds/music/08 Strong Electro House.mp3";
+import { createPersistentBgmController } from "./bgm_controller.mjs";
 
-const TRACKS = [
+export const BGM_TRACKS = [
   anthemicElectroHouse,
   boldElectroHouse,
   catchyElectroHouse,
@@ -19,79 +20,20 @@ const TRACKS = [
 ];
 
 const MUSIC_VOLUME = 0.18;
+let sharedController = null;
 
-export function createBgmController() {
-  const supported = typeof Audio === "function";
-  const listeners = new Set();
-  let audio = null;
-  let enabled = false;
-  let trackIndex = 0;
+export function createBgmController(options = {}) {
+  return createPersistentBgmController({
+    tracks: BGM_TRACKS,
+    volume: MUSIC_VOLUME,
+    ...options
+  });
+}
 
-  const snapshot = () => ({ enabled, supported });
-  const notify = () => listeners.forEach((listener) => listener(snapshot()));
+export function getBgmController() {
+  if (!sharedController) {
+    sharedController = createBgmController();
+  }
 
-  const play = () => {
-    if (!audio || !enabled) {
-      return;
-    }
-
-    audio.play().catch(() => {
-      enabled = false;
-      notify();
-    });
-  };
-
-  const loadTrack = () => {
-    if (!audio) {
-      return;
-    }
-
-    audio.src = TRACKS[trackIndex];
-    audio.load();
-    play();
-  };
-
-  const ensureAudio = () => {
-    if (audio || !supported) {
-      return;
-    }
-
-    audio = new Audio(TRACKS[trackIndex]);
-    audio.preload = "metadata";
-    audio.volume = MUSIC_VOLUME;
-    audio.addEventListener("ended", () => {
-      trackIndex = (trackIndex + 1) % TRACKS.length;
-      loadTrack();
-    });
-  };
-
-  return {
-    getSnapshot: snapshot,
-    setEnabled(nextEnabled) {
-      enabled = !!nextEnabled;
-
-      if (!enabled) {
-        audio?.pause();
-        if (audio) {
-          audio.currentTime = 0;
-        }
-        notify();
-        return;
-      }
-
-      ensureAudio();
-      play();
-      notify();
-    },
-    subscribe(listener) {
-      listeners.add(listener);
-      listener(snapshot());
-      return () => listeners.delete(listener);
-    },
-    destroy() {
-      audio?.pause();
-      audio = null;
-      listeners.clear();
-    }
-  };
+  return sharedController;
 }

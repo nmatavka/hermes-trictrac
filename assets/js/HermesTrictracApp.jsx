@@ -17,7 +17,7 @@ import {
   variantTitle
 } from "./i18n";
 import { SOUND_PACK_OPTIONS, createSoundController } from "./sound";
-import { createBgmController } from "./bgm";
+import { getBgmController } from "./bgm";
 import { cycleTheme, getTheme, subscribeTheme } from "./theme";
 import BoardWood from "../static/images/6besh/board-wood.jpg";
 import CheckerGreen from "../static/images/6besh/checker-green.png";
@@ -1224,7 +1224,7 @@ function HermesTrictracApp({ channel, initialGame, player, viewer: initialViewer
   }
 
   if (!bgmControllerRef.current) {
-    bgmControllerRef.current = createBgmController();
+    bgmControllerRef.current = getBgmController();
   }
 
   const [game, setGame] = useState(initialGame);
@@ -1356,10 +1356,10 @@ function HermesTrictracApp({ channel, initialGame, player, viewer: initialViewer
   useEffect(() => {
     const controller = bgmControllerRef.current;
     const unsubscribe = controller.subscribe(setBgmState);
+    controller.start();
 
     return () => {
       unsubscribe();
-      controller.destroy();
     };
   }, []);
 
@@ -1822,15 +1822,18 @@ function SoundToggle({ state, onToggle }) {
 }
 
 function BgmToggle({ state, onToggle }) {
-  const label = !state.supported
+  const unavailable = !state.supported || !state.available;
+  const label = unavailable
     ? t("game.bgmUnavailable")
     : state.enabled
       ? t("game.bgmOn")
       : t("game.bgmOff");
-  const title = !state.supported
+  const title = unavailable
     ? t("game.bgmUnavailableTitle")
     : state.enabled
-      ? t("game.bgmOffTitle")
+      ? state.awaitingInteraction
+        ? t("game.bgmAwaitingTitle")
+        : t("game.bgmOffTitle")
       : t("game.bgmOnTitle");
 
   return (
@@ -1838,7 +1841,7 @@ function BgmToggle({ state, onToggle }) {
       type="button"
       className="sound-toggle bgm-toggle"
       onClick={onToggle}
-      disabled={!state.supported}
+      disabled={unavailable}
       aria-pressed={state.enabled}
       title={title}
     >

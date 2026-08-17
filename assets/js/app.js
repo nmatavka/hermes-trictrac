@@ -28,6 +28,7 @@ import {
   t,
   tx
 } from "./i18n";
+import { getBgmController } from "./bgm";
 import { attachThemeControls, subscribeTheme, syncThemeControls } from "./theme";
 
 const MODEL_LAB_CHECKER_IMAGES = {
@@ -74,6 +75,62 @@ const MULTIPLAYER_VARIANT_IDS = new Set([
   "trictrac_combine_chouette",
   "trictrac_combine_deux_contre_deux"
 ]);
+
+function bgmTogglePresentation(state) {
+  const unavailable = !state.supported || !state.available;
+
+  if (unavailable) {
+    return {
+      label: t("game.bgmUnavailable"),
+      title: t("game.bgmUnavailableTitle"),
+      disabled: true
+    };
+  }
+
+  if (!state.enabled) {
+    return {
+      label: t("game.bgmOff"),
+      title: t("game.bgmOnTitle"),
+      disabled: false
+    };
+  }
+
+  return {
+    label: t("game.bgmOn"),
+    title: state.awaitingInteraction ? t("game.bgmAwaitingTitle") : t("game.bgmOffTitle"),
+    disabled: false
+  };
+}
+
+function initBgmMenuControl() {
+  const toggles = Array.from(document.querySelectorAll("[data-bgm-toggle]"));
+
+  if (toggles.length === 0) {
+    return;
+  }
+
+  const controller = getBgmController();
+  const render = (state) => {
+    const presentation = bgmTogglePresentation(state);
+
+    toggles.forEach((toggle) => {
+      toggle.textContent = presentation.label;
+      toggle.title = presentation.title;
+      toggle.disabled = presentation.disabled;
+      toggle.setAttribute("aria-pressed", state.enabled ? "true" : "false");
+    });
+  };
+
+  controller.subscribe(render);
+  controller.start();
+  subscribeLanguage(() => render(controller.getSnapshot()));
+
+  toggles.forEach((toggle) => {
+    toggle.addEventListener("click", () => {
+      controller.setEnabled(!controller.getSnapshot().enabled);
+    });
+  });
+}
 
 function initLobbyForm() {
   const form = document.querySelector("[data-lobby-form]");
@@ -1304,6 +1361,7 @@ document.addEventListener("DOMContentLoaded", () => {
   localizeStaticPage(document);
   subscribeLanguage(() => localizeStaticPage(document));
   subscribeTheme(() => syncThemeControls(document));
+  initBgmMenuControl();
   initLobbyForm();
   initModelLab();
 

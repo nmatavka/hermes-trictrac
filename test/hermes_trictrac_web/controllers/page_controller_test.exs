@@ -14,6 +14,10 @@ defmodule HermesTrictracWeb.PageControllerTest do
     assert body =~ ~s(href="/rules")
     assert body =~ ~s(data-rules-language-link)
     assert body =~ ">Rules<"
+    assert body =~ ~s(data-bgm-toggle)
+    assert body =~ ~s(aria-pressed="true")
+    assert body =~ ~s(title="Turn background music off")
+    assert body =~ "Music On"
     assert body =~ "Lobby Name"
     assert body =~ "User Name"
     assert body =~ "Head-to-head"

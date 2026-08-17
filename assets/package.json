@@ -2,6 +2,9 @@
   "name": "hermes-trictrac-assets",
   "private": true,
   "license": "MIT",
+  "scripts": {
+    "test:bgm": "node --test test/bgm_controller.test.mjs"
+  },
   "dependencies": {
     "classnames": "^2.5.1",
     "phoenix": "file:../deps/phoenix",
