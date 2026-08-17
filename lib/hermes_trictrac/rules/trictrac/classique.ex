@@ -2,6 +2,7 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique do
   alias HermesTrictrac.Rules.Trictrac.Classique.{
     Branches,
     Events,
+    Events.Remplissage,
     Moves,
     Opening,
     Scoring,
@@ -23,6 +24,16 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique do
       trictrac.opening
       |> Opening.remember_first_throw(color, dice)
       |> update_in([:coups_by_type, color], &((&1 || 0) + 1))
+      |> put_in(
+        [:double_seen_by_type, color],
+        (get_in(trictrac.opening, [:double_seen_by_type, color]) || false) or State.double?(dice)
+      )
+
+    {opening_events, opening} =
+      opening_roll_events(opening, board, variant, color, dice, branches_info)
+
+    fill_candidates = Remplissage.roll_candidates(board, variant, color, dice)
+    fill_events = Remplissage.roll_events(variant, color, dice, fill_candidates)
 
     trictrac
     |> Map.put(:opening, opening)
@@ -41,6 +52,8 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique do
           white: State.trous_for(trictrac, :white),
           black: State.trous_for(trictrac, :black)
         },
+        events: opening_events ++ fill_events,
+        fill_candidates: fill_candidates,
         start_board: board,
         dice: dice
     })
@@ -51,10 +64,16 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique do
     turn = trictrac.turn || State.turn_state()
     dice = turn.dice || %{values: [], moves: [], moves_left: [], moves_played: []}
     start_board = turn.start_board || board
-    analysis = Events.detect_turn_events(start_board, board, variant, color, dice, trictrac)
+
+    analysis =
+      Events.detect_turn_events(start_board, board, variant, color, dice, trictrac,
+        fill_candidates: turn.fill_candidates || []
+      )
+
+    events = analysis.events
 
     trictrac =
-      Enum.reduce(analysis.events, trictrac, fn event, acc ->
+      Enum.reduce(events, trictrac, fn event, acc ->
         beneficiary = beneficiary_atom(event.beneficiary)
 
         Scoring.apply_points(
@@ -83,8 +102,9 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique do
 
     trictrac
     |> put_in([:opening], analysis.opening)
-    |> put_in([:turn, :events], analysis.events)
+    |> put_in([:turn, :events], events)
     |> put_in([:turn, :obligations], analysis.obligations)
+    |> put_in([:turn, :fill_candidates], turn.fill_candidates || [])
     |> put_in([:turn, :conservation_candidates], analysis.conservation_candidates)
     |> put_in([:turn, :pile_misere_candidate], analysis.pile_misere_candidate)
     |> put_in([:turn, :pile_misere_pending], analysis.pile_misere_pending)
@@ -93,8 +113,8 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique do
     |> put_in([:turn, :can_reprise], can_reprise)
     |> put_in([:turn, :reprise_color], reprise_color)
     |> Scoring.maybe_record_sortie_event(color, turn_number)
-    |> Map.put(:last_event_rules, Enum.map(analysis.events, &State.event_rule/1))
-    |> Map.put(:last_events, Enum.map(analysis.events, &State.event_label/1))
+    |> Map.put(:last_event_rules, Enum.map(events, &State.event_rule/1))
+    |> Map.put(:last_events, Enum.map(events, &State.event_label/1))
   end
 
   def destination_forbidden_by_jan_interdit?(board, variant, color, destination),
@@ -105,7 +125,11 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique do
     turn = trictrac.turn || State.turn_state()
     start_board = turn.start_board || board
     dice = turn.dice || %{values: [], moves: [], moves_left: [], moves_played: []}
-    analysis = Events.detect_turn_events(start_board, board, variant, color, dice, trictrac)
+
+    analysis =
+      Events.detect_turn_events(start_board, board, variant, color, dice, trictrac,
+        fill_candidates: turn.fill_candidates || []
+      )
 
     cond do
       not Validation.coin_rest_satisfied?(board, variant, color) ->
@@ -158,6 +182,31 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique do
         )
 
   def legal_moves(runtime, variant, color), do: Moves.legal_moves(runtime, variant, color)
+
+  defp opening_roll_events(opening, _board, %{id: "plein"}, _color, _dice, _branches_info),
+    do: {[], opening}
+
+  defp opening_roll_events(opening, board, variant, color, dice, branches_info) do
+    depart_done =
+      get_in(opening, [:depart_done_by_type, color]) ||
+        %{two_tables: false, meseas: false, six_tables: false}
+
+    {events, depart_done} =
+      Opening.detect_coin_jans(
+        [],
+        board,
+        board,
+        color,
+        dice,
+        opening.coups_by_type[color],
+        depart_done,
+        variant,
+        branches_info,
+        get_in(opening, [:double_seen_by_type, color]) || false
+      )
+
+    {events, put_in(opening, [:depart_done_by_type, color], depart_done)}
+  end
 
   defp beneficiary_atom("white"), do: :white
   defp beneficiary_atom("black"), do: :black

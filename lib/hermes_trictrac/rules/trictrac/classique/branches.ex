@@ -14,6 +14,23 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Branches do
     }
   end
 
+  @doc """
+  Enumerates the maximum-usage legal terminal branches for one Trictrac turn.
+
+  Unlike `best_end_branches/4`, each branch retains the legal moves that led to
+  its terminal board.  Scoring rules that are decided from a virtual play of
+  the dice (notably remplissage) use this so their possibilities cannot drift
+  from the production move generator.
+  """
+  def best_turn_branches(board, variant, color, dice) do
+    branches = enumerate_leaf_turn_branches(board, variant, color, dice)
+    max_played = max_played(branches)
+
+    branches
+    |> Enum.filter(&(&1.played == max_played))
+    |> Enum.uniq_by(fn branch -> {branch.board, branch.steps} end)
+  end
+
   def best_end_states(runtime, variant, color) when is_map(runtime) do
     branches = enumerate_runtime_leaf_states(runtime, variant, color)
     max_played = max_played(branches)
@@ -73,6 +90,7 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Branches do
 
   defp enumerate_leaf_states(board, variant, color, dice) do
     moves = full_turn_moves(dice)
+
     enumerate_runtime_leaf_states(
       %{
         board: board,
@@ -86,6 +104,65 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Branches do
       variant,
       color
     )
+  end
+
+  defp enumerate_leaf_turn_branches(board, variant, color, dice) do
+    moves = full_turn_moves(dice)
+
+    enumerate_runtime_turn_branches(
+      %{
+        board: board,
+        dice: %{
+          values: moves,
+          moves: moves,
+          moves_left: moves,
+          moves_played: []
+        }
+      },
+      variant,
+      color
+    )
+  end
+
+  defp enumerate_runtime_turn_branches(runtime, variant, color, played \\ 0, steps \\ []) do
+    moves =
+      runtime
+      |> Moves.legal_moves(variant, color)
+      |> Enum.uniq_by(fn move ->
+        {move.from, move.to, move.die, Map.get(move, :dice_used), Map.get(move, :via),
+         Map.get(move, :sequence)}
+      end)
+
+    moves_left = Map.get(runtime.dice || %{}, :moves_left, [])
+
+    cond do
+      moves_left == [] or moves == [] ->
+        [%{board: runtime.board, played: played, steps: Enum.reverse(steps)}]
+
+      true ->
+        Enum.flat_map(moves, fn move ->
+          used = Map.get(move, :dice_used, [move.die])
+          next_board = Moves.apply_step_move(runtime.board, color, move)
+          dice = runtime.dice || %{}
+
+          next_runtime = %{
+            runtime
+            | board: next_board,
+              dice:
+                dice
+                |> Map.put(:moves_left, State.remove_all_used(moves_left, used))
+                |> Map.put(:moves_played, Map.get(dice, :moves_played, []) ++ used)
+          }
+
+          enumerate_runtime_turn_branches(
+            next_runtime,
+            variant,
+            color,
+            played + length(used),
+            [%{move: move, board: next_board} | steps]
+          )
+        end)
+    end
   end
 
   defp enumerate_runtime_leaf_states(runtime, variant, color, played \\ 0) do
@@ -140,7 +217,9 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Branches do
         best
 
       [] ->
-        best = compute_best_runtime_leaf_state(runtime, variant, color, scorer, played, memo, opts)
+        best =
+          compute_best_runtime_leaf_state(runtime, variant, color, scorer, played, memo, opts)
+
         true = :ets.insert(memo, {key, best})
         best
     end
@@ -249,7 +328,8 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Branches do
   end
 
   defp greedy_branch_mode?(opts) do
-    Keyword.get(opts, :max_branch_moves, 0) == 1 and is_function(Keyword.get(opts, :move_ranker), 2)
+    Keyword.get(opts, :max_branch_moves, 0) == 1 and
+      is_function(Keyword.get(opts, :move_ranker), 2)
   end
 
   defp greedy_runtime_leaf_state(runtime, variant, color, scorer, played, opts) do
@@ -286,7 +366,14 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Branches do
               |> Map.put(:moves_played, Map.get(dice, :moves_played, []) ++ used)
         }
 
-        greedy_runtime_leaf_state(next_runtime, variant, color, scorer, played + length(used), opts)
+        greedy_runtime_leaf_state(
+          next_runtime,
+          variant,
+          color,
+          scorer,
+          played + length(used),
+          opts
+        )
     end
   end
 
@@ -294,6 +381,7 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Branches do
 
   defp greedy_best_move([first | rest], runtime, opts, played) do
     move_ranker = Keyword.fetch!(opts, :move_ranker)
+
     moves =
       [first | rest]
       |> maybe_filter_greedy_moves_by_primary_rank(opts)
@@ -306,7 +394,12 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Branches do
         parallelism = greedy_root_parallelism(opts, played)
 
         if parallelism > 1 do
-          parallel_greedy_best_move([filtered_first | filtered_rest], runtime, move_ranker, parallelism)
+          parallel_greedy_best_move(
+            [filtered_first | filtered_rest],
+            runtime,
+            move_ranker,
+            parallelism
+          )
         else
           serial_greedy_best_move([filtered_first | filtered_rest], runtime, move_ranker)
         end
@@ -436,5 +529,4 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Branches do
         State.dice_values(dice)
     end
   end
-
 end

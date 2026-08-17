@@ -37,6 +37,7 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.OpeningState do
       first_values: nil,
       jan_rencontre_checked: false,
       coups_by_type: %{white: 0, black: 0},
+      double_seen_by_type: %{white: false, black: false},
       releve_count: 0,
       depart_done_by_type: %{
         white: %{two_tables: false, meseas: false, six_tables: false},
@@ -55,6 +56,7 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.OpeningState do
           first_values: [integer()] | nil,
           jan_rencontre_checked: boolean(),
           coups_by_type: %{Types.color() => non_neg_integer()},
+          double_seen_by_type: %{Types.color() => boolean()},
           releve_count: non_neg_integer(),
           depart_done_by_type: %{Types.color() => depart_done()}
         }
@@ -115,12 +117,14 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Obligation do
     fields: [
       piece_type: nil,
       must_fill: [],
+      fill_candidates: [],
       must_conserve: []
     ]
 
   @type t :: %__MODULE__{
           piece_type: String.t() | nil,
           must_fill: [Types.table_key()],
+          fill_candidates: [map()],
           must_conserve: [ConservationCandidate.t()]
         }
 end
@@ -139,6 +143,7 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.TurnState do
       events: [],
       score_by_type: %{white: 0, black: 0},
       obligations: %Obligation{},
+      fill_candidates: [],
       conservation_candidates: [],
       pile_misere_candidate: nil,
       pile_misere_pending: false,
@@ -155,6 +160,7 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.TurnState do
           events: [ScoreEvent.t()],
           score_by_type: %{Types.color() => integer()},
           obligations: Obligation.t(),
+          fill_candidates: [map()],
           conservation_candidates: [ConservationCandidate.t()],
           pile_misere_candidate: map() | nil,
           pile_misere_pending: boolean(),

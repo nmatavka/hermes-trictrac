@@ -1,5 +1,5 @@
 defmodule HermesTrictrac.Rules.Trictrac.Classique.Events.Ways do
-  alias HermesTrictrac.Rules.Trictrac.Classique.{Dice, Moves, State}
+  alias HermesTrictrac.Rules.Trictrac.Classique.{Branches, Constants, Dice, Moves, State}
 
   def jan_missing_info(board, color, from_norm, to_norm) do
     jan_missing_info(board, nil, color, from_norm, to_norm)
@@ -75,18 +75,179 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Events.Ways do
     end
   end
 
-  def remplissage_way_count(start_board, color, table, dice, variant \\ nil) do
-    missing = jan_missing_info(start_board, variant, color, table.from, table.to)
+  @doc """
+  Returns every scoreable remplissage that the current roll can complete.
 
-    if missing.missing_units == 1 and length(missing.single_pos) == 1 do
-      to_target(start_board, color, hd(missing.single_pos), dice,
-        own_coin_policy: if(table.key == :retour, do: :must_move_both_if_made, else: :ordinary),
-        variant: variant
-      ).true_ways
-    else
-      0
+  A fill is a virtual, roll-time calculation, but it must be realizable by a
+  maximum-usage legal branch.  This deliberately uses the same move generator
+  as normal play instead of trying to infer possibilities from distances.  In
+  particular, a table with two demi-cases scores only when one ordered branch
+  can place the second (final) checker after the first has been fixed.
+  """
+  def remplissage_candidates(start_board, variant, color, dice) do
+    branches = Branches.best_turn_branches(start_board, variant, color, dice)
+
+    scoring_tables(variant)
+    |> Enum.flat_map(fn table ->
+      missing = jan_missing_info(start_board, variant, color, table.from, table.to)
+
+      case fill_methods_for_table(start_board, variant, color, table, missing, branches) do
+        [] ->
+          []
+
+        methods ->
+          [
+            %{
+              key: table.key,
+              ways: length(methods),
+              missing_units: missing.missing_units,
+              missing_positions: missing_positions(missing),
+              methods: methods
+            }
+          ]
+      end
+    end)
+  end
+
+  def remplissage_way_count(start_board, color, table, dice, variant \\ nil) do
+    variant = variant || %{id: "trictrac_classique", total_pieces: 15}
+
+    remplissage_candidates(start_board, variant, color, dice)
+    |> Enum.find_value(0, fn candidate ->
+      if candidate.key == table.key, do: candidate.ways, else: nil
+    end)
+  end
+
+  defp fill_methods_for_table(
+         _start_board,
+         _variant,
+         _color,
+         _table,
+         %{missing_units: units},
+         _branches
+       )
+       when units not in 1..2,
+       do: []
+
+  defp fill_methods_for_table(start_board, variant, color, table, missing, branches) do
+    branches
+    |> Enum.flat_map(fn branch ->
+      if Moves.all_paired?(branch.board, variant, color, table.from, table.to) do
+        case method_for_branch(start_board, variant, color, table, missing, branch.steps) do
+          nil -> []
+          method -> [method]
+        end
+      else
+        []
+      end
+    end)
+    |> Enum.uniq_by(& &1.signature)
+    |> Enum.sort_by(& &1.signature)
+    |> Enum.map(&Map.delete(&1, :signature))
+  end
+
+  defp method_for_branch(start_board, variant, color, table, missing, steps) do
+    result =
+      Enum.reduce_while(steps, {[], [], start_board}, fn %{move: move, board: next_board},
+                                                         {relevant, played_moves, _previous_board} ->
+        cond do
+          move.from in missing_positions(missing) ->
+            # The historical virtual construction fills the existing
+            # demi-case(s); it cannot first disturb one of them.
+            {:halt, :invalid}
+
+          true ->
+            relevant =
+              if move_targets_missing?(move, missing) do
+                [method_step(move, List.last(played_moves)) | relevant]
+              else
+                relevant
+              end
+
+            played_moves = played_moves ++ [move]
+
+            if Moves.all_paired?(next_board, variant, color, table.from, table.to) do
+              {:halt, {Enum.reverse(relevant), next_board}}
+            else
+              {:cont, {relevant, played_moves, next_board}}
+            end
+        end
+      end)
+
+    case result do
+      {completion_steps, _board} when is_list(completion_steps) ->
+        build_fill_method(completion_steps, missing)
+
+      _ ->
+        nil
     end
   end
+
+  defp build_fill_method(completion_steps, missing) do
+    if complete_virtual_fill?(completion_steps, missing) do
+      completion_order = Enum.map(completion_steps, & &1.target)
+      dice = Enum.flat_map(completion_steps, & &1.dice_used)
+
+      %{
+        signature: Enum.map(completion_steps, &method_step_signature/1),
+        completion_order: completion_order,
+        dice_used: dice,
+        steps: completion_steps
+      }
+    end
+  end
+
+  defp method_step_signature(%{target: target, dice_used: [die]}), do: {:direct, target, die}
+
+  defp method_step_signature(%{target: target, dice_used: dice_used}),
+    do: {:combined, target, Enum.sort(dice_used)}
+
+  defp move_targets_missing?(move, missing) do
+    move.to in missing_positions(missing)
+  end
+
+  defp complete_virtual_fill?(steps, %{single_pos: positions}) when positions != [] do
+    Enum.all?(positions, fn target -> Enum.any?(steps, &(&1.target == target)) end)
+  end
+
+  defp complete_virtual_fill?(steps, %{empty_pos: positions}) when positions != [] do
+    Enum.all?(positions, fn target -> Enum.count(steps, &(&1.target == target)) >= 2 end)
+  end
+
+  defp complete_virtual_fill?(_steps, _missing), do: false
+
+  defp method_step(move, previous_move) do
+    dice_used = Map.get(move, :dice_used, [move.die])
+    sequence = Map.get(move, :sequence, dice_used)
+
+    if chained_single_steps?(previous_move, move) do
+      previous_dice = Map.get(previous_move, :dice_used, [previous_move.die])
+      previous_sequence = Map.get(previous_move, :sequence, previous_dice)
+
+      %{
+        target: move.to,
+        dice_used: previous_dice ++ dice_used,
+        sequence: previous_sequence ++ sequence
+      }
+    else
+      %{target: move.to, dice_used: dice_used, sequence: sequence}
+    end
+  end
+
+  defp chained_single_steps?(nil, _move), do: false
+
+  defp chained_single_steps?(previous_move, move) do
+    previous_move.to == move.from and
+      length(Map.get(previous_move, :dice_used, [previous_move.die])) == 1 and
+      length(Map.get(move, :dice_used, [move.die])) == 1
+  end
+
+  defp missing_positions(missing), do: missing.single_pos ++ missing.empty_pos
+
+  defp scoring_tables(%{id: "plein"}),
+    do: Enum.filter(Constants.jan_tables(), &(&1.key == :grand))
+
+  defp scoring_tables(_variant), do: Constants.jan_tables()
 
   def coin_battu_true_ways(board, color, dice) do
     coin_battu_true_ways(board, color, dice, nil)

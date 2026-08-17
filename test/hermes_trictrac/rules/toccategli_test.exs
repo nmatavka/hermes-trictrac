@@ -36,6 +36,32 @@ defmodule HermesTrictrac.Rules.ToccategliTest do
     assert get_in(double, [:score, Access.at(1), :points]) == 0
   end
 
+  test "toccategli records the settled hole classification and multiplier" do
+    variant = Registry.fetch!("toccategli")
+
+    for {opponent_points, classification, multiplier} <- [
+          {11, :simple, 1},
+          {6, :double, 2},
+          {3, :triple, 3},
+          {0, :march, 4}
+        ] do
+      trictrac =
+        Classique.ensure(%{
+          score: [%{points: 11, trous: 0}, %{points: opponent_points, trous: 0}]
+        })
+        |> Classique.apply_points(variant, :white, 1, "test", 1)
+
+      [event] = trictrac.score_history
+      settlement = event.metadata.toccategli_hole
+
+      assert settlement.classification == classification
+      assert settlement.multiplier == multiplier
+      assert settlement.opponent_points == opponent_points
+      assert settlement.trous_awarded == multiplier
+      assert get_in(trictrac, [:score, Access.at(0), :trous]) == multiplier
+    end
+  end
+
   test "toccategli allows entry into the opponent grand jan while classique forbids it" do
     board = %{
       points:

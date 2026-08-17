@@ -365,7 +365,10 @@ Au cours du XVIIème siècle trois *jans* furent progressivement abandonnés. Il
 
 On vit jusqu’à présent que toutes les situation de jeu permettant de marquer des points s'appelaient des *jans*. Or parmi les trois situations de jeu, que nous appelons généralement *jan*, disparues, seule la première a été nommée « *jan* ». Il est fort possible que le *jan de rencontre* existe depuis le tout début du jeu de Trictrac. Par contre on peut penser que les deux autres *jans* sont apparus après, suite à l'expérience des joueurs. En effet ces deux *jans* correspondent à des situations de jeu non réellement prévisible à la création du jeu. Leurs appellations sont très évocatrices mais demandent des explications.
 
-Nous allons maintenant détailler les trois jans et expliquer pourquoi nous en reprendrons deux dans nos principales règles et le troisième en option de jeu.
+Nous allons maintenant détailler les trois jans. Dans la version numérique,
+la *pile de misère* demeure active, *Margot la fendue* exige l’accord des
+joueurs, et le *jan de rencontre* demeure historique: l’ouverture au plus
+haut dé simultané ne lui laisse pas son ancienne fonction de compensation.
 
 ### Jan de rencontre
 
@@ -401,7 +404,10 @@ L’application du *jan de rencontre* rétablit, au mieux, l'équilibre des chan
 
 #### Conclusion
 
-Par souci d’équité, nous reviendrons aux sources du jeu de Trictrac, en appliquant toujours, dans nos règles, le *jan de rencontre*.
+Dans la version numérique, nous ne marquons pas le *jan de rencontre*. Son
+détecteur historique est conservé pour l’étude des règles, mais l’ouverture
+au plus haut dé simultané remplace le contexte du *coup et dés* auquel il
+était attaché.
 
 **Nota:** on ne peut parler du jan de rencontre sans parler d’une pratique, auparavant très répandu, pour décider qui commencerait le premier : la méthode de *coup et dés*.
 

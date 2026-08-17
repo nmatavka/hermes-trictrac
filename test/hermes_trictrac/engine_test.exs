@@ -2177,7 +2177,7 @@ defmodule HermesTrictrac.EngineTest do
     assert Enum.any?(get_in(snapshot, ["trictrac", "score_history"]), fn event ->
              event["label"] == "remplissage grand jan" and
                event["metadata"]["ways"] == 3 and
-               event["metadata"]["resolution"] == "earned_now"
+               event["metadata"]["resolution"] == "roll_time_virtual"
            end)
   end
 

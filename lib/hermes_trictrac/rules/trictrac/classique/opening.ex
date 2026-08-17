@@ -42,34 +42,42 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Opening do
         dice,
         coup_index,
         depart_done,
-        variant \\ %{id: "trictrac_classique"}
+        variant \\ %{id: "trictrac_classique"},
+        branches_info \\ nil,
+        double_seen? \\ false
       ) do
+    candidate_boards = candidate_boards(end_board, branches_info)
     talon = if(color == :white, do: 23, else: 0)
-    abattues = count_abattues(end_board, color, talon)
-    own_coin_cnt = pieces_at(end_board, State.own_coin(color), color)
-    opp_coin_cnt = pieces_at(end_board, State.opp_coin(color), State.opposite(color))
     jan_points = VariantRules.coin_jan_points(variant, State.double?(dice))
     low_die = State.dice_values(dice) |> Enum.min(fn -> nil end)
 
     {events, depart_done} =
-      if !depart_done.meseas and abattues == 2 and own_coin_cnt >= 2 and low_die == 1 and
-           jan_points > 0 do
-        rule = if opp_coin_cnt <= 0, do: :jan_de_meseas, else: :contre_jan_de_meseas
-        beneficiary = if opp_coin_cnt <= 0, do: color, else: State.opposite(color)
+      if !depart_done.meseas and low_die == 1 and jan_points > 0 and
+           Enum.any?(candidate_boards, &meseas_ready?(&1, color, talon)) do
+        opponent_present? =
+          Enum.any?(candidate_boards, fn board ->
+            meseas_ready?(board, color, talon) and
+              pieces_at(board, State.opp_coin(color), State.opposite(color)) > 0
+          end)
+
+        rule = if opponent_present?, do: :contre_jan_de_meseas, else: :jan_de_meseas
+        beneficiary = if opponent_present?, do: State.opposite(color), else: color
         {events ++ [Scoring.event(beneficiary, rule, jan_points)], %{depart_done | meseas: true}}
       else
         {events, depart_done}
       end
 
-    off_points = off_talon_points(end_board, color, talon)
-
     {events, depart_done} =
-      if !depart_done.two_tables and abattues == 2 and length(off_points) == 2 and
-           can_two_tables?(off_points, color, dice) and jan_points > 0 do
-        rule =
-          if opp_coin_cnt <= 0, do: :jan_de_deux_tables, else: :contre_jan_de_deux_tables
+      if !depart_done.two_tables and jan_points > 0 and
+           Enum.any?(candidate_boards, &two_tables_ready?(&1, color, talon, dice)) do
+        opponent_present? =
+          Enum.any?(candidate_boards, fn board ->
+            two_tables_ready?(board, color, talon, dice) and
+              pieces_at(board, State.opp_coin(color), State.opposite(color)) > 0
+          end)
 
-        beneficiary = if opp_coin_cnt <= 0, do: color, else: State.opposite(color)
+        rule = if opponent_present?, do: :contre_jan_de_deux_tables, else: :jan_de_deux_tables
+        beneficiary = if opponent_present?, do: State.opposite(color), else: color
 
         {events ++ [Scoring.event(beneficiary, rule, jan_points)],
          %{depart_done | two_tables: true}}
@@ -80,8 +88,9 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Opening do
     six_tables_points = VariantRules.six_tables_points(variant)
 
     {events, depart_done} =
-      if !depart_done.six_tables and !State.double?(dice) and coup_index == 3 and
-           all_occupied?(end_board, color, 18, 23) and six_tables_points > 0 do
+      if !depart_done.six_tables and !(double_seen? or State.double?(dice)) and coup_index == 3 and
+           Enum.any?(candidate_boards, &all_occupied?(&1, color, 17, 22)) and
+           six_tables_points > 0 do
         {events ++ [Scoring.event(color, :jan_de_six_tables, six_tables_points)],
          %{depart_done | six_tables: true}}
       else
@@ -89,6 +98,21 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Opening do
       end
 
     {events, depart_done}
+  end
+
+  defp candidate_boards(_end_board, %{branches: branches}) when is_list(branches), do: branches
+  defp candidate_boards(end_board, _branches_info), do: [end_board]
+
+  defp meseas_ready?(board, color, talon) do
+    count_abattues(board, color, talon) == 2 and
+      pieces_at(board, State.own_coin(color), color) >= 2
+  end
+
+  defp two_tables_ready?(board, color, talon, dice) do
+    off_points = off_talon_points(board, color, talon)
+
+    count_abattues(board, color, talon) == 2 and length(off_points) == 2 and
+      can_two_tables?(off_points, color, dice)
   end
 
   defp mark_jan_rencontre(%{first_type: nil} = opening, color), do: %{opening | first_type: color}

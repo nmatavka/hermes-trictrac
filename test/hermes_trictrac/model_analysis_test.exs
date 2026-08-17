@@ -5,7 +5,7 @@ defmodule HermesTrictrac.ModelAnalysisTest do
   alias HermesTrictrac.Rules.{RaceCore, Registry, TrictracCore}
   alias HermesTrictrac.Rules.Trictrac.Classique
 
-  test "model analysis surfaces intermediate trictrac scoring events along a line" do
+  test "model analysis omits remplir en passant from intermediate trictrac events" do
     assert {:ok, parsed} =
              Xgid.parse("XGID=-a-----bbabbb-------------:0:0:-1:44:0:0:0:1:0")
 
@@ -50,7 +50,7 @@ defmodule HermesTrictrac.ModelAnalysisTest do
       ])
 
     assert :coin_battu in Enum.map(line_events, & &1.rule)
-    assert :remplissage_grand in Enum.map(line_events, & &1.rule)
+    refute :remplissage_grand in Enum.map(line_events, & &1.rule)
   end
 
   defp begin_trictrac_turn(runtime, variant, dice, match_options) do

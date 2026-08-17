@@ -8,30 +8,21 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Events do
 
   alias HermesTrictrac.Rules.Trictrac.Classique.Events.{
     CoinBattu,
-    CoinJans,
     Conservation,
     Context,
     Impuissance,
     JanRecompense,
-    JanRencontre,
     Margot,
     PileMisere,
-    Remplissage,
     RuleResult,
     Sortie
   }
 
-  @plein_rules [
-    Remplissage,
-    Conservation
-  ]
+  @plein_rules [Conservation]
 
   @classique_rules [
-    JanRencontre,
-    CoinJans,
     JanRecompense,
     CoinBattu,
-    Remplissage,
     Conservation,
     PileMisere,
     Margot,
@@ -44,7 +35,8 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Events do
     detect_turn_events(start_board, end_board, variant, color, dice, trictrac, [])
   end
 
-  @spec detect_turn_events(map(), map(), map(), atom(), map(), map(), keyword()) :: TurnAnalysis.t()
+  @spec detect_turn_events(map(), map(), map(), atom(), map(), map(), keyword()) ::
+          TurnAnalysis.t()
   def detect_turn_events(start_board, end_board, variant, color, dice, trictrac, opts)
       when is_list(opts) do
     trictrac = State.ensure(trictrac)
@@ -71,7 +63,8 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Events do
       conservation_candidates:
         Validation.build_conservation_candidates(start_board, variant, color, dice, branches_info),
       pile_misere:
-        PileMisere.resolution(trictrac, variant, end_board, color, branches_info, is_double)
+        PileMisere.resolution(trictrac, variant, end_board, color, branches_info, is_double),
+      fill_candidates: Keyword.get(opts, :fill_candidates, [])
     }
 
     if plein_variant?(variant) do
@@ -90,7 +83,8 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Events do
         context.color,
         context.dice,
         context.branches_info,
-        context.conservation_candidates
+        context.conservation_candidates,
+        context.fill_candidates
       )
 
     result = apply_rules(@plein_rules, context)
@@ -101,7 +95,7 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Events do
       conservation_candidates: context.conservation_candidates,
       pile_misere_candidate: nil,
       pile_misere_pending: false,
-      events: result.events
+      events: pre_move_events(context) ++ result.events
     }
   end
 
@@ -122,7 +116,8 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Events do
           context.color,
           context.dice,
           context.branches_info,
-          context.conservation_candidates
+          context.conservation_candidates,
+          context.fill_candidates
         )
       )
       |> Map.put(:pile_misere_candidate, elem(context.pile_misere, 0))
@@ -143,7 +138,7 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Events do
       conservation_candidates: context.conservation_candidates,
       pile_misere_candidate: context.pile_misere_candidate,
       pile_misere_pending: context.pile_misere_pending,
-      events: events
+      events: pre_move_events(context) ++ events
     }
   end
 
@@ -152,6 +147,8 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Events do
       rule.apply(result)
     end)
   end
+
+  defp pre_move_events(context), do: get_in(context.trictrac, [:turn, :events]) || []
 
   defp plein_variant?(%{id: "plein"}), do: true
   defp plein_variant?(_variant), do: false

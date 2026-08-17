@@ -8,7 +8,26 @@ deps
 assets/node_modules
 npm-debug.log
 
-android
+# Preserve the shared Monaspace sources used by the web rules reader while
+# excluding the rest of the Android project from the Docker build context.
+android/*
+!android/backgammon/
+android/backgammon/*
+!android/backgammon/app/
+android/backgammon/app/*
+!android/backgammon/app/src/
+android/backgammon/app/src/*
+!android/backgammon/app/src/main/
+android/backgammon/app/src/main/*
+!android/backgammon/app/src/main/res/
+android/backgammon/app/src/main/res/*
+!android/backgammon/app/src/main/res/font/
+android/backgammon/app/src/main/res/font/*
+!android/backgammon/app/src/main/res/font/monaspace_argon.ttf
+!android/backgammon/app/src/main/res/font/monaspace_krypton.ttf
+!android/backgammon/app/src/main/res/font/monaspace_neon.ttf
+!android/backgammon/app/src/main/res/font/monaspace_radon.ttf
+!android/backgammon/app/src/main/res/font/monaspace_xenon.ttf
 shared
 
 erl_crash.dump

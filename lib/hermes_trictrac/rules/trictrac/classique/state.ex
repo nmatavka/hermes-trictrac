@@ -166,6 +166,7 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.State do
       first_values: opening.first_values,
       jan_rencontre_checked: opening.jan_rencontre_checked,
       coups_by_type: normalize_color_map(opening.coups_by_type, 0),
+      double_seen_by_type: normalize_color_map(opening.double_seen_by_type, false),
       releve_count: opening.releve_count || default.releve_count,
       depart_done_by_type:
         normalize_depart_done_by_type(opening.depart_done_by_type, default.depart_done_by_type)
@@ -182,6 +183,11 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.State do
         fetch(opening, :jan_rencontre_checked, default.jan_rencontre_checked),
       coups_by_type:
         normalize_color_map(fetch(opening, :coups_by_type, default.coups_by_type), 0),
+      double_seen_by_type:
+        normalize_color_map(
+          fetch(opening, :double_seen_by_type, default.double_seen_by_type),
+          false
+        ),
       releve_count: fetch(opening, :releve_count, default.releve_count),
       depart_done_by_type:
         normalize_depart_done_by_type(
@@ -197,6 +203,7 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.State do
       events: normalize_events(turn.events),
       score_by_type: normalize_color_map(turn.score_by_type, 0),
       obligations: normalize_obligation(turn.obligations),
+      fill_candidates: normalize_fill_candidates(turn.fill_candidates),
       conservation_candidates: normalize_conservation_candidates(turn.conservation_candidates),
       pile_misere_candidate: turn.pile_misere_candidate,
       pile_misere_pending: turn.pile_misere_pending,
@@ -217,6 +224,8 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.State do
       events: normalize_events(fetch(turn, :events, default.events)),
       score_by_type: normalize_color_map(fetch(turn, :score_by_type, default.score_by_type), 0),
       obligations: normalize_obligation(fetch(turn, :obligations, default.obligations)),
+      fill_candidates:
+        normalize_fill_candidates(fetch(turn, :fill_candidates, default.fill_candidates)),
       conservation_candidates:
         normalize_conservation_candidates(
           fetch(turn, :conservation_candidates, default.conservation_candidates)
@@ -261,12 +270,27 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.State do
     %Obligation{
       piece_type: fetch(obligation, :piece_type, nil),
       must_fill: normalize_table_keys(fetch(obligation, :must_fill, [])),
+      fill_candidates: normalize_fill_candidates(fetch(obligation, :fill_candidates, [])),
       must_conserve:
         normalize_conservation_candidates(fetch(obligation, :must_conserve, []),
           requirement?: true
         )
     }
   end
+
+  def normalize_fill_candidates(candidates) when is_list(candidates) do
+    Enum.map(candidates, fn candidate ->
+      %{
+        key: normalize_table_key(fetch(candidate, :key, nil)),
+        ways: fetch(candidate, :ways, 0),
+        missing_units: fetch(candidate, :missing_units, 0),
+        missing_positions: fetch(candidate, :missing_positions, []),
+        methods: fetch(candidate, :methods, [])
+      }
+    end)
+  end
+
+  def normalize_fill_candidates(_candidates), do: []
 
   def normalize_conservation_candidate(%ConservationCandidate{} = candidate), do: candidate
 

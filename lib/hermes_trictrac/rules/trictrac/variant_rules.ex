@@ -107,7 +107,7 @@ defmodule HermesTrictrac.Rules.Trictrac.VariantRules do
         0
 
       toccategli?(variant) ->
-        base_trous * toccategli_multiplier(opp.points || 0)
+        base_trous * toccategli_hole_result(opp.points || 0).multiplier
 
       true ->
         base_trous * if(score.doubling_active, do: 2, else: 1)
@@ -115,6 +115,22 @@ defmodule HermesTrictrac.Rules.Trictrac.VariantRules do
   end
 
   def apply_etendard?(variant), do: not toccategli?(variant)
+
+  def toccategli_hole_result(opponent_points) when is_integer(opponent_points) do
+    {classification, multiplier} =
+      cond do
+        opponent_points == 0 -> {:march, 4}
+        opponent_points <= 3 -> {:triple, 3}
+        opponent_points <= 6 -> {:double, 2}
+        true -> {:simple, 1}
+      end
+
+    %{
+      classification: classification,
+      multiplier: multiplier,
+      opponent_points: opponent_points
+    }
+  end
 
   defp petit_like_target?(target, opp) do
     opp_norm = State.norm_pos(target, opp)
@@ -126,15 +142,6 @@ defmodule HermesTrictrac.Rules.Trictrac.VariantRules do
       if is_double, do: 6, else: 4
     else
       if is_double, do: 4, else: 2
-    end
-  end
-
-  defp toccategli_multiplier(opp_points) do
-    cond do
-      opp_points == 0 -> 4
-      opp_points <= 3 -> 3
-      opp_points <= 6 -> 2
-      true -> 1
     end
   end
 end

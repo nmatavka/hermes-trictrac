@@ -69,7 +69,14 @@ defmodule HermesTrictrac.Rules.TrictracArchitectureTest do
       |> Enum.map(fn leaf ->
         leaf_runtime = %{board: leaf.board, dice: leaf.dice}
         {score, sort_key} = scorer.(leaf_runtime, leaf.played)
-        %{board: leaf.board, dice: leaf.dice, played: leaf.played, score: score, sort_key: sort_key}
+
+        %{
+          board: leaf.board,
+          dice: leaf.dice,
+          played: leaf.played,
+          score: score,
+          sort_key: sort_key
+        }
       end)
       |> Enum.reduce(nil, fn candidate, best ->
         cond do
@@ -101,8 +108,15 @@ defmodule HermesTrictrac.Rules.TrictracArchitectureTest do
       |> put_piece(:white, 22, 2)
       |> put_piece(:white, 20, 1)
 
-    runtime_a = %{board: board, dice: %{values: [2, 1], moves: [2, 1], moves_left: [2, 1], moves_played: []}}
-    runtime_b = %{board: board, dice: %{values: [2, 1], moves: [2, 1], moves_left: [1, 2], moves_played: []}}
+    runtime_a = %{
+      board: board,
+      dice: %{values: [2, 1], moves: [2, 1], moves_left: [2, 1], moves_played: []}
+    }
+
+    runtime_b = %{
+      board: board,
+      dice: %{values: [2, 1], moves: [2, 1], moves_left: [1, 2], moves_played: []}
+    }
 
     scorer = fn leaf_runtime, _played ->
       score =
@@ -112,8 +126,15 @@ defmodule HermesTrictrac.Rules.TrictracArchitectureTest do
       {score, :erlang.term_to_binary(leaf_runtime.board, [:deterministic])}
     end
 
-    best_a = Branches.best_end_state_by(runtime_a, variant, :white, scorer, canonical_dice_for_memo: true)
-    best_b = Branches.best_end_state_by(runtime_b, variant, :white, scorer, canonical_dice_for_memo: true)
+    best_a =
+      Branches.best_end_state_by(runtime_a, variant, :white, scorer,
+        canonical_dice_for_memo: true
+      )
+
+    best_b =
+      Branches.best_end_state_by(runtime_b, variant, :white, scorer,
+        canonical_dice_for_memo: true
+      )
 
     assert best_a.played == best_b.played
     assert best_a.score == best_b.score
@@ -130,7 +151,10 @@ defmodule HermesTrictrac.Rules.TrictracArchitectureTest do
       |> put_piece(:white, 22, 2)
       |> put_piece(:white, 20, 1)
 
-    runtime = %{board: board, dice: %{values: [2, 1], moves: [2, 1], moves_left: [2, 1], moves_played: []}}
+    runtime = %{
+      board: board,
+      dice: %{values: [2, 1], moves: [2, 1], moves_left: [2, 1], moves_played: []}
+    }
 
     scorer = fn leaf_runtime, _played ->
       score =
@@ -143,7 +167,10 @@ defmodule HermesTrictrac.Rules.TrictracArchitectureTest do
     move_ranker = fn current_runtime, move ->
       used = Map.get(move, :dice_used, [move.die])
       next_board = Moves.apply_step_move(current_runtime.board, :white, move)
-      score = Moves.pieces_at(next_board, 23, :white) + Moves.pieces_at(next_board, 22, :white) * 10
+
+      score =
+        Moves.pieces_at(next_board, 23, :white) + Moves.pieces_at(next_board, 22, :white) * 10
+
       {length(used), score}
     end
 
@@ -183,7 +210,11 @@ defmodule HermesTrictrac.Rules.TrictracArchitectureTest do
       |> put_piece(:white, 22, 2)
       |> put_piece(:white, 20, 1)
 
-    runtime = %{board: board, dice: %{values: [2, 1], moves: [2, 1], moves_left: [2, 1], moves_played: []}}
+    runtime = %{
+      board: board,
+      dice: %{values: [2, 1], moves: [2, 1], moves_left: [2, 1], moves_played: []}
+    }
+
     root_moves_left = runtime.dice.moves_left
     root_board = runtime.board
     rank_counts = :ets.new(:rank_counts, [:set, :public])
@@ -199,14 +230,18 @@ defmodule HermesTrictrac.Rules.TrictracArchitectureTest do
     tuple_move_ranker = fn current_runtime, move ->
       used = Map.get(move, :dice_used, [move.die])
       next_board = Moves.apply_step_move(current_runtime.board, :white, move)
-      score = Moves.pieces_at(next_board, 23, :white) + Moves.pieces_at(next_board, 22, :white) * 10
+
+      score =
+        Moves.pieces_at(next_board, 23, :white) + Moves.pieces_at(next_board, 22, :white) * 10
+
       {length(used), score}
     end
 
     filtered_move_ranker = fn current_runtime, move ->
       used = Map.get(move, :dice_used, [move.die])
 
-      if current_runtime.board == root_board and Map.get(current_runtime.dice || %{}, :moves_left, []) == root_moves_left do
+      if current_runtime.board == root_board and
+           Map.get(current_runtime.dice || %{}, :moves_left, []) == root_moves_left do
         :ets.update_counter(rank_counts, length(used), {2, 1}, {length(used), 0})
       end
 
@@ -436,7 +471,7 @@ defmodule HermesTrictrac.Rules.TrictracArchitectureTest do
     refute Dice.double?(%{values: [2, 3, 2]})
   end
 
-  test "jan de rencontre ignores dice order" do
+  test "historical jan de rencontre detector ignores dice order" do
     opening = %OpeningState{
       first_type: :white,
       first_values: [1, 6],
@@ -457,6 +492,77 @@ defmodule HermesTrictrac.Rules.TrictracArchitectureTest do
     assert Enum.any?(events, fn event ->
              event.label == "jan de rencontre" and event.beneficiary == "black"
            end)
+  end
+
+  test "live turns leave jan de rencontre inactive under the high-roll opening" do
+    opening = %OpeningState{first_type: :white, first_values: [1, 6]}
+    variant = %{id: "trictrac_classique", total_pieces: 15}
+
+    trictrac =
+      Classique.begin_turn(
+        %{opening: opening},
+        empty_board(),
+        variant,
+        :black,
+        %{values: [6, 1], moves: [6, 1], moves_left: [6, 1], moves_played: []}
+      )
+
+    refute Enum.any?(trictrac.turn.events, &(&1.rule == :jan_rencontre))
+  end
+
+  test "jan de six tables uses the six points after the talon" do
+    variant = %{id: "trictrac_classique", total_pieces: 15}
+    depart_done = %OpeningState{}.depart_done_by_type.white
+    dice = %{values: [2, 1]}
+
+    after_talon = fill_range(empty_board(), :white, 17, 22, 1)
+    talon_included = fill_range(empty_board(), :white, 18, 23, 1)
+
+    {events, _depart_done} =
+      Opening.detect_coin_jans(
+        [],
+        after_talon,
+        after_talon,
+        :white,
+        dice,
+        3,
+        depart_done,
+        variant,
+        %BranchAnalysis{branches: [after_talon], max_played: 2}
+      )
+
+    assert Enum.any?(events, &(&1.rule == :jan_de_six_tables))
+
+    {events, _depart_done} =
+      Opening.detect_coin_jans(
+        [],
+        talon_included,
+        talon_included,
+        :white,
+        dice,
+        3,
+        depart_done,
+        variant,
+        %BranchAnalysis{branches: [talon_included], max_played: 2}
+      )
+
+    refute Enum.any?(events, &(&1.rule == :jan_de_six_tables))
+
+    {events, _depart_done} =
+      Opening.detect_coin_jans(
+        [],
+        after_talon,
+        after_talon,
+        :white,
+        dice,
+        3,
+        depart_done,
+        variant,
+        %BranchAnalysis{branches: [after_talon], max_played: 2},
+        true
+      )
+
+    refute Enum.any?(events, &(&1.rule == :jan_de_six_tables))
   end
 
   test "opening coin jan detection handles expanded doubles without crashing" do
@@ -517,6 +623,80 @@ defmodule HermesTrictrac.Rules.TrictracArchitectureTest do
     assert Ways.remplissage_way_count(surcase_board, :white, table, dice, variant) == 1
   end
 
+  test "two demi-cases score only when the second virtual placement is legal" do
+    variant = %{id: "trictrac_classique", total_pieces: 15}
+
+    board =
+      empty_board()
+      |> fill_range(:white, 12, 15, 2)
+      |> put_piece(:white, 16, 1)
+      |> put_piece(:white, 17, 1)
+      |> put_piece(:white, 18, 2)
+
+    dice = %{values: [2, 1], moves: [2, 1], moves_left: [2, 1], moves_played: []}
+    [candidate] = Ways.remplissage_candidates(board, variant, :white, dice)
+
+    assert candidate.key == :grand
+    assert candidate.missing_units == 2
+    assert candidate.missing_positions == [16, 17]
+    assert candidate.ways == 2
+    assert Enum.map(candidate.methods, & &1.completion_order) == [[16, 17], [17, 16]]
+
+    # The first demi-case alone is not a fill.  The second must also be
+    # legally reachable from the fictively fixed first placement.
+    assert Ways.remplissage_candidates(board, variant, :white, %{values: [3, 1]}) == []
+
+    trictrac = Classique.begin_turn(%{}, board, variant, :white, dice)
+
+    assert {:error, %Obligation{must_fill: [:grand]}} =
+             Classique.validate_turn(trictrac, board, variant, :white)
+
+    completed =
+      board
+      |> put_piece(:white, 16, 2)
+      |> put_piece(:white, 17, 2)
+      |> put_piece(:white, 18, 0)
+
+    assert {:ok, _analysis} = Classique.validate_turn(trictrac, completed, variant, :white)
+  end
+
+  test "remplir en passant is not a scoreable virtual fill" do
+    variant = %{id: "trictrac_classique", total_pieces: 15}
+
+    board =
+      empty_board()
+      |> fill_range(:white, 12, 16, 2)
+      |> put_piece(:white, 17, 1)
+      |> put_piece(:white, 18, 1)
+
+    # The ace can fill the demi-case, but the remaining die must break the
+    # table; maximum-usage legal branches therefore never finish with a plein.
+    assert Ways.remplissage_candidates(board, variant, :white, %{values: [2, 1]}) == []
+  end
+
+  test "an announced fill rejects move lines that cannot realize it" do
+    variant = %{id: "trictrac_classique", total_pieces: 15}
+    dice = %{values: [2, 1], moves: [2, 1], moves_left: [2, 1], moves_played: []}
+
+    board =
+      empty_board()
+      |> fill_range(:white, 12, 15, 2)
+      |> put_piece(:white, 16, 1)
+      |> put_piece(:white, 17, 1)
+      |> put_piece(:white, 18, 2)
+      |> put_piece(:white, 20, 1)
+
+    trictrac = Classique.begin_turn(%{}, board, variant, :white, dice)
+    runtime = %{board: board, dice: dice, trictrac: trictrac}
+
+    assert Enum.any?(
+             Moves.raw_legal_moves(board, variant, :white, dice.moves_left),
+             &(&1.from == 20)
+           )
+
+    assert Enum.map(Moves.legal_moves(runtime, variant, :white), & &1.from) == [18, 18]
+  end
+
   defp empty_board do
     %{
       points: Enum.map(0..23, fn _ -> %{white: 0, black: 0} end),
@@ -549,15 +729,22 @@ defmodule HermesTrictrac.Rules.TrictracArchitectureTest do
     cond do
       moves_left == [] or moves == [] ->
         {score, sort_key} = scorer.(runtime, played)
-        %{board: runtime.board, dice: runtime.dice, played: played, score: score, sort_key: sort_key}
+
+        %{
+          board: runtime.board,
+          dice: runtime.dice,
+          played: played,
+          score: score,
+          sort_key: sort_key
+        }
 
       true ->
         move =
           Enum.reduce(tl(moves), hd(moves), fn candidate, best ->
             candidate_rank =
               {move_ranker.(runtime, candidate),
-               {candidate.from, candidate.to, candidate.die, Map.get(candidate, :dice_used), Map.get(candidate, :via),
-                Map.get(candidate, :sequence)}}
+               {candidate.from, candidate.to, candidate.die, Map.get(candidate, :dice_used),
+                Map.get(candidate, :via), Map.get(candidate, :sequence)}}
 
             best_rank =
               {move_ranker.(runtime, best),
@@ -581,7 +768,14 @@ defmodule HermesTrictrac.Rules.TrictracArchitectureTest do
               |> Map.put(:moves_played, Map.get(dice, :moves_played, []) ++ used)
         }
 
-        greedy_reference_leaf(next_runtime, variant, color, scorer, move_ranker, played + length(used))
+        greedy_reference_leaf(
+          next_runtime,
+          variant,
+          color,
+          scorer,
+          move_ranker,
+          played + length(used)
+        )
     end
   end
 

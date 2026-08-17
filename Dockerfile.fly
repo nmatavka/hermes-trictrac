@@ -52,6 +52,7 @@ COPY config ./config
 COPY lib ./lib
 COPY priv ./priv
 COPY assets ./assets
+COPY android/backgammon/app/src/main/res/font ./android/backgammon/app/src/main/res/font
 COPY gamedocs ./gamedocs
 COPY hermes-bluesky ./hermes-bluesky
 COPY trictrac_zero ./trictrac_zero

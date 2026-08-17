@@ -45,7 +45,8 @@ defmodule HermesTrictrac.Rules.TrictracCore do
         |> Classique.begin_turn(runtime.board, variant, color, runtime.dice)
         |> maybe_seed_aecrire_coup_starter(variant, color)
 
-      {:ok, %{runtime | trictrac: trictrac}}
+      runtime = %{runtime | trictrac: trictrac}
+      {:ok, %{runtime | legal_moves: Classique.legal_moves(runtime, variant, color)}}
     end
   end
 

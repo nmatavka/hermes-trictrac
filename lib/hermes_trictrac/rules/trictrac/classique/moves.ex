@@ -1,5 +1,5 @@
 defmodule HermesTrictrac.Rules.Trictrac.Classique.Moves do
-  alias HermesTrictrac.Rules.Trictrac.Classique.{Constants, State}
+  alias HermesTrictrac.Rules.Trictrac.Classique.{Branches, Constants, State}
   alias HermesTrictrac.Rules.Trictrac.VariantRules
 
   def legal_moves(runtime, variant, color) do
@@ -14,6 +14,7 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Moves do
     |> filter_natural_coin_priority()
     |> filter_coin_rest_immediate_follow(runtime, variant, color)
     |> filter_coin_rest_setup_follow(runtime, variant, color)
+    |> filter_pending_fill(runtime, variant, color)
   end
 
   def raw_legal_moves(board, variant, color, moves_left) do
@@ -542,6 +543,51 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Moves do
           end
         end)
     end
+  end
+
+  # Fills are announced from the roll position, before a checker is moved.  In
+  # the no-école digital ruleset, constrain the selectable moves to routes that
+  # can still realize the announced fill instead of letting a later choice
+  # silently discard an already-earned score.
+  defp filter_pending_fill(moves, runtime, variant, color) do
+    candidates = get_in(runtime, [:trictrac, :turn, :fill_candidates]) || []
+
+    if candidates == [] do
+      moves
+    else
+      Enum.filter(moves, fn move ->
+        future_fill_candidates_satisfied?(runtime, variant, color, move, candidates)
+      end)
+    end
+  end
+
+  defp future_fill_candidates_satisfied?(runtime, variant, color, move, candidates) do
+    dice = runtime.dice || %{}
+    used = Map.get(move, :dice_used, [move.die])
+    moves_left = State.remove_all_used(Map.get(dice, :moves_left, []), used)
+    next_board = apply_step_move(runtime.board, color, move)
+
+    branches =
+      if moves_left == [] do
+        [next_board]
+      else
+        Branches.best_end_branches(
+          next_board,
+          variant,
+          color,
+          %{values: moves_left, moves: moves_left, moves_left: moves_left, moves_played: []}
+        ).branches
+      end
+
+    Enum.all?(candidates, fn candidate ->
+      case Constants.jan_table(State.normalize_table_key(candidate.key)) do
+        nil ->
+          true
+
+        table ->
+          Enum.any?(branches, &all_paired?(&1, variant, color, table.from, table.to))
+      end
+    end)
   end
 
   defp plein_forbids_opponent_side?(%{id: "plein"}), do: true

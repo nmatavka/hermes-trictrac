@@ -7,6 +7,7 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Validation do
     State
   }
 
+  alias HermesTrictrac.Rules.Trictrac.Classique.Events.Ways
   alias HermesTrictrac.Rules.Trictrac.VariantRules
 
   def build_obligations(
@@ -14,25 +15,42 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Validation do
         end_board,
         variant,
         color,
-        _dice,
+        dice,
         branches_info,
-        conservation_candidates
+        conservation_candidates,
+        fill_candidates \\ []
       ) do
+    fill_candidates =
+      if is_list(fill_candidates) and fill_candidates != [] do
+        fill_candidates
+      else
+        Ways.remplissage_candidates(start_board, variant, color, dice)
+      end
+
     must_fill =
-      scoring_tables_for_variant(variant)
-      |> Enum.filter(fn table ->
-        !Moves.all_paired?(start_board, variant, color, table.from, table.to) and
-          Moves.all_paired?(end_board, variant, color, table.from, table.to) and
-          Enum.any?(
-            branches(branches_info),
-            &Moves.all_paired?(&1, variant, color, table.from, table.to)
-          )
-      end)
-      |> Enum.map(& &1.key)
+      case fill_candidates do
+        [] ->
+          scoring_tables_for_variant(variant)
+          |> Enum.filter(fn table ->
+            !Moves.all_paired?(start_board, variant, color, table.from, table.to) and
+              Moves.all_paired?(end_board, variant, color, table.from, table.to) and
+              Enum.any?(
+                branches(branches_info),
+                &Moves.all_paired?(&1, variant, color, table.from, table.to)
+              )
+          end)
+          |> Enum.map(& &1.key)
+
+        candidates ->
+          candidates
+          |> Enum.map(& &1.key)
+          |> Enum.uniq()
+      end
 
     %Obligation{
       piece_type: Atom.to_string(color),
       must_fill: must_fill,
+      fill_candidates: fill_candidates,
       must_conserve:
         Enum.map(conservation_candidates, fn candidate ->
           %ConservationCandidate{

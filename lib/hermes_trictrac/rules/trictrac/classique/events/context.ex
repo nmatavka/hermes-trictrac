@@ -29,6 +29,7 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Events.Context do
     :is_double,
     :conservation_candidates,
     :pile_misere,
+    fill_candidates: [],
     depart_done: %{two_tables: false, meseas: false, six_tables: false},
     obligations: nil,
     pile_misere_candidate: nil,

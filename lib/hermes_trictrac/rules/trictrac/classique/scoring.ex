@@ -20,6 +20,7 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Scoring do
     trous_before = score.trous || 0
     total = (score.points || 0) + points
     trous_gain = VariantRules.trous_gain(variant, total, score, opp)
+    settlement_metadata = toccategli_settlement_metadata(variant, total, opp, trous_gain)
 
     updated_score =
       score
@@ -42,7 +43,7 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Scoring do
 
     event =
       color
-      |> event(rule_or_label, points, metadata, source)
+      |> event(rule_or_label, points, Map.merge(metadata || %{}, settlement_metadata), source)
       |> Map.put(:trous_delta, trous_gain)
       |> Map.put(:turn_number, turn_number)
 
@@ -89,6 +90,26 @@ defmodule HermesTrictrac.Rules.Trictrac.Classique.Scoring do
   def label_for_points(rule_or_label), do: Constants.score_label(rule_or_label)
 
   def source_from_label(rule_or_label), do: Constants.score_source(rule_or_label)
+
+  defp toccategli_settlement_metadata(_variant, _total, _opp, 0), do: %{}
+
+  defp toccategli_settlement_metadata(variant, total, opp, trous_gain) do
+    if VariantRules.toccategli?(variant) do
+      result = VariantRules.toccategli_hole_result(opp.points || 0)
+
+      %{
+        toccategli_hole: %{
+          classification: result.classification,
+          multiplier: result.multiplier,
+          opponent_points: result.opponent_points,
+          holes_completed: div(total, 12),
+          trous_awarded: trous_gain
+        }
+      }
+    else
+      %{}
+    end
+  end
 
   defp maybe_apply_etendard(score_list, variant) do
     if VariantRules.apply_etendard?(variant), do: apply_etendard(score_list), else: score_list
